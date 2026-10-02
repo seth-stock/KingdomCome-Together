@@ -36,6 +36,12 @@ public static class SceneFollowLogic
     /// <summary>A timer fires this much early at worst; <see cref="Window.TryClose"/> forgives it.</summary>
     public const int SettleSlackMs = 150;
     /// <summary>
+    /// The host's end position is the first position sample at least this long after the last scene's end edge: by then
+    /// the engine's end placement has been applied and the sample is not the poll loop's stale pre-placement one, and the
+    /// player has had well under a second of free movement (a gallop covers ~6 m in 0.4 s, against a 25 m threshold).
+    /// </summary>
+    public const int EndSampleDelayMs = 400;
+    /// <summary>
     /// A scene still "running" this long after its start is an orphan (its end edge was never delivered, e.g.
     /// a name the log parser refuses): it is forgotten at the next edge, so it cannot hold a window open for
     /// good. Long enough for any real scene; a scene's real END is never refused for its age.
@@ -106,15 +112,29 @@ public static class SceneFollowLogic
     public sealed class Window
     {
         private readonly Dictionary<string, long> _running = new(StringComparer.Ordinal);
-        private bool _open, _hasEnd;
+        private bool _open, _hasEnd, _awaitSample;
         private long _lastEndMs;
         private (float X, float Y) _start, _end;
         private bool _story;
 
         public bool Open => _open;
         public int Depth => _running.Count;
+        /// <summary>True while the window still wants the position sample that settles its end position (the caller skips the lock otherwise).</summary>
+        public bool AwaitingEndSample => _awaitSample;
 
-        public void Reset() { _running.Clear(); _open = false; _hasEnd = false; _story = false; }
+        public void Reset() { _running.Clear(); _open = false; _hasEnd = false; _awaitSample = false; _story = false; }
+
+        /// <summary>
+        /// A host position sample. The first one at least <see cref="EndSampleDelayMs"/> after the last scene's end
+        /// edge replaces the provisional end position (the poll loop's last sample at the edge, possibly from before
+        /// the engine's placement). True = it did.
+        /// </summary>
+        public bool NoteSample(long nowMs, float x, float y)
+        {
+            if (!_awaitSample || nowMs - _lastEndMs < EndSampleDelayMs) return false;
+            _end = (x, y); _awaitSample = false;
+            return true;
+        }
 
         private void Purge(long nowMs)
         {
@@ -135,6 +155,7 @@ public static class SceneFollowLogic
             if (opened) { _open = true; _hasEnd = false; _start = (x, y); _story = false; }
             _running[name] = nowMs;
             _story |= IsStoryScene(type);
+            _awaitSample = false;   // a scene runs again: its own end will want its own sample
             return opened;
         }
 
@@ -144,7 +165,8 @@ public static class SceneFollowLogic
             // The named scene's own end first, whatever its age: a scene's real end is never refused as an orphan.
             // Only then are the OTHER scenes that never ended forgotten.
             if (!_open || !_running.Remove(name)) { Purge(nowMs); return false; }
-            _lastEndMs = nowMs; _hasEnd = true; _end = (x, y);
+            _lastEndMs = nowMs; _hasEnd = true; _end = (x, y);   // provisional: NoteSample settles it
+            _awaitSample = true;
             Purge(nowMs);
             return _running.Count == 0;
         }
@@ -154,7 +176,7 @@ public static class SceneFollowLogic
         {
             if (!_open || !_hasEnd || _running.Count > 0) return null;
             if (nowMs - _lastEndMs < SettleMs - SettleSlackMs) return null;
-            _open = false;
+            _open = false; _awaitSample = false;
             return new Closed(_start.X, _start.Y, _end.X, _end.Y, _story);
         }
     }

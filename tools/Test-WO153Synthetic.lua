@@ -399,6 +399,46 @@ do
     noErrs("N-chained")
 end
 
+-- Reset: a session start or end, the host leaving, or a load: no notice and no remembered scene survives it.
+do
+    reset(); NOW = 1200
+    local mark = #LOG
+    KCD2MP_W153HostScene("1", true, "Ingame", "host-quit-mid-scene", false)    -- the host quits: its end edge never comes
+    check("N: (reset) a notice is up and a scene is remembered", KCD2MP.w153.prompt ~= nil and next(KCD2MP.w153.hostScenes) ~= nil)
+    KCD2MP_W153Reset("host-left")
+    check("N: the reset takes the notice and the remembered scenes away", KCD2MP.w153.prompt == nil and KCD2MP.w153.watching == false and next(KCD2MP.w153.hostScenes) == nil)
+    check("N: ...and logs it once, with the reason", logCount("WO153-RESET host-left", mark) == 1)
+    KCD2MP_W153Reset("connect")
+    check("N: a reset with nothing to forget is silent", logCount("WO153-RESET connect", mark) == 0)
+    KCD2MP_W153HostScene("1", true, "Ingame", "next-session-scene", false)
+    check("N: (reset) the next session's first scene IS offered (it was silenced for 30 min before the reset existed)", KCD2MP.w153.prompt ~= nil and toastCount("Your host is in a cutscene.") == 2)
+    KCD2MP.w153.watching = true
+    KCD2MP_W153Reset("disconnect")
+    check("N: a watching player is reset too", KCD2MP.w153.watching == false and KCD2MP.w153.prompt == nil)
+    noErrs("N-reset")
+end
+
+-- Precedence: the older shared-quest readiness prompt (WO-94) uses the same two keys and is answered first.
+do
+    reset(); NOW = 1300
+    local mark = #LOG
+    local origQA = KCD2MP_QuestAnswer
+    QUEST_ANSWERED = nil
+    KCD2MP_QuestAnswer = function(yes) QUEST_ANSWERED = yes end
+    KCD2MP_W153HostScene("1", true, "Ingame", "p", false)
+    KCD2MP.quest.prompt = { fake = true }
+    press("kcd2mp_dice_bank")
+    check("K: (quest prompt) with the readiness prompt up, F11 is the quest prompt's: the notice is not answered", QUEST_ANSWERED == true and KCD2MP.w153.prompt ~= nil and #emitted("w153_watch", mark) == 0)
+    press("kcd2mp_dice_yield")
+    check("K: ...and so is F12", QUEST_ANSWERED == false and KCD2MP.w153.prompt ~= nil and KCD2MP.w153.stats.keep == 0)
+    KCD2MP.quest.prompt = nil
+    press("kcd2mp_dice_bank")
+    check("K: with the readiness prompt gone, F11 answers the notice", #emitted("w153_watch", mark) == 1)
+    KCD2MP_QuestAnswer = origQA
+    KCD2MP.quest.prompt = nil
+    noErrs("K-quest")
+end
+
 -- The race: this game's own copy of the scene starts 0.1-1.5 s after the host's, after the notice is up.
 do
     reset(); NOW = 900
@@ -479,7 +519,8 @@ do
     KCD2MP_W153Result("placed")
     check("R: placed: 'You are beside your host.'", toastCount("You are beside your host.") == 1 and KCD2MP.w153.watching == true)
     local codes = { busy = "You can't be moved right now. Try again when you are free.", nopos = "Can't tell where your host is yet.",
-                    mounted = "Get off your horse first.", failed = "Could not move you beside your host.", notjoined = "You are not in a host's world." }
+                    mounted = "Get off your horse first.", failed = "Could not move you beside your host.", notjoined = "You are not in a host's world.",
+                    pulling = "You are already being brought to your host." }
     local all = true
     for code, text in pairs(codes) do
         KCD2MP.w153.watching = true
@@ -492,7 +533,7 @@ do
     check("R: an unknown code from a newer agent says the plain failure", toastCount("Could not move you beside your host.") >= 2)
     KCD2MP_W153Result(nil)
     check("R: a nil code does not error", true)
-    check("R: results are counted", KCD2MP.w153.stats.results == 8, KCD2MP.w153.stats.results)
+    check("R: results are counted", KCD2MP.w153.stats.results == 9, KCD2MP.w153.stats.results)
     noErrs("R")
 end
 

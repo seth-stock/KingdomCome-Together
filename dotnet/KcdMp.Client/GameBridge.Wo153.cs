@@ -33,7 +33,7 @@ public partial class GameBridge
 
     // ---- host: the scene window ----
     private readonly SceneFollowLogic.Window _w153Window = new();
-    private DateTime _w153NotedUtc = DateTime.MinValue;                  // this feature's own 20 s stamp (the leash's is read, never written)
+    private int _w153Gen;                                                // bumped by a load / session start: a judgement waiting on a hold is abandoned
     private int _w153Windows, _w153Verdicts, _w153Pulls;
 
     // ---- joiner ----
@@ -48,18 +48,49 @@ public partial class GameBridge
 
     private void Wo153OnConnect()
     {
+        Interlocked.Increment(ref _w153Gen);
         lock (_w153Window) _w153Window.Reset();
         _w153HostStoryEndUtc = DateTime.MinValue;
+        _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"connect\") end");   // a notice or scene names left by an earlier session
         _ = ExecLuaAsync("if KCD2MP_W153CfgEmit then KCD2MP_W153CfgEmit() end");
+    }
+
+    /// <summary>The session ended: nothing of the notice survives it (the host's end edge can never arrive now).</summary>
+    private void Wo153OnDisconnect()
+    {
+        Interlocked.Increment(ref _w153Gen);
+        lock (_w153Window) _w153Window.Reset();
+        _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"disconnect\") end");
+    }
+
+    /// <summary>A peer left. If it was the host, its scenes can never end: the notice goes.</summary>
+    private void Wo153OnPeerGone(byte ghostId)
+    {
+        if (W153IsHost) return;
+        byte hid = W153HostId();
+        if (hid == 0xFF || ghostId == hid) _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"host-left\") end");
     }
 
     /// <summary>A load or the session's end (Wo151SceneReset): the engine interrupts every scene, so no window survives.</summary>
     private void Wo153OnSceneReset(string why)
     {
+        Interlocked.Increment(ref _w153Gen);
         bool was;
         lock (_w153Window) { was = _w153Window.Open; _w153Window.Reset(); }
         _w153HostStoryEndUtc = DateTime.MinValue;
         if (was) Console.WriteLine($"MP-W153 host: a scene window was open at a {why} -- forgotten (no scene survives it)");
+        _ = ExecLuaAsync($"if KCD2MP_W153Reset then KCD2MP_W153Reset(\"{why}\") end");
+    }
+
+    /// <summary>
+    /// Every position sample of this game (the push site). While a window waits for its end position, the first sample
+    /// 0.4 s after the last scene's end edge settles it: the poll loop's sample at the edge itself can predate the engine's
+    /// end placement. One unlocked flag read otherwise.
+    /// </summary>
+    private void Wo153OnHostSample(float x, float y)
+    {
+        if (!_w153Window.AwaitingEndSample) return;
+        lock (_w153Window) _w153Window.NoteSample(W153NowMs(), x, y);
     }
 
     // ---------------------------------------------------------------- mod events
@@ -126,10 +157,21 @@ public partial class GameBridge
     {
         try
         {
+            int gen = Volatile.Read(ref _w153Gen);
             await Task.Delay(SceneFollowLogic.SettleMs);
             SceneFollowLogic.Closed? closed;
             lock (_w153Window) closed = _w153Window.TryClose(W153NowMs());
-            if (closed is { } c) Wo153Evaluate(c, lastType, lastName);
+            if (closed is not { } c) return;
+            // A loading screen can cover the very teleport this is for. The end position is already taken (at the end edge,
+            // settled by the first sample after it), so wait for the host's own hold to clear -- up to 20 s -- instead of
+            // dropping the verdict. A real LOAD resets the window and bumps the generation: that is abandoned.
+            for (int i = 0; i < 20 && (HostHold() & HostPositionNotTheirs) != 0; i++)
+            {
+                await Task.Delay(1000);
+                if (gen != Volatile.Read(ref _w153Gen) || !W153IsHost) { Console.WriteLine($"MP-W153 host: the scene window ({lastType} '{lastName}') was waiting for a load or a down to end when the session or the world changed -- not judged"); return; }
+            }
+            if (gen != Volatile.Read(ref _w153Gen)) return;
+            Wo153Evaluate(c, lastType, lastName);
         }
         catch (Exception ex) { Console.WriteLine($"MP-W153 host: close failed: {ex.GetType().Name}: {ex.Message}"); }
     }
@@ -137,10 +179,9 @@ public partial class GameBridge
     private void Wo153Evaluate(SceneFollowLogic.Closed c, string lastType, string lastName)
     {
         if (!W153IsHost || !_sharedWorld || !_hasPushed) return;
-        var hold = HostHold();
-        if ((hold & HostPositionNotTheirs) != 0 || DateTime.UtcNow < _leashJumpQuietUntilUtc)
+        if ((HostHold() & HostPositionNotTheirs) != 0)
         {
-            Console.WriteLine($"MP-W153 host: the scene window closed ({lastType} '{lastName}') while this game was loading, down or travelling -- nobody is brought along on a position that is not the scene's");
+            Console.WriteLine($"MP-W153 host: the scene window closed ({lastType} '{lastName}') and this game is still loading, down or travelling after 20 s -- not judged");
             return;
         }
         double moved = c.MovedM;
@@ -164,18 +205,15 @@ public partial class GameBridge
     }
 
     /// <summary>
-    /// Ask the leash to bring every joiner along (the same call the engine's fast travel makes: LeashLogic.NoteHostFastTravel),
-    /// with this feature's OWN 20 s stamp. The leash's stamp (_leashFastTravelUtc) is only READ: a real fast travel or jump noted
-    /// in the last 20 s already has every joiner coming along, and writing it here would swallow the next real one.
-    /// True = it asked the leash.
+    /// Ask the leash to bring every joiner along (the same call the engine's fast travel makes: LeashLogic.NoteHostFastTravel).
+    /// No duplicate stamp, neither the leash's nor one of its own: the leash's exists because one fast travel is announced three
+    /// ways (the engine's lines, a position jump, a clock jump), whereas this is one request per scene window, and the leash keeps
+    /// what is owed (a joiner that was busy is still owed it for up to 120 s; asking again while it is pending changes nothing).
+    /// A second relocating scene within 20 s of the first must bring the joiners along again. True = it asked the leash.
     /// </summary>
     private bool Wo153NoteScene(string why)
     {
-        var now = DateTime.UtcNow;
-        if ((now - _leashFastTravelUtc).TotalSeconds < 20) { Console.WriteLine($"MP-W153 host: {why} -- a fast travel or jump was just noted: the joiners are already coming along"); return false; }
-        if ((now - _w153NotedUtc).TotalSeconds < 20) { Console.WriteLine($"MP-W153 host: {why} -- asked less than 20 s ago"); return false; }
         if (!_leashEnabled) { Console.WriteLine($"MP-W153 host: {why} -- mp_leash is off: nobody is brought along"); return false; }
-        _w153NotedUtc = now;
         Console.WriteLine($"MP-W153 host: {why} -- {_leashJoinerState.Count} joiner(s) come along (the leash decides who: nobody within 50 m, nobody busy)");
         foreach (var id in _leashJoinerState.Keys) { var l = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic()); lock (l) l.NoteHostFastTravel(); }
         return true;
@@ -274,7 +312,7 @@ public partial class GameBridge
                 await Task.Delay(300);
             }
             if (Wo153HostTarget(hid) is not { } t) { code = "nopos"; Console.WriteLine("MP-W153 watch: the host's position went stale while this was checked -- not moved"); return; }
-            if (Interlocked.Exchange(ref _leashPulling, 1) == 1) { code = "busy"; Console.WriteLine("MP-W153 watch: a pull is placing this player right now -- it will put them beside the host"); return; }
+            if (Interlocked.Exchange(ref _leashPulling, 1) == 1) { code = "pulling"; Console.WriteLine("MP-W153 watch: a pull is placing this player right now -- it puts them beside the host"); return; }
             locked = true;
             var pr = await _combat.JoinPlaceAsync(t.X, t.Y, t.Z, LeashPlaceDistM);
             if (pr is null) { code = "failed"; Console.WriteLine("MP-W153 watch: no answer from the plugin (not placed)"); return; }
