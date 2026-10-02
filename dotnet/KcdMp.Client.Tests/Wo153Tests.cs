@@ -334,4 +334,76 @@ public class Wo153Tests
     [Fact]
     public void The_scene_wording_is_the_projects_own_and_names_no_game_text() =>
         Assert.Equal("Your host's scene took them elsewhere; you were brought along.", SceneFollowLogic.Text.JoinerPulledScene);
+
+    // ---- the end position: the first sample 0.4 s after the end edge (review: the sample at the edge can predate the engine's placement) ----
+
+    private const long Delay = SceneFollowLogic.EndSampleDelayMs;
+
+    [Fact]
+    public void The_first_sample_after_the_delay_settles_the_end_position()
+    {
+        var w = new SceneFollowLogic.Window();
+        w.Start(0, 0, 0, "Fader", "a");
+        Assert.True(w.End(1000, "a", 0, 0));                     // the poll loop's last sample: still the pre-teleport one
+        Assert.True(w.AwaitingEndSample);
+        Assert.False(w.NoteSample(1000 + Delay - 1, 5, 5));      // too soon: the engine's placement may not be in the sample yet
+        Assert.True(w.NoteSample(1000 + Delay, 300, 400));       // the first sample after the delay: where the scene put the host
+        Assert.False(w.AwaitingEndSample);
+        Assert.False(w.NoteSample(1000 + Delay + 500, 9, 9));    // only the first counts: the player is free now
+        Assert.Equal(500.0, w.TryClose(1000 + Settle)!.Value.MovedM, 6);
+    }
+
+    [Fact]
+    public void With_no_sample_after_the_end_the_provisional_position_stands()
+    {
+        var w = new SceneFollowLogic.Window();
+        w.Start(0, 0, 0, "Fader", "a");
+        w.End(1000, "a", 30, 40);
+        Assert.Equal(50.0, w.TryClose(1000 + Settle)!.Value.MovedM, 6);
+    }
+
+    [Fact]
+    public void A_scene_starting_again_stops_waiting_and_its_own_end_waits_for_its_own_sample()
+    {
+        var w = new SceneFollowLogic.Window();
+        w.Start(0, 0, 0, "Fader", "a");
+        w.End(1000, "a", 1, 1);
+        Assert.True(w.AwaitingEndSample);
+        w.Start(1200, 5, 5, "Ingame", "b");                      // chained
+        Assert.False(w.AwaitingEndSample);
+        Assert.False(w.NoteSample(1200 + Delay + 10, 77, 77));   // a scene runs: this sample is not an end position
+        w.End(3000, "b", 2, 2);
+        Assert.True(w.AwaitingEndSample);
+        Assert.True(w.NoteSample(3000 + Delay, 60, 80));
+        Assert.Equal(100.0, w.TryClose(3000 + Settle)!.Value.MovedM, 6);
+    }
+
+    [Fact]
+    public void Closing_or_resetting_the_window_stops_it_waiting_for_a_sample()
+    {
+        var w = new SceneFollowLogic.Window();
+        w.Start(0, 0, 0, "Fader", "a"); w.End(10, "a", 0, 0);
+        Assert.NotNull(w.TryClose(10 + Settle));
+        Assert.False(w.AwaitingEndSample);
+        Assert.False(w.NoteSample(10 + Settle + Delay, 1, 1));
+        w.Start(5000, 0, 0, "Fader", "b"); w.End(5010, "b", 0, 0);
+        w.Reset();
+        Assert.False(w.AwaitingEndSample);
+    }
+
+    [Fact]
+    public void A_sample_with_no_window_is_ignored()
+    {
+        var w = new SceneFollowLogic.Window();
+        Assert.False(w.NoteSample(10_000, 1, 1));
+        Assert.False(w.AwaitingEndSample);
+    }
+
+    [Fact]
+    public void The_sample_delay_is_short_enough_that_free_movement_cannot_reach_the_threshold()
+    {
+        // a gallop is ~15 m/s: the free movement the delay lets in must stay well under the relocation threshold.
+        double gallopMetres = 15.0 * SceneFollowLogic.EndSampleDelayMs / 1000.0;
+        Assert.True(gallopMetres < SceneFollowLogic.RelocDefaultM / 2);
+    }
 }

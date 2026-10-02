@@ -60,11 +60,14 @@ No wire message was added or changed; `Protocol.Version` and `VERSION` are untou
   early. A scene that starts inside the 2 s joins the same window, so chained scenes are measured from the
   first start to the last end and a relocation between them is not lost. A load or a disconnect forgets the
   window (`Wo151SceneReset`). A scene that starts before this game's first position sample is not measured.
-* **Where the host stood** is read at the window's **start** and at the **end edge of the last scene** (the
-  engine's release, after its end placement), not at the close 2 s later: by then the player is free again
-  and a gallop covers about 30 m. Player input is off in every scene kind (WO-149 §6.2), so the host does
-  not walk away inside a scene; **if a live run shows a scene in which the host does move, "Relocated" would
-  misfire for it and the rule needs a speed test (an open question, §5)**.
+* **Where the host stood** is read at the window's **start** and, at the end, as the **first position sample
+  0.4 s after the last scene's end edge** (the engine's release, after its end placement). Not at the edge
+  alone: the poll loop's sample at that instant can predate the placement and read as "did not move". Not at
+  the close 2 s later either: by then the player is free again and a gallop covers about 30 m; 0.4 s lets in
+  about 6 m. If no sample arrives (the host did not change position), the sample at the edge stands. Player
+  input is off in every scene kind (WO-149 §6.2), so the host does not walk away inside a scene; **if a live
+  run shows a scene in which the host does move, "Relocated" would misfire for it and the rule needs a speed
+  test (an open question, §5)**.
 * A scene whose end never arrives (an end edge the log parser refuses, for example for an unusual scene
   name) is an **orphan**: after 20 minutes the next edge forgets it, so it cannot hold a window open for
   good. A scene's own real end is never refused for its age. **(unit: 22 window tests, 9 wording cases)**
@@ -81,10 +84,15 @@ No wire message was added or changed; `Protocol.Version` and `VERSION` are untou
   **unless already within 50 m** (the leash's own rule, `FastTravelMinM`; so `mp_scene_follow_far_m` starts at
   50, and a joiner standing 30–49 m from the host's new spot is not moved by `mp_scene_follow_m` either), with
   the leash's own dismount, placement, fall-damage hold, busy refusals, 60 s hold cap and failure back-off.
-  The 20 s duplicate stamp is **this feature's own** (`_w153NotedUtc`): the leash's stamp is only read (a real
-  fast travel or jump noted in the last 20 s already has every joiner coming along), never written, so a scene
-  can never swallow the next real fast travel. This WO adds **no** second pull mechanism and changes **none** of
-  the leash's numbers (WO-114's are the maintainer's).
+  It has **no duplicate stamp**, neither the leash's 20 s one (which exists because one fast travel is announced
+  three ways) nor one of its own: this is one request per scene window, the leash keeps what is owed (a busy
+  joiner is still owed the pull for up to 120 s, and asking again while it is pending changes nothing), and a
+  second relocating scene within 20 s of the first must bring the joiners along again. So a scene can never
+  swallow a real fast travel, and a real one never swallows a scene. If the host's own game is **loading,
+  down or travelling** when the window closes (a loading screen can cover the very teleport this is for), the
+  judgement **waits up to 20 s** for that to clear instead of being dropped; a real load or a session end
+  abandons it. This WO adds **no** second pull mechanism and changes **none** of the leash's numbers
+  (WO-114's are the maintainer's).
 * Nothing moves anyone at a scene's **start**; nothing ends, skips or suppresses a scene.
 
 ## 2. The joiner's side
@@ -119,12 +127,12 @@ No wire message was added or changed; `Protocol.Version` and `VERSION` are untou
 
 ## 3. Defects found before the first live run, and fixed
 
-Three rounds. Round 1 was my own review while writing. Rounds 2 and 3 were independent high-effort code
-reviews of the whole branch: round 2 found nine, round 3 eight. **Each finding was checked against the code
-before it was acted on**: all nine of round 2 were real; of round 3's eight, six were real and fixed, one
-(#17) was partly unsupported by the repo's own docs and was fixed on the part that is real, and one (#22, the
-duplicated placement code) was answered by documenting rather than refactoring the leash's core. Two round-2
-points were decided with the maintainer (the pull wording, which keys dismiss the notice).
+Four rounds. Round 1 was my own review while writing. Rounds 2, 3 and 4 were independent high-effort code
+reviews of the whole branch: nine, eight and ten findings. **Each finding was checked against the code
+before it was acted on.** Round 2: all nine were real. Round 3: six real and fixed, one fixed on the part
+that is real (#17), one answered by documenting rather than refactoring the leash's core (#22). Round 4:
+six real and fixed (#25–#30); four declined with reasons, listed after the table. Two round-2 points were
+decided with the maintainer (the pull wording, which keys dismiss the notice).
 
 | # | Found | Cause | Fix | Evidence |
 |---|---|---|---|---|
@@ -152,11 +160,26 @@ points were decided with the maintainer (the pull wording, which keys dismiss th
 | 22 | The watch copies about 40 lines of the pull's placement steps, and had drifted (4 dismount tries against 6) | written beside the pull rather than shared | the same six tries; the host-hold mask is one shared constant; the copy is documented and listed in §7 | code-verified |
 | 23 | A chained or nested scene start rebuilt the notice, re-toasted, and overrode an earlier F12 | every start made an offer | one offer per run of the host's scenes; it stands until the last one ends | synthetic |
 | 24 | `mp_scene_follow_m` / `_far_m` values under 50 m could not do what the help said | the leash never pulls a joiner within 50 m (`FastTravelMinM`) | `mp_scene_follow_far_m` starts at 50; the help text and §1 say so | unit, synthetic |
+| 25 | **A relocation covered by a loading screen was dropped**, the main case for this feature | the evaluation refused anything inside the leash's 5 s "quiet" window after a load/respawn, which every tick of a loading hold pushes forward | that check is gone (a real load resets the window); the judgement waits up to 20 s for the host's own hold to clear, and is abandoned only by a load or a session end | code-verified |
+| 26 | The end position could be the **pre-teleport** sample: the poll loop's last read at the end edge can predate the engine's placement | one sample taken at the edge | the first sample 0.4 s after the end edge settles it (the edge's own stands if none comes) | unit (6 tests) |
+| 27 | A notice and the remembered scene names **survived a host quit, a reconnect or a load**, silencing the next notice for 30 min | only `mp_scene_notice off` reset them | `KCD2MP_W153Reset` from connect, disconnect, the host leaving, and `Wo151SceneReset` | synthetic |
+| 28 | A second relocating scene within 20 s was **ignored**, stranding a joiner the first pull had already placed | the 20 s stamp (round 3 gave the feature its own) | no stamp at all: one request per scene window; the leash keeps what is owed | code-verified |
+| 29 | F11 while a host pull was placing the player said "You can't be moved right now", the opposite of what was happening | the lock-held case reused `busy` | its own code and words: "You are already being brought to your host." | synthetic |
+| 30 | The notice **shadowed the older quest-readiness prompt** (WO-94), which uses F11/F12 too | the notice's branch ran first | it yields while that prompt is up (that layer is off in a shared world, where the notice shows) | synthetic |
 
-Not changed, with the reason: the round-3 point that a host could **walk during a scene** (so that
-start→end displacement misreads a long scene). WO-149 §6.2 records input off in every scene kind and WO-80
-says nothing about free movement during Text or Fader scenes. It stays an open question for the live run (§5);
-#17 removed the only free-movement stretch the code itself created.
+Not changed, with the reason:
+* **A host that walks or rides during a scene** (so that start→end displacement would misread a long scene).
+  WO-149 §6.2 records input off in every scene kind and WO-80 says nothing about free movement during Text or
+  Fader scenes. It stays an open question for the live run (§5); #17 and #26 removed the free-movement stretches
+  the code itself created. If a scripted scene walks the host 30 m, "the host ended elsewhere" is still true, and
+  the leash only moves joiners 50 m or more from where the host now stands.
+* **The pull's wording after a scene** can still be wrong for an unrelated pull inside the 10 s (a fast travel
+  right after a scene): the joiner cannot tell which pull a scene asked for without a new pull reason in the
+  leash's core. Decided with the maintainer to tighten the heuristic (#13), not to change the leash.
+* **Two overlapping host scenes with the same name** are one entry in the notice, as in the agent's window: a
+  scene name is assumed unique to its scene (not verified against the game data), and a re-logged start must count once.
+* **The watch's copy of the pull's placement steps** stays a copy (§7): the pull is the leash's core and cannot be
+  exercised without the game; refactoring it blind to remove a duplicate trades a maintenance risk for a live one.
 
 Also found on the way (separate branch `fix/kcd2-install-selection`, `b73c204`): the agent could take
 Kingdom Come: Deliverance **1**'s `kcd.log` and `Tables.pak` as the game's. See `docs/WO-152-orientation.md` §2.1.

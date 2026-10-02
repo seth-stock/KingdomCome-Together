@@ -2201,6 +2201,7 @@ public partial class GameBridge(ClientConfig config)
                         bool moved = !_hasPushed || HasChanged(x, y, z, rotZ);
                         _hasPushed = true;
                         _lastX = x; _lastY = y; _lastZ = z; _lastRotZ = rotZ; _lastRiding = riding;
+                        Wo153OnHostSample(x, y);   // WO-153: settles a closed scene's end position (one flag read when nothing waits)
                         // WO-100.5 Phase 2: published at the position stream's
                         // own cadence, with no debouncing, smoothing or
                         // hold-and-confirm. WO-100 S10.2 settled that live: the
@@ -2240,6 +2241,7 @@ public partial class GameBridge(ClientConfig config)
             try { PrintSessionSummary("disconnect"); } catch { }   // WO-98 Phase 6
             _stats = new SessionCounters();
             _peerCutscene.Clear();
+            Wo153OnDisconnect();   // WO-153: no notice, scene name or window outlives the session
             cts.Cancel();
             try { await receiveTask;     } catch { }
             try { await pingTask;        } catch { }
@@ -4760,6 +4762,7 @@ public partial class GameBridge(ClientConfig config)
                     Wo148OnPeerGone(ghostId);           // WO-148: its avatar sets down what it carried
                     _peerLastSeenUtc.TryRemove(ghostId, out _);
                     _peerCutscene.TryRemove(ghostId, out _);   // WO-98 Phase 5
+                    Wo153OnPeerGone(ghostId);                  // WO-153: the host's scenes can never end now: the notice goes
                     RefreshDiscordPeerCount();
                     _voice?.RemovePlayer(ghostId);
                     _ghostAppearance.TryRemove(ghostId, out _);

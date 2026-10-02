@@ -17638,6 +17638,7 @@ KCD2MP_W153_TEXT = {
     busy      = "You can't be moved right now. Try again when you are free.",
     nopos     = "Can't tell where your host is yet.",
     mounted   = "Get off your horse first.",
+    pulling   = "You are already being brought to your host.",
     failed    = "Could not move you beside your host.",
     notjoined = "You are not in a host's world.",
 }
@@ -17734,6 +17735,17 @@ function KCD2MP_W153DrawUI()
     local left = math.ceil(p.deadline - os.clock())
     mp_draw_row("w153_prompt", 10, 360, KCD2MP_W153_TEXT.inScene .. "  (" .. left .. "s)", 2, KCD2MP_W153_TEXT.inScene)
     mp_draw_row("w153_prompt_keys", 10, 386, KCD2MP_W153_TEXT.keys, 1.6)
+end
+
+-- The agent: a session started or ended, the host left, or a load: no notice, no remembered scene survives it (the
+-- host's end edge can never arrive, and a name left in the table would silence the next notice for 30 minutes).
+function KCD2MP_W153Reset(why)
+    local w = KCD2MP.w153
+    local had = (w.prompt ~= nil) or (w.watching == true) or (next(w.hostScenes or {}) ~= nil)
+    w.prompt = nil
+    w.watching = false
+    w.hostScenes = {}
+    if had then mp_log("WO153-RESET " .. tostring(why or "?") .. " -- the notice and the host's scenes are forgotten") end
 end
 
 function KCD2MP_W153CfgEmit()
@@ -21397,7 +21409,9 @@ local function handleAction(action, activation, value)
     -- WO-153: the host's-cutscene notice. Only F11 (kcd2mp_dice_bank) means watch and only F12 (kcd2mp_dice_yield)
     -- means keep playing. The generic accept actions (confirm, ui_accept) are never a yes, because a yes moves the
     -- player, and the generic cancels (cancel, ui_cancel: opening a menu) do not dismiss the notice -- it times out.
-    if KCD2MP.w153 and KCD2MP.w153.prompt and activation == "press" then
+    -- It yields to the shared-quest readiness prompt (WO-94), which uses the same two keys: that one is the older
+    -- question and is answered first (it is off in a shared world; this notice shows only in one).
+    if KCD2MP.w153 and KCD2MP.w153.prompt and activation == "press" and not (KCD2MP.quest and KCD2MP.quest.prompt) then
         if action == "kcd2mp_dice_bank" then pcall(KCD2MP_W153Answer, true); return end
         if action == "kcd2mp_dice_yield" then pcall(KCD2MP_W153Answer, false); return end
     end
