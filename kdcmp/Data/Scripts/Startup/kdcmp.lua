@@ -1159,6 +1159,7 @@ function KCD2MP_DrawInteractionUI()
     if KCD2MP_JoinDrawUI then pcall(KCD2MP_JoinDrawUI) end   -- WO-123: "<partner> is joining..."
     if KCD2MP_Wo114DrawUI then pcall(KCD2MP_Wo114DrawUI) end -- WO-114: "Bringing you back to your host in N..."
     if KCD2MP_W140DrawUI then pcall(KCD2MP_W140DrawUI) end   -- WO-140: "Waiting for other players...", the sleep prompt, the own-world line
+    if KCD2MP_W153DrawUI then pcall(KCD2MP_W153DrawUI) end   -- WO-153: "Your host is in a cutscene" and its two keys
     mp_screen_frame_end()   -- WO-98 Phase 6: rows that vanished this frame log text=""
 end
 
@@ -17599,6 +17600,186 @@ function KCD2MP_W140Status()
     KCD2MP_EmitEvent("w140_status", "")
 end
 
+-- ====================================================================================
+-- WO-153 -- a partner in a cutscene: the notice, "watch", and being brought along
+-- (docs/WO-153-findings.md). Three small things:
+--   * The JOINER is told when the HOST is in a cutscene (the agent calls KCD2MP_W153HostScene
+--     from the host's Rendered/Ingame edge, WO-98) and may press F11 (or mp_scene_watch) to
+--     stand beside the host and watch the staged scene from their own camera, or F12 /
+--     nothing (20 s) to keep playing. The engine cannot show one player another's camera
+--     (WO-149 6.1 C); "watch" is standing there. Only the explicit F11 action counts as yes:
+--     the generic accept actions (confirm, ui_accept) never move a player.
+--   * The HOST's agent brings every joiner along when a scene window closes with the host
+--     somewhere else, or after a story scene with a joiner left far away (mp_scene_follow,
+--     default OFF; the thresholds mp_scene_follow_m / mp_scene_follow_far_m). It is the
+--     leash's own pull; the agent owns the rule (SceneFollowLogic), the mod only holds the switches.
+--   * Nothing here ever moves anyone at a scene's start, and nothing ends or skips a scene.
+-- Switches: mp_scene_notice on|off (default ON: words only, until F11), mp_scene_follow on|off
+-- (HOST, default OFF), mp_scene_follow_m <m> (25), mp_scene_follow_far_m <m> (150).
+--   WO153-NOTICE  WO153-END  WO153-ANSWER  WO153-TIMEOUT  WO153-RESULT  WO153-STATUS
+KCD2MP.w153 = KCD2MP.w153 or {}
+KCD2MP.w153.notice  = (KCD2MP.w153.notice == nil) and true or KCD2MP.w153.notice     -- mp_scene_notice
+KCD2MP.w153.follow  = (KCD2MP.w153.follow == nil) and false or KCD2MP.w153.follow    -- mp_scene_follow (host)
+KCD2MP.w153.relocM  = KCD2MP.w153.relocM or 25
+KCD2MP.w153.farM    = KCD2MP.w153.farM or 150
+KCD2MP.w153.promptS = 20
+KCD2MP.w153.stats = KCD2MP.w153.stats or { notices = 0, prompts = 0, watch = 0, keep = 0, timeouts = 0, results = 0, ownCopy = 0 }
+KCD2MP_W153_TEXT = {
+    inScene   = "Your host is in a cutscene.",
+    keys      = "F11 stand beside them to watch  /  F12 keep playing  (or mp_scene_watch / mp_scene_play)",
+    over      = "Your host's cutscene is over.",
+    placed    = "You are beside your host.",
+    busy      = "You can't be moved right now. Try again when you are free.",
+    nopos     = "Can't tell where your host is yet.",
+    mounted   = "Get off your horse first.",
+    failed    = "Could not move you beside your host.",
+    notjoined = "You are not in a host's world.",
+}
+
+-- The agent: the HOST's Rendered/Ingame scene started or ended (this machine is a joiner in the host's
+-- world). ownPlaying = this machine's own copy of the scene is already running: nothing to offer.
+function KCD2MP_W153HostScene(ghostId, active, kind, name, ownPlaying)
+    local w = KCD2MP.w153
+    if not w.notice then return end
+    if active == true then
+        w.stats.notices = w.stats.notices + 1
+        if ownPlaying == true then
+            w.stats.ownCopy = w.stats.ownCopy + 1
+            mp_log(string.format("WO153-NOTICE the host's %s scene '%s' -- this game's own copy is playing: nothing to offer", tostring(kind), tostring(name)))
+            return
+        end
+        w.prompt = { deadline = os.clock() + w.promptS, kind = tostring(kind), name = tostring(name) }
+        w.stats.prompts = w.stats.prompts + 1
+        mp_log(string.format("WO153-NOTICE the host's %s scene '%s' (F11 stand beside the host / F12 keep playing, %d s)", tostring(kind), tostring(name), w.promptS))
+        KCD2MP_ShowNativeToast(KCD2MP_W153_TEXT.inScene)
+    else
+        local had = (w.prompt ~= nil) or (w.watching == true)
+        w.prompt = nil
+        w.watching = false
+        mp_log(string.format("WO153-END the host's %s scene '%s' ended%s", tostring(kind), tostring(name), had and " (the notice goes)" or ""))
+        if had then KCD2MP_ShowNativeToast(KCD2MP_W153_TEXT.over) end
+    end
+end
+
+-- F11 / F12 / mp_scene_watch / mp_scene_play. True = the notice took it.
+function KCD2MP_W153Answer(watch)
+    local w = KCD2MP.w153
+    if not w.prompt then
+        mp_log("WO153-ANSWER no cutscene notice is up")
+        return false
+    end
+    w.prompt = nil
+    if watch then
+        w.stats.watch = w.stats.watch + 1
+        w.watching = true
+        mp_log("WO153-ANSWER watch -- the agent stands this player beside the host")
+        KCD2MP_EmitEvent("w153_watch", "")
+    else
+        w.stats.keep = w.stats.keep + 1
+        w.watching = false
+        mp_log("WO153-ANSWER keep playing")
+    end
+    return true
+end
+
+-- The agent's answer to a watch: placed | busy | nopos | mounted | failed | notjoined.
+function KCD2MP_W153Result(code)
+    local w = KCD2MP.w153
+    code = tostring(code or "failed")
+    w.stats.results = w.stats.results + 1
+    if code ~= "placed" then w.watching = false end
+    mp_log("WO153-RESULT " .. code)
+    KCD2MP_ShowNativeToast(KCD2MP_W153_TEXT[code] or KCD2MP_W153_TEXT.failed)
+end
+
+function KCD2MP_W153DrawUI()
+    local w = KCD2MP.w153
+    local p = w.prompt
+    if not p then return end
+    -- compared on the clock, not on the rounded countdown: math.ceil(-0.5) is -0, which is not < 0
+    if os.clock() >= p.deadline then
+        w.prompt = nil
+        w.stats.timeouts = w.stats.timeouts + 1
+        mp_log("WO153-TIMEOUT no answer in " .. w.promptS .. " s -- keep playing")
+        return
+    end
+    local left = math.ceil(p.deadline - os.clock())
+    mp_draw_row("w153_prompt", 10, 360, KCD2MP_W153_TEXT.inScene .. "  (" .. left .. "s)", 2, KCD2MP_W153_TEXT.inScene)
+    mp_draw_row("w153_prompt_keys", 10, 386, KCD2MP_W153_TEXT.keys, 1.6)
+end
+
+function KCD2MP_W153CfgEmit()
+    local w = KCD2MP.w153
+    KCD2MP_EmitEvent("w153_cfg", string.format("follow=%s relocm=%d farm=%d", w.follow and "on" or "off", w.relocM, w.farM))
+end
+
+-- mp_scene_notice on|off (default on); bare = report.
+function KCD2MP_SetSceneNotice(arg)
+    local v = KCD2MP_Wo122ParseBool(arg)
+    if v == "bad" then mp_log("mp_scene_notice: expected on|off, got '" .. tostring(arg) .. "'"); return false end
+    local w = KCD2MP.w153
+    if v ~= nil then
+        w.notice = v
+        if not v then w.prompt = nil; w.watching = false end
+    end
+    mp_log("WO153-NOTICE-SWITCH mp_scene_notice " .. (w.notice and "on" or "off"))
+    return true
+end
+
+-- mp_scene_follow on|off (HOST; default off); bare = report. Only the host's value counts.
+function KCD2MP_SetSceneFollow(arg)
+    local v = KCD2MP_Wo122ParseBool(arg)
+    if v == "bad" then mp_log("mp_scene_follow: expected on|off, got '" .. tostring(arg) .. "'"); return false end
+    local w = KCD2MP.w153
+    if v ~= nil then w.follow = v end
+    mp_log(string.format("WO153-FOLLOW mp_scene_follow %s (reloc %d m, far %d m) -- %s", w.follow and "on" or "off", w.relocM, w.farM,
+        w.follow and "after the host's scene the joiners are brought along" or "nobody is brought along after a scene"))
+    KCD2MP_W153CfgEmit()
+    return true
+end
+
+function KCD2MP_W153ParseMetres(name, arg)
+    local s = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if s == "" or s:lower() == "%line" then return nil, true end
+    -- digits only, as the agent's parser (no "1e3", no "0x10", no sign, no fraction)
+    local n = s:match("^%d+$") and tonumber(s) or nil
+    if not n or n < 5 or n > 5000 then
+        mp_log(name .. ": expected whole metres 5..5000, got '" .. s .. "'")
+        return nil, false
+    end
+    return n, true
+end
+
+-- mp_scene_follow_m <metres> (HOST, default 25): the host ended a scene this far from where it began.
+function KCD2MP_SetSceneFollowM(arg)
+    local n, ok = KCD2MP_W153ParseMetres("mp_scene_follow_m", arg)
+    if not ok then return false end
+    local w = KCD2MP.w153
+    if n then w.relocM = n end
+    mp_log(string.format("WO153-FOLLOW mp_scene_follow_m %d", w.relocM))
+    KCD2MP_W153CfgEmit()
+    return true
+end
+
+-- mp_scene_follow_far_m <metres> (HOST, default 150): a story scene ended with a joiner this far away.
+function KCD2MP_SetSceneFollowFarM(arg)
+    local n, ok = KCD2MP_W153ParseMetres("mp_scene_follow_far_m", arg)
+    if not ok then return false end
+    local w = KCD2MP.w153
+    if n then w.farM = n end
+    mp_log(string.format("WO153-FOLLOW mp_scene_follow_far_m %d", w.farM))
+    KCD2MP_W153CfgEmit()
+    return true
+end
+
+function KCD2MP_W153Status()
+    local w = KCD2MP.w153
+    local s = w.stats
+    mp_log(string.format("WO153-STATUS notice=%s follow=%s reloc_m=%d far_m=%d prompt=%s watching=%s | notices=%d prompts=%d watch=%d keep=%d timeouts=%d results=%d own_copy=%d",
+        w.notice and "on" or "off", w.follow and "on" or "off", w.relocM, w.farM, w.prompt and "yes" or "no", w.watching and "yes" or "no",
+        s.notices, s.prompts, s.watch, s.keep, s.timeouts, s.results, s.ownCopy))
+end
+
 -- ===== WO-141: activities and animal attacks (docs/WO-141-findings.md) ============
 -- Sync what the activity is, not the animation: the DLL reads every body's NPC
 -- state (sitting on this bench, lying in this bed, leaning on this spot, working
@@ -20839,6 +21020,13 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_sleep_yes", "KCD2MP_W140Answer(true)", "WO-140: answer the other player's sleep request YES (same as F11)")
     System.AddCCommand("mp_sleep_no", "KCD2MP_W140Answer(false)", "WO-140: answer the other player's sleep request NO (same as F12)")
     System.AddCCommand("mp_sleep_vote", 'KCD2MP_SetSleepVote(%line)', "WO-140: in a shared world a sleep or a wait waits for everyone's yes (default on): mp_sleep_vote on|off")
+    System.AddCCommand("mp_scene_notice", 'KCD2MP_SetSceneNotice(%line)', "WO-153: tell this player when the host is in a cutscene, with F11 to stand beside the host and watch (default on): mp_scene_notice on|off")
+    System.AddCCommand("mp_scene_follow", 'KCD2MP_SetSceneFollow(%line)', "WO-153 (HOST only): after the host's cutscene moved the host, or a story scene left a joiner far away, bring the joiners along (default OFF): mp_scene_follow on|off")
+    System.AddCCommand("mp_scene_follow_m", 'KCD2MP_SetSceneFollowM(%line)', "WO-153 (HOST): the host ended a scene this many metres from where it began = the host was moved (default 25; 5..5000)")
+    System.AddCCommand("mp_scene_follow_far_m", 'KCD2MP_SetSceneFollowFarM(%line)', "WO-153 (HOST): a story scene ended with a joiner this many metres away = bring them to the story (default 150; 5..5000)")
+    System.AddCCommand("mp_scene_watch", "KCD2MP_W153Answer(true)", "WO-153: answer the host's-cutscene notice WATCH -- stand beside the host (same as F11)")
+    System.AddCCommand("mp_scene_play", "KCD2MP_W153Answer(false)", "WO-153: answer the host's-cutscene notice KEEP PLAYING (same as F12)")
+    System.AddCCommand("mp_scene_status", "KCD2MP_W153Status()", "WO-153: the cutscene notice and bring-along settings and counters (WO153-STATUS)")
     System.AddCCommand("mp_activities", 'KCD2MP_SetActivities(%line)', "WO-141: sitting, sleeping, leaning and working (NPCs and players) show on the other screen, the game's own way (default on): mp_activities on|off")
     System.AddCCommand("mp_animal_attacks", 'KCD2MP_SetAnimalAttacks(%line)', "WO-141: the host's wolves', dogs' and boars' attacks play on the joiner's screen (default on): mp_animal_attacks on|off")
     System.AddCCommand("mp_activity_status", "KCD2MP_W141Status()", "WO-141: activities and animal attacks (WO141-STATUS here, MP-W141 stats and the DLL's line in agent.log)")
@@ -21175,6 +21363,12 @@ local function handleAction(action, activation, value)
     if KCD2MP.w140 and KCD2MP.w140.prompt and activation == "press" then
         if ACTS.ACCEPT_ACTIONS[action] then pcall(KCD2MP_W140Answer, true); return end
         if ACTS.DECLINE_ACTIONS[action] then pcall(KCD2MP_W140Answer, false); return end
+    end
+    -- WO-153: the host's-cutscene notice. Only F11 (kcd2mp_dice_bank) means watch -- the generic accept
+    -- actions (confirm, ui_accept) are never a yes, because a yes moves the player; any decline action is "keep playing".
+    if KCD2MP.w153 and KCD2MP.w153.prompt and activation == "press" then
+        if action == "kcd2mp_dice_bank" then pcall(KCD2MP_W153Answer, true); return end
+        if ACTS.DECLINE_ACTIONS[action] then pcall(KCD2MP_W153Answer, false); return end
     end
     if KCD2MP.quest and KCD2MP.quest.prompt and activation == "press" then
         if ACTS.ACCEPT_ACTIONS[action] then

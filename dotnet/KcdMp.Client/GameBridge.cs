@@ -846,6 +846,7 @@ public partial class GameBridge(ClientConfig config)
 
     private void ApplyLocalCutsceneEdge(bool active, string type, string name)
     {
+        Wo153OnLocalScene(active, type, name);   // WO-153: every kind, the host's scene window (before the early return below)
         // WO-99 Phase 4: Fader/Text/SkipTime are logged (acted=0) and nothing
         // else -- no peer beat, no prompt hold. Only Rendered/Ingame act.
         bool acts = type is "Rendered" or "Ingame";
@@ -1768,6 +1769,7 @@ public partial class GameBridge(ClientConfig config)
         Wo123OnConnect(stream, cts.Token);   // WO-123: the join (send the world, pause the host)
         Wo124OnConnect(stream, cts.Token);   // WO-124: the session mode, the joiner's side of the join
         Wo114OnConnect(stream, cts.Token);   // WO-114: the leash (host decides; joiner is brought back)
+        Wo153OnConnect();                    // WO-153: the scene window starts clean; the mod re-sends its settings
         Wo131OnConnect(cts.Token);           // WO-131: combat and bodies (the copy guard, the hit gate, perception)
         Wo134OnConnect(cts.Token);           // WO-134: world items (bodies, loose items, chest ledgers)
         Wo132OnConnect(cts.Token);           // WO-132: damage safety, combat engagement
@@ -5265,6 +5267,7 @@ public partial class GameBridge(ClientConfig config)
                             string csWho = _ghostNames.TryGetValue(sbSource, out var csDn) ? csDn : $"player {sbSource}";
                             Console.WriteLine($"MP-CUTSCENE side=peer ghost={sbSource} who=\"{csWho}\" state={csParts[0]} type={csParts[1]} name={csParts[2]} local={(_localCutsceneActive ? 1 : 0)}");
                             _ = ExecLuaAsync($"if KCD2MP_SetPeerCutscene then KCD2MP_SetPeerCutscene(\"{sbSource}\", {(csActive ? "true" : "false")}, \"{EscapeLua(csParts[2])}\") end");
+                            Wo153OnPeerScene(sbSource, csActive, csParts[1], csParts[2]);   // WO-153: the host's scene, told to a joiner
                         }
                         else Console.WriteLine($"[quest] ghost {sbSource} sent a malformed cutscene edge; dropped");
                     }
@@ -5900,6 +5903,10 @@ public partial class GameBridge(ClientConfig config)
             case "w140_cfg":
             case "w140_status":
                 Wo140OnEvent(name, arg);
+                return;
+            case "w153_cfg":         // WO-153: mp_scene_follow / mp_scene_follow_m / mp_scene_follow_far_m (the host's)
+            case "w153_watch":       // WO-153: this player's F11 on the host's-cutscene notice
+                Wo153OnEvent(name, arg);
                 return;
         }
 

@@ -594,7 +594,7 @@ public partial class GameBridge
             Console.WriteLine(FormattableString.Invariant(
                 $"MP-LEASH pulled from={from:F0} to={to:F1} residual={pr.Residual:F2} -- pull #{c.Seq} reason={reason} {(pr.Ok ? "placed" : "NOT placed")}{(fallback ? " (on the host's own spot)" : "")} snapped={On114(pr.Snapped)} fall_held={On114(pr.FallHeld)} mounted_before={On114(mounted)} at ({pr.After[0]:F1}, {pr.After[1]:F1}, {pr.After[2]:F1})"));
             if (pr.Ok)
-                await Wo114SayAsync(Protocol.LeashReasonBase(c.Arg) == Protocol.LeashReasonFastTravel ? LeashLogic.Text.JoinerPulledFastTravel : LeashLogic.Text.JoinerPulledDistance);
+                await Wo114SayAsync(Wo153PulledText(Protocol.LeashReasonBase(c.Arg) == Protocol.LeashReasonFastTravel));   // WO-153: after the host's own scene the words say so
             if (pr.Ok && fallback) _ = Wo147SettleBesideHostAsync(c.Seq);   // WO-147: the ground beside the host once it has loaded
             // Read it back once more after the landing settles (the emitter's position, 1.5 s on).
             _ = Task.Delay(1500).ContinueWith(_ => Console.WriteLine(FormattableString.Invariant(
