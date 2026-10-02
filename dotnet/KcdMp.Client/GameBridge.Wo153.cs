@@ -15,10 +15,11 @@ namespace KcdMp.Client;
 ///     means standing beside the host's staged scene and looking at it from your own camera.
 ///   * The HOST, when a scene window closes with the host somewhere else, or after a story scene with a
 ///     joiner left far away, brings every joiner along through the leash's own pull (WO-114/147: the
-///     dismount, the placement beside the host, the busy refusals). Only with mp_scene_follow on.
+///     dismount, the placement beside the host, the busy refusals, the 50 m "already beside" rule). Only
+///     with mp_scene_follow on.
 ///   * Nothing here moves anyone at a scene's START, nothing ends or skips a scene, and nothing here is a
-///     second pull mechanism: the host asks the leash (Wo114NoteHostFastTravel), the joiner's "watch" is
-///     the leash's placement under the leash's own refusals, with the leash's own bookkeeping
+///     second pull mechanism: the host asks the leash (LeashLogic.NoteHostFastTravel), the joiner's "watch"
+///     is the leash's placement under the leash's own refusals, with the leash's own bookkeeping
 ///     (_leashPulledUtc, so the joiner's motion check does not read the teleport as flight).
 ///
 /// The rules are SceneFollowLogic (pure, Wo153Tests). Rollback: mp_scene_follow off / mp_scene_notice off.
@@ -32,6 +33,7 @@ public partial class GameBridge
 
     // ---- host: the scene window ----
     private readonly SceneFollowLogic.Window _w153Window = new();
+    private DateTime _w153NotedUtc = DateTime.MinValue;                  // this feature's own 20 s stamp (the leash's is read, never written)
     private int _w153Windows, _w153Verdicts, _w153Pulls;
 
     // ---- joiner ----
@@ -77,7 +79,7 @@ public partial class GameBridge
                     {
                         case "follow": _w153Follow = v == "on"; break;
                         case "relocm": if (SceneFollowLogic.ParseMetres(v) is float r) _w153RelocM = r; break;
-                        case "farm": if (SceneFollowLogic.ParseMetres(v) is float f) _w153FarM = f; break;
+                        case "farm": if (SceneFollowLogic.ParseMetres(v, SceneFollowLogic.MinFarM) is float f) _w153FarM = f; break;
                     }
                 }
                 Console.WriteLine(FormattableString.Invariant(
@@ -112,35 +114,36 @@ public partial class GameBridge
             if (opened) { _w153Windows++; Console.WriteLine(FormattableString.Invariant($"MP-W153 host: a scene window opens ({type} '{name}') at ({_lastX:F0}, {_lastY:F0})")); }
             return;
         }
+        // The end edge is the engine's release (after its end placement): where the host stands NOW is where the scene put it,
+        // before the player is free again. Not read at the close, 2 s later.
         bool quiet;
-        lock (_w153Window) quiet = _w153Window.End(now, name);
+        lock (_w153Window) quiet = _w153Window.End(now, name, _lastX, _lastY);
         if (quiet) _ = Wo153CloseAsync(type, name);
     }
 
-    /// <summary>The last scene ended: after the quiet period (a chained scene would have started) the window closes and is measured.</summary>
+    /// <summary>The last scene ended: after the quiet period (a chained scene would have started) the window closes and is judged.</summary>
     private async Task Wo153CloseAsync(string lastType, string lastName)
     {
         try
         {
             await Task.Delay(SceneFollowLogic.SettleMs);
-            (float StartX, float StartY, bool Story)? closed;
+            SceneFollowLogic.Closed? closed;
             lock (_w153Window) closed = _w153Window.TryClose(W153NowMs());
-            if (closed is { } c) Wo153Evaluate(c.StartX, c.StartY, c.Story, lastType, lastName);
+            if (closed is { } c) Wo153Evaluate(c, lastType, lastName);
         }
         catch (Exception ex) { Console.WriteLine($"MP-W153 host: close failed: {ex.GetType().Name}: {ex.Message}"); }
     }
 
-    private void Wo153Evaluate(float startX, float startY, bool story, string lastType, string lastName)
+    private void Wo153Evaluate(SceneFollowLogic.Closed c, string lastType, string lastName)
     {
         if (!W153IsHost || !_sharedWorld || !_hasPushed) return;
-        var excluded = LeashLogic.Hold.HostDowned | LeashLogic.Hold.HostLoading | LeashLogic.Hold.HostReloading | LeashLogic.Hold.HostTravelling;
         var hold = HostHold();
-        if ((hold & excluded) != 0 || DateTime.UtcNow < _leashJumpQuietUntilUtc)
+        if ((hold & HostPositionNotTheirs) != 0 || DateTime.UtcNow < _leashJumpQuietUntilUtc)
         {
             Console.WriteLine($"MP-W153 host: the scene window closed ({lastType} '{lastName}') while this game was loading, down or travelling -- nobody is brought along on a position that is not the scene's");
             return;
         }
-        double moved = LeashLogic.Dist2D(startX, startY, _lastX, _lastY);
+        double moved = c.MovedM;
         // The joiners the leash itself would pull: in the host's world (not in its own, WO-140), with a fresh state and a current position.
         double? farthest = null;
         foreach (var (id, (st, at)) in _leashJoinerState)
@@ -149,27 +152,45 @@ public partial class GameBridge
             if ((st.Flags & Protocol.LeashFlagInWorld) == 0 || (st.Flags & Protocol.LeashFlagSeparate) != 0) continue;
             if (Wo147LeashDistance(id, _lastX, _lastY) is double d && (farthest is null || d > farthest)) farthest = d;
         }
-        var verdict = SceneFollowLogic.Decide(story, moved, farthest, _w153RelocM, _w153FarM);
+        var verdict = SceneFollowLogic.Decide(c.Story, moved, farthest, _w153RelocM, _w153FarM);
         Console.WriteLine(FormattableString.Invariant(
-            $"MP-W153 host: the scene window closed (last {lastType} '{lastName}', story={(story ? 1 : 0)}): the host moved {moved:F0} m, the farthest joiner in this world is {(farthest is double f ? f.ToString("F0", CultureInfo.InvariantCulture) + " m away" : "unknown")} -> {verdict} (follow {(_w153Follow ? "on" : "off")}, reloc {_w153RelocM:F0} m, far {_w153FarM:F0} m)"));
+            $"MP-W153 host: the scene window closed (last {lastType} '{lastName}', story={(c.Story ? 1 : 0)}): the host moved {moved:F0} m ({c.StartX:F0},{c.StartY:F0} -> {c.EndX:F0},{c.EndY:F0}), the farthest joiner in this world is {(farthest is double f ? f.ToString("F0", CultureInfo.InvariantCulture) + " m away" : "unknown")} -> {verdict} (follow {(_w153Follow ? "on" : "off")}, reloc {_w153RelocM:F0} m, far {_w153FarM:F0} m)"));
         if (verdict == SceneFollowLogic.Verdict.None) return;
         _w153Verdicts++;
         if (!_w153Follow) { Console.WriteLine("MP-W153 host: mp_scene_follow is off -- nobody is brought along"); return; }
-        bool asked = Wo114NoteHostFastTravel(FormattableString.Invariant(
-            $"a scene ({lastType} '{lastName}') {(verdict == SceneFollowLogic.Verdict.Relocated ? $"moved the host {moved:F0} m" : $"ended with a joiner {farthest:F0} m from the story")}"));
-        if (asked) _w153Pulls++;
-        else Console.WriteLine("MP-W153 host: the leash did not take it (a fast travel was noted in the last 20 s, or mp_leash is off)");
+        if (Wo153NoteScene(FormattableString.Invariant(
+                $"a scene ({lastType} '{lastName}') {(verdict == SceneFollowLogic.Verdict.Relocated ? $"moved the host {moved:F0} m" : $"ended with a joiner {farthest:F0} m from the story")}")))
+            _w153Pulls++;
+    }
+
+    /// <summary>
+    /// Ask the leash to bring every joiner along (the same call the engine's fast travel makes: LeashLogic.NoteHostFastTravel),
+    /// with this feature's OWN 20 s stamp. The leash's stamp (_leashFastTravelUtc) is only READ: a real fast travel or jump noted
+    /// in the last 20 s already has every joiner coming along, and writing it here would swallow the next real one.
+    /// True = it asked the leash.
+    /// </summary>
+    private bool Wo153NoteScene(string why)
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _leashFastTravelUtc).TotalSeconds < 20) { Console.WriteLine($"MP-W153 host: {why} -- a fast travel or jump was just noted: the joiners are already coming along"); return false; }
+        if ((now - _w153NotedUtc).TotalSeconds < 20) { Console.WriteLine($"MP-W153 host: {why} -- asked less than 20 s ago"); return false; }
+        if (!_leashEnabled) { Console.WriteLine($"MP-W153 host: {why} -- mp_leash is off: nobody is brought along"); return false; }
+        _w153NotedUtc = now;
+        Console.WriteLine($"MP-W153 host: {why} -- {_leashJoinerState.Count} joiner(s) come along (the leash decides who: nobody within 50 m, nobody busy)");
+        foreach (var id in _leashJoinerState.Keys) { var l = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic()); lock (l) l.NoteHostFastTravel(); }
+        return true;
     }
 
     // ---------------------------------------------------------------- joiner: the notice and "watch"
 
     /// <summary>
     /// A peer's Rendered/Ingame scene edge arrived (called from the StoryBeat receive). Only the HOST's
-    /// scenes matter, and only to a joiner in the host's world: the mod's Lua shows the notice.
+    /// scenes matter, and only to a joiner in the host's world (not one connected from its own save, WO-140:
+    /// the host's coordinates mean nothing there): the mod's Lua shows the notice.
     /// </summary>
     private void Wo153OnPeerScene(byte source, bool active, string type, string name)
     {
-        if (!_joinedWorld || W153IsHost) return;
+        if (!_joinedWorld || W153IsHost || _w140Separate) return;
         byte hid = W153HostId();
         if (hid == 0xFF || source != hid) return;
         if (!active) _w153HostStoryEndUtc = DateTime.UtcNow;   // the wording of a pull right after: only an END counts
@@ -206,10 +227,17 @@ public partial class GameBridge
     /// <summary>
     /// F11 on the notice: stand beside the host. The leash's own placement under the leash's own refusals
     /// (a load, a dialogue, a cutscene of this player's, a down); never while mounted without a clean
-    /// dismount; the host's position read again right before the placement (the awaits take seconds);
-    /// the leash's "no ground beside the host yet" fallback and settle; and its _leashPulledUtc, so the
-    /// motion check (WO-147) does not take the teleport for a flight. A result code goes back to the mod,
-    /// which has the words.
+    /// dismount (the pull's six tries); the host's position read again right before the placement (the awaits
+    /// take seconds); the leash's "no ground beside the host yet" fallback and settle; and its _leashPulledUtc,
+    /// so the motion check (WO-147) does not take the teleport for a flight. A result code goes back to the
+    /// mod, which has the words.
+    ///
+    /// The steps mirror Wo114PullAsync's on purpose (a watch is a pull the player asks for). They are copied,
+    /// not shared: the pull is the leash's core and cannot be exercised here without the game. A later change
+    /// to the pull's placement rules must be repeated here until the two are merged (docs/WO-153-findings.md 7).
+    /// The pull lock (_leashPulling) is held only for the PLACEMENT, never across the waits before it: a host
+    /// pull that arrives while this player is still being asked about their horse is not dropped (a dropped
+    /// pull reports no result, and the host counts it as a failure; three disarm the leash).
     /// </summary>
     private async Task Wo153WatchAsync()
     {
@@ -218,10 +246,8 @@ public partial class GameBridge
         try
         {
             byte hid = W153HostId();
-            if (!_joinedWorld || hid == 0xFF) { code = "notjoined"; Console.WriteLine("MP-W153 watch: not in a host's world -- nothing to stand beside"); return; }
+            if (!_joinedWorld || hid == 0xFF || _w140Separate) { code = "notjoined"; Console.WriteLine("MP-W153 watch: not in the host's world -- nothing to stand beside"); return; }
             if (Wo153HostTarget(hid) is null) { code = "nopos"; Console.WriteLine("MP-W153 watch: no fresh position of the host -- not moved"); return; }
-            if (Interlocked.Exchange(ref _leashPulling, 1) == 1) { code = "busy"; Console.WriteLine("MP-W153 watch: a placement is already running -- ignored"); return; }
-            locked = true;
             _w153Watches++;
             string busy = await AskModAsync("KCD2MP_Wo114BusyNow", 2000);
             bool dlg = busy.Contains("d=1"), mounted = busy.Contains("m=1") || (!busy.Contains("m=0") && _lastRiding);
@@ -237,7 +263,7 @@ public partial class GameBridge
             if (mounted)
             {
                 bool off = false;
-                for (int i = 0; i < 4 && !off; i++)
+                for (int i = 0; i < 6 && !off; i++)
                 {
                     string r = await AskModAsync("KCD2MP_Wo114Dismount", 2000);
                     off = r.Contains("mounted=no");
@@ -248,6 +274,8 @@ public partial class GameBridge
                 await Task.Delay(300);
             }
             if (Wo153HostTarget(hid) is not { } t) { code = "nopos"; Console.WriteLine("MP-W153 watch: the host's position went stale while this was checked -- not moved"); return; }
+            if (Interlocked.Exchange(ref _leashPulling, 1) == 1) { code = "busy"; Console.WriteLine("MP-W153 watch: a pull is placing this player right now -- it will put them beside the host"); return; }
+            locked = true;
             var pr = await _combat.JoinPlaceAsync(t.X, t.Y, t.Z, LeashPlaceDistM);
             if (pr is null) { code = "failed"; Console.WriteLine("MP-W153 watch: no answer from the plugin (not placed)"); return; }
             bool fallback = false;
@@ -275,6 +303,10 @@ public partial class GameBridge
         }
     }
 
-    private string Wo153StatsLine() =>
-        $"MP-W153 stats follow={(_w153Follow ? "on" : "off")} windows={_w153Windows} verdicts={_w153Verdicts} pulls_asked={_w153Pulls} notices={_w153Notices} watches={_w153Watches}";
+    private string Wo153StatsLine()
+    {
+        int open, running;
+        lock (_w153Window) { open = _w153Window.Open ? 1 : 0; running = _w153Window.Depth; }
+        return $"MP-W153 stats follow={(_w153Follow ? "on" : "off")} windows={_w153Windows} window_open={open} scenes_running={running} verdicts={_w153Verdicts} pulls_asked={_w153Pulls} notices={_w153Notices} watches={_w153Watches}";
+    }
 }

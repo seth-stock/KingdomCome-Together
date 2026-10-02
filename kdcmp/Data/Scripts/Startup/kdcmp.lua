@@ -17654,7 +17654,14 @@ function KCD2MP_W153HostScene(ghostId, active, kind, name, ownPlaying)
     for k, at in pairs(w.hostScenes) do if now - at > 1800 then w.hostScenes[k] = nil end end   -- an end never logged
     local key = tostring(name)
     if active == true then
+        local first = (next(w.hostScenes) == nil)
         w.hostScenes[key] = now
+        if not first then
+            -- a second scene inside the first (nested or chained): the offer was made once, and whatever the player
+            -- answered (F12 included) stands until the host's LAST scene ends; no second toast, no second count
+            mp_log(string.format("WO153-NOTICE the host's %s scene '%s' started inside another of the host's scenes -- no second offer", tostring(kind), key))
+            return
+        end
     else
         w.hostScenes[key] = nil
         if next(w.hostScenes) ~= nil then
@@ -17759,13 +17766,14 @@ function KCD2MP_SetSceneFollow(arg)
     return true
 end
 
-function KCD2MP_W153ParseMetres(name, arg)
+function KCD2MP_W153ParseMetres(name, arg, min)
+    min = min or 5
     local s = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if s == "" or s:lower() == "%line" then return nil, true end
     -- digits only, as the agent's parser (no "1e3", no "0x10", no sign, no fraction)
     local n = s:match("^%d+$") and tonumber(s) or nil
-    if not n or n < 5 or n > 5000 then
-        mp_log(name .. ": expected whole metres 5..5000, got '" .. s .. "'")
+    if not n or n < min or n > 5000 then
+        mp_log(name .. ": expected whole metres " .. min .. "..5000, got '" .. s .. "'")
         return nil, false
     end
     return n, true
@@ -17784,7 +17792,7 @@ end
 
 -- mp_scene_follow_far_m <metres> (HOST, default 150): a story scene ended with a joiner this far away.
 function KCD2MP_SetSceneFollowFarM(arg)
-    local n, ok = KCD2MP_W153ParseMetres("mp_scene_follow_far_m", arg)
+    local n, ok = KCD2MP_W153ParseMetres("mp_scene_follow_far_m", arg, 50)   -- the leash never pulls a joiner already within 50 m
     if not ok then return false end
     local w = KCD2MP.w153
     if n then w.farM = n end
@@ -21043,9 +21051,9 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_sleep_no", "KCD2MP_W140Answer(false)", "WO-140: answer the other player's sleep request NO (same as F12)")
     System.AddCCommand("mp_sleep_vote", 'KCD2MP_SetSleepVote(%line)', "WO-140: in a shared world a sleep or a wait waits for everyone's yes (default on): mp_sleep_vote on|off")
     System.AddCCommand("mp_scene_notice", 'KCD2MP_SetSceneNotice(%line)', "WO-153: tell this player when the host is in a cutscene, with F11 to stand beside the host and watch (default on): mp_scene_notice on|off")
-    System.AddCCommand("mp_scene_follow", 'KCD2MP_SetSceneFollow(%line)', "WO-153 (HOST only): after the host's cutscene moved the host, or a story scene left a joiner far away, bring the joiners along (default OFF): mp_scene_follow on|off")
+    System.AddCCommand("mp_scene_follow", 'KCD2MP_SetSceneFollow(%line)', "WO-153 (HOST only): after the host's cutscene moved the host, or a story scene left a joiner far away, bring the joiners along through the leash (default OFF; a joiner already within 50 m of the host is never moved): mp_scene_follow on|off")
     System.AddCCommand("mp_scene_follow_m", 'KCD2MP_SetSceneFollowM(%line)', "WO-153 (HOST): the host ended a scene this many metres from where it began = the host was moved (default 25; 5..5000)")
-    System.AddCCommand("mp_scene_follow_far_m", 'KCD2MP_SetSceneFollowFarM(%line)', "WO-153 (HOST): a story scene ended with a joiner this many metres away = bring them to the story (default 150; 5..5000)")
+    System.AddCCommand("mp_scene_follow_far_m", 'KCD2MP_SetSceneFollowFarM(%line)', "WO-153 (HOST): a story scene ended with a joiner this many metres away = bring them to the story (default 150; 50..5000: the leash never moves a joiner within 50 m)")
     System.AddCCommand("mp_scene_watch", "KCD2MP_W153Answer(true)", "WO-153: answer the host's-cutscene notice WATCH -- stand beside the host (same as F11)")
     System.AddCCommand("mp_scene_play", "KCD2MP_W153Answer(false)", "WO-153: answer the host's-cutscene notice KEEP PLAYING (same as F12)")
     System.AddCCommand("mp_scene_status", "KCD2MP_W153Status()", "WO-153: the cutscene notice and bring-along settings and counters (WO153-STATUS)")
