@@ -22,7 +22,7 @@ the second player is brought along.* Built, offline-verified, **not yet seen in 
 |---|---|---|---|
 | The notice | When the **host's** Rendered or Ingame scene starts, the joiner sees "Your host is in a cutscene." with a 20 s countdown and two keys | `mp_scene_notice on\|off` | **on** (words only) |
 | Watch | **F11** (or `mp_scene_watch`) stands the joiner beside the host, through the leash's own placement and its own refusals | — | the joiner's choice |
-| Keep playing | **F12**, any decline key, or no answer for 20 s: nothing happens | `mp_scene_play` | — |
+| Keep playing | **F12**, or no answer for 20 s: nothing happens. Esc and menu-cancel do **not** dismiss it | `mp_scene_play` | — |
 | Bring-along | When the host's scene window closes with the host **25 m or more** from where it opened, or after a **story scene** with a joiner **150 m or more** away, the host's agent asks the leash to pull every joiner beside the host | `mp_scene_follow on\|off` (HOST) | **off** |
 | Thresholds | `mp_scene_follow_m` (25), `mp_scene_follow_far_m` (150); whole metres 5..5000 | | |
 | Status | `mp_scene_status` writes `WO153-STATUS`; the agent writes `MP-W153` lines | | |
@@ -54,12 +54,17 @@ No wire message was added or changed; `Protocol.Version` and `VERSION` are untou
 ## 1. The rules (SceneFollowLogic, pure)
 
 * A **scene window** opens at the host's first scene start (any kind: Rendered, Ingame, Fader, Text,
-  SkipTime) and closes at the last matching end. Scenes are tracked **by name**: a repeated start counts
-  once, and an end that matches no running scene (a duplicate release, the guard giving up and the engine
-  releasing later, a load) closes nothing and can never close an outer scene early. A window older than
-  10 minutes is dropped, not evaluated. **(unit: 12 window tests)**
-* 2 s after the close (the end placement has run) the agent measures: how far the host is from where the
-  window opened, and how far the **farthest** joiner with a fresh position is.
+  SkipTime) and closes **2 s after the last scene ended**. Scenes are tracked **by name**: a repeated start
+  counts once, and an end that matches no running scene (a duplicate release, the guard giving up and the
+  engine releasing later, a load) changes nothing and can never close an outer scene early. A scene that
+  starts inside the 2 s joins the same window, so chained scenes are measured from the first start to the
+  last end and a relocation between them is not lost. An END is never refused for its age (a long scene is
+  evaluated at its real end); only a START drops an orphan window with no edge for 30 minutes. A load or a
+  disconnect forgets the window (`Wo151SceneReset`). A scene that starts before this game's first position
+  sample is not measured. **(unit: 16 window tests, 9 wording cases)**
+* At the close the agent measures: how far the host is from where the window opened, and how far the
+  **farthest** joiner is, counting only joiners the leash itself would pull: in the host's world (not in its
+  own, WO-140), with a fresh state and a current position.
   * moved ≥ `mp_scene_follow_m` → **Relocated**
   * else a story scene (Rendered/Ingame) and farthest joiner ≥ `mp_scene_follow_far_m` → **Far**
   * else nothing. **(unit: decision table, NaN and negative displacements, exact thresholds)**
@@ -79,42 +84,68 @@ No wire message was added or changed; `Protocol.Version` and `VERSION` are untou
   (`hud.ShowInfoText`, like every prompt) plus a two-row overlay with the seconds left.
 * **Keys.** Only the explicit F11 action (`kcd2mp_dice_bank`) means watch. The generic accept actions
   (`confirm`, `ui_accept`, `dialog_answer1`), which the sleep prompt accepts, are **never** a yes here,
-  because a yes moves the player. Any decline action (F12, `cancel`, `ui_cancel`) is "keep playing". Only a
-  press answers. The sleep prompt (WO-140) is answered first when both are up, so one press never answers
-  two prompts, and the dice board's earlier branch still wins. **(synthetic)**
+  because a yes moves the player. Only F12 (`kcd2mp_dice_yield`) means "keep playing"; a menu's `cancel` /
+  `ui_cancel` does not dismiss the notice (it times out), so opening a menu does not lose the F11 option.
+  Only a press answers. The sleep prompt (WO-140) is answered first when both are up, so one press never
+  answers two prompts, and the dice board's earlier branch still wins. **(synthetic)**
+* The host's scenes nest (a video inside a sequence: start, start, end, end). The notice keeps them **by
+  name**: only the end of the **last** one ends the offer, clears "watching" and says "over". **(synthetic)**
 * **Watch** runs under the leash's refusals: not while this player is loading, in a dialogue, in a cutscene
-  of their own, or downed; mounted → dismount first (up to 4 tries), never placed on a horse. A result code
-  (`placed | busy | nopos | mounted | failed | notjoined`) comes back and the mod says it in its own words.
-  It reuses the leash's pull lock, so it can never run beside a real pull. It does **not** touch the
-  leash's pull sequence number or its state report to the host.
-* After the host's own **story** scene, a pull is worded "Your host's scene took them elsewhere; you were
-  brought along." instead of "Your host fast-travelled." A scene made of faders only (no edge reaches the
-  joiner for those) still reads "fast-travelled". **(known wording nuance, cosmetic)**
+  of their own, or downed; mounted → dismount first (up to 4 tries), never placed on a horse. The host's
+  position is read **again right before** the placement (the awaits take seconds), from the host's trail as
+  a pull does; when the area around the host is not loaded here yet, the leash's fallback (a spot the host
+  stood on, then the ground beside the host once it has loaded) runs; and on success `_leashPulledUtc` is
+  set, so the WO-147 motion check does not take the teleport for a flight (which would stop the host's NPC
+  stream following this player). A result code (`placed | busy | nopos | mounted | failed | notjoined`)
+  comes back and the mod says it in its own words. It reuses the leash's pull lock, so it can never run
+  beside a real pull, and it does **not** touch the leash's pull sequence number or its state report.
+* After the host's own **story** scene **ended** (within 10 s), a pull is worded "Your host's scene took
+  them elsewhere; you were brought along." instead of "Your host fast-travelled." (A scene's start never
+  counts; a fast travel a minute later is a fast travel.) A scene made of faders only (no edge reaches the
+  joiner for those) still reads "fast-travelled". **(unit; the wording is cosmetic)**
 
-## 3. Review findings fixed before the first live run
+## 3. Defects found before the first live run, and fixed
+
+Two rounds. Round 1 was my own review while writing; round 2 was an independent high-effort code review of
+the whole branch (nine findings; **each was checked against the code before it was fixed**, all nine were
+real, and two were decided with the maintainer: the pull wording and which keys dismiss the notice).
 
 | # | Found | Cause | Fix | Evidence |
 |---|---|---|---|---|
-| 1 | The notice could stay up over the joiner's **own** copy of the scene | the copy starts 0.1–1.5 s after the host's, after the notice | withdrawn in `KCD2MP_SetCutscene` when this game's own scene starts | synthetic (6 checks) |
+| 1 | The notice could stay up over the joiner's **own** copy of the scene | the copy starts 0.1–1.5 s after the host's, after the notice | withdrawn in `KCD2MP_SetCutscene` when this game's own scene starts | synthetic |
 | 2 | A script reload left the agent's `mp_scene_follow` **on** while the Lua came back **off** | the Lua is reborn with defaults; the agent kept its copy | the agent asks the mod to re-send its settings when it sees the mod reborn (`OnModInitDetected`) | code-verified |
 | 3 | The notice lingered up to 1 s past its 20 s | `math.ceil(-0.5)` is `-0`, which is not `< 0` | compare on the clock, not the rounded countdown | synthetic |
 | 4 | Lua accepted `1e3` and `0x10` as metres; the agent's parser refuses them | `tonumber` is permissive | digits only on both sides | synthetic |
 | 5 | A duplicate end could close an outer scene's window early | a counter, not a set | scenes tracked by name | unit |
+| 6 | **A load or disconnect left the host's scene window open**: the bring-along was dead for up to 10 min, or measured the load as a relocation and pulled everyone | `Wo151SceneReset` (every load and disconnect) never reached the window | `Wo153OnSceneReset` from it | unit (Reset) |
+| 7 | **A long scene brought nobody along** | an END was refused for the window's age (10 min) | staleness measured from the last edge, only a START drops an orphan (30 min); an end is never refused | unit |
+| 8 | Chained scenes: a second evaluation could read a position mid-scene, and a relocation between two scenes was lost | the window closed at the first end | the window closes 2 s after the last end; a start inside the 2 s joins it | unit |
+| 9 | A joiner in **its own world** (WO-140) could trigger a pull of everyone | the "farthest joiner" scan covered every joiner the leash knows | only joiners in the host's world with a fresh state, as the leash does | code-verified |
+| 10 | **The watch teleport could be read as flight**, which stops the host's NPC stream following that player | `_leashPulledUtc` (the WO-147 motion check's 5 s hold-off) was not set | set on a successful placement | code-verified |
+| 11 | The watch used a host position seconds old and had none of the pull's "no ground yet" fallback | it read the position once, before the awaits | read again right before the placement; the pull's fallback and settle | code-verified |
+| 12 | An inner scene's end cleared the notice and said "over" early | no nesting on the joiner | scenes kept by name; only the last end ends it | synthetic |
+| 13 | A real fast travel soon after a scene could read "your host's scene took them elsewhere" | the wording followed any host scene edge within 30 s | only a story scene's **end** within 10 s (decided) | unit |
+| 14 | Esc / menu-cancel silently dismissed the notice | the decline set included `cancel`, `ui_cancel` | F12 only (decided) | synthetic |
+| 15 | `pulls_asked` counted requests the leash deduped; the agent's stats line was never printed | the note returned void; no event called it | it returns whether it asked; `mp_scene_status` prints `MP-W153 stats` | code-verified |
+| 16 | A scene during the first seconds would open a window at (0, 0) and read as a huge relocation | no position sample yet | such a scene is not measured | code-verified |
 
 Also found on the way (separate branch `fix/kcd2-install-selection`, `b73c204`): the agent could take
 Kingdom Come: Deliverance **1**'s `kcd.log` and `Tables.pak` as the game's. See `docs/WO-152-orientation.md` §2.1.
 
 ## 4. Verification status
 
+Run on `integration/wo-152-153` (this branch plus the KCD1 fix), 2026-10-02:
+
 | What | Result |
 |---|---|
-| `dotnet build KCD2-MP.sln` | 0 errors |
-| `KcdMp.Client.Tests` | 875 / 875 (824 before; +41 for this WO, +10 for the KCD1 fix) |
+| `dotnet build KCD2-MP.sln` | 0 errors (11 warnings, all in code this WO did not touch) |
+| `KcdMp.Client.Tests` | **887 / 887** (824 before: +10 for the KCD1 fix, +53 for this WO). On this branch alone: 887 minus the KCD1 fix = 877 run, 2 failing (`Wo121Tests`), which are the KCD1 bug and nothing of this WO |
 | `KcdMp.Relay.Tests` / `KcdMp.Farkle.Tests` | 62 / 62, 59 / 59 |
-| `Test-WO153Synthetic.ps1` | 63 / 63 (defaults, 7 commands, settings line, metres parser, notice, countdown, race, timeout, keys, precedence, results, status) |
-| Every other offline Lua suite (42) | exit 0, 0 failed (the real `kdcmp.lua` is loaded by all of them) |
+| `Test-WO153Synthetic.ps1` | **73 / 73** (defaults, 7 commands, settings line, metres parser, notice, countdown, race, nesting, stale names, timeout, keys, precedence, results, status) |
+| Every Lua suite (43 scripts, this one included) | all exit 0; **2,894 checks, 0 failed** (the real `kdcmp.lua` is loaded by every one) |
 | The three static checks | 7/7, 6/6, 7/7 |
 | `kdcmp.pak` | rebuilt with `tools\Build-And-Install-Mod.ps1 -NoInstall`; its Lua is byte-identical to the source |
+| The relay over a non-loopback (Tailscale) address | `Test-Sessions` 22/22, `Test-Combat` 14/14, `Test-Dice` 15/15 (WO-152 orientation §6) |
 | **In the game** | **not verified** (no Modding Tools on this machine) |
 
 ## 5. What a live run must show (two players; the checklist items are 104–109)
