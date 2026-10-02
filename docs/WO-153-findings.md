@@ -191,10 +191,10 @@ Run on `integration/wo-152-153` (this branch plus the KCD1 fix), 2026-10-02:
 | What | Result |
 |---|---|
 | `dotnet build KCD2-MP.sln` | 0 errors (11 warnings, all in code this WO did not touch) |
-| `KcdMp.Client.Tests` | **898 / 898** (824 before: +10 for the KCD1 fix, +64 for this WO). On this branch alone the same suite runs 888 with 2 failing (`Wo121Tests`), which are the KCD1 bug and nothing of this WO |
+| `KcdMp.Client.Tests` | **904 / 904** (824 before: +10 for the KCD1 fix, +70 for this WO). On this branch alone the same suite runs 894 with 2 failing (`Wo121Tests`), which are the KCD1 bug and nothing of this WO |
 | `KcdMp.Relay.Tests` / `KcdMp.Farkle.Tests` | 62 / 62, 59 / 59 |
-| `Test-WO153Synthetic.ps1` | **83 / 83** (defaults, 7 commands, settings line, metres parser and the far floor, notice, countdown, race, nesting, chaining, stale names, timeout, keys, precedence, results, status) |
-| Every Lua suite (43 scripts, this one included) | all exit 0; **2,904 checks, 0 failed** (2,821 before this WO; the real `kdcmp.lua` is loaded by every one) |
+| `Test-WO153Synthetic.ps1` | **94 / 94** (defaults, 7 commands, settings line, metres parser and the far floor, notice, countdown, race, nesting, chaining, stale names, timeout, keys, precedence, results, status) |
+| Every Lua suite (43 scripts, this one included) | all exit 0; **2,915 checks, 0 failed** (2,821 before this WO; the real `kdcmp.lua` is loaded by every one) |
 | The three static checks | 7/7, 6/6, 7/7 |
 | `kdcmp.pak` | rebuilt with `tools\Build-And-Install-Mod.ps1 -NoInstall`; its Lua is byte-identical to the source |
 | The relay over a non-loopback (Tailscale) address | `Test-Sessions` 22/22, `Test-Combat` 14/14, `Test-Dice` 15/15 (WO-152 orientation §6) |
