@@ -127,12 +127,14 @@ No wire message was added or changed; `Protocol.Version` and `VERSION` are untou
 
 ## 3. Defects found before the first live run, and fixed
 
-Four rounds. Round 1 was my own review while writing. Rounds 2, 3 and 4 were independent high-effort code
-reviews of the whole branch: nine, eight and ten findings. **Each finding was checked against the code
-before it was acted on.** Round 2: all nine were real. Round 3: six real and fixed, one fixed on the part
-that is real (#17), one answered by documenting rather than refactoring the leash's core (#22). Round 4:
-six real and fixed (#25–#30); four declined with reasons, listed after the table. Two round-2 points were
-decided with the maintainer (the pull wording, which keys dismiss the notice).
+Five rounds. Round 1 was my own review while writing. Rounds 2–5 were independent high-effort code reviews
+of the whole branch: nine, eight, ten and seven findings. **Each finding was checked against the code before
+it was acted on.** Round 2: all nine were real. Round 3: six real and fixed, one fixed on the part that is
+real (#17), one answered by documenting rather than refactoring the leash's core (#22). Round 4: six real and
+fixed (#25–#30), four declined. Round 5: five real and fixed (#31–#35), two declined; the declined ones are
+listed after the table. Two round-2 points were decided with the maintainer (the pull wording, which keys
+dismiss the notice). The rounds stopped here because the last round's findings were edge cases of the same
+shape as before, not new mechanisms; that is a judgement, not a proof, and the live run is the real test.
 
 | # | Found | Cause | Fix | Evidence |
 |---|---|---|---|---|
@@ -166,6 +168,11 @@ decided with the maintainer (the pull wording, which keys dismiss the notice).
 | 28 | A second relocating scene within 20 s was **ignored**, stranding a joiner the first pull had already placed | the 20 s stamp (round 3 gave the feature its own) | no stamp at all: one request per scene window; the leash keeps what is owed | code-verified |
 | 29 | F11 while a host pull was placing the player said "You can't be moved right now", the opposite of what was happening | the lock-held case reused `busy` | its own code and words: "You are already being brought to your host." | synthetic |
 | 30 | The notice **shadowed the older quest-readiness prompt** (WO-94), which uses F11/F12 too | the notice's branch ran first | it yields while that prompt is up (that layer is off in a shared world, where the notice shows) | synthetic |
+| 31 | **A scene whose name only the start parser accepts became an orphan** and silenced the feature for 20 min | the end edge (the engine's release line) is parsed for `[A-Za-z0-9_]` names only; the start edge is parsed more loosely | such a scene is not tracked at all (`IsTrackableName`); it is logged as not measured | unit |
+| 32 | **With `mp_scene_guard` off the end position was read before the engine's end placement** (the content's end edge, 41–60 s earlier in the field) | the feature assumed the guard's release edge | with the guard off, scenes are not measured and nobody is brought along; logged once. The guard ships on | code-verified |
+| 33 | A separate-world joiner (WO-140) was left with a **pending pull** that would fire if it rejoined within 120 s | the request noted every joiner the leash knows | the request skips separate-world joiners; a joiner loading or busy is still owed it, as for a real fast travel | code-verified |
+| 34 | **The watch could place a player mid-cutscene or after the host's scene was over** | it checked busy once, before several seconds of awaits | re-checked right before the placement: this game's own copy playing → refused; the host's scene over → nothing moved and nothing more said | code-verified, synthetic |
+| 35 | The scene wording attached to the end of a nested inner scene, and was never cleared when a new host scene started; and an unrelated peer leaving reset the notice while the host was not yet known | one stamp on every end; `hid == 0xFF` matched any peer | the stamp is the LAST running host scene's end and is cleared at the next start (a set by name, as the mod keeps); only the known host leaving resets | code-verified |
 
 Not changed, with the reason:
 * **A host that walks or rides during a scene** (so that start→end displacement would misread a long scene).
@@ -180,6 +187,12 @@ Not changed, with the reason:
   scene name is assumed unique to its scene (not verified against the game data), and a re-logged start must count once.
 * **The watch's copy of the pull's placement steps** stays a copy (§7): the pull is the leash's core and cannot be
   exercised without the game; refactoring it blind to remove a duplicate trades a maintenance risk for a live one.
+* **The scene follow's note loop is a copy of `Wo114NoteHostFastTravel`'s body** on purpose: it must skip
+  separate-world joiners and carry no duplicate stamp, and changing the shared helper would change real fast
+  travel in the leash's core.
+* **The disconnect reset runs twice** (once from this feature, once through `Wo151SceneReset`): harmless and
+  idempotent (each logs only when it had something to forget), and the `finally` that runs the first is the one
+  that is certain to run.
 
 Also found on the way (separate branch `fix/kcd2-install-selection`, `b73c204`): the agent could take
 Kingdom Come: Deliverance **1**'s `kcd.log` and `Tables.pak` as the game's. See `docs/WO-152-orientation.md` §2.1.
@@ -226,7 +239,7 @@ choice is empty until the start gate exists (§0.1, item 1). The first live run 
 
 ## 6. Rollback and files
 
-`mp_scene_follow off` (host) and `mp_scene_notice off` (joiner) remove every behaviour; with both off the
+The bring-along needs `mp_scene_guard` **on** (it ships on): its end edge is the engine's release, after the end placement. `mp_scene_follow off` (host) and `mp_scene_notice off` (joiner) remove every behaviour; with both off the
 mod behaves as 0.43.0. New: `dotnet/KcdMp.Client/SceneFollowLogic.cs`, `GameBridge.Wo153.cs`,
 `dotnet/KcdMp.Client.Tests/Wo153Tests.cs`, `tools/Test-WO153Synthetic.{ps1,lua}`. Changed: `GameBridge.cs`
 (four one-line hooks), `GameBridge.Wo114.cs` (the pull's wording, one line), `kdcmp.lua` (one block, three

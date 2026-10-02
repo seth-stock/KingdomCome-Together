@@ -17718,6 +17718,9 @@ function KCD2MP_W153Result(code)
     w.stats.results = w.stats.results + 1
     if code ~= "placed" then w.watching = false end
     mp_log("WO153-RESULT " .. code)
+    -- "over": the host's scene ended while the watch was being set up; the "your host's cutscene is over" line was already
+    -- shown (or is about to be), so nothing more is said
+    if code == "over" then return end
     KCD2MP_ShowNativeToast(KCD2MP_W153_TEXT[code] or KCD2MP_W153_TEXT.failed)
 end
 

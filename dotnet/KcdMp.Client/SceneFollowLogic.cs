@@ -81,6 +81,19 @@ public static class SceneFollowLogic
     public static bool IsStoryScene(string type) => type is "Rendered" or "Ingame";
 
     /// <summary>
+    /// A scene the window can follow from its start to its end. The end edge (the engine's release) is parsed by
+    /// <c>LogTailGameTransport.TryParseSceneStage</c>, which refuses a name with anything but letters, digits and
+    /// '_'; the start edge is parsed more loosely. A scene whose name only the start parser accepts would never end in
+    /// the window, so it is not tracked at all (not measured) instead of becoming an orphan.
+    /// </summary>
+    public static bool IsTrackableName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        foreach (char c in name) if (!(char.IsAsciiLetterOrDigit(c) || c == '_')) return false;
+        return true;
+    }
+
+    /// <summary>
     /// The joiner's wording of a pull: the scene's only when the host's own story scene ENDED a moment ago
     /// (<see cref="SceneTextWindowS"/>). A fast travel a minute later is a fast travel. Never set by a scene's
     /// start: the pull this wording is for comes after the end.
