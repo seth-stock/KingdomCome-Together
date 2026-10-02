@@ -337,6 +337,12 @@ function KCD2MP_SetCutscene(active, name)
     for gid, pc in pairs(KCD2MP.peerCutscene) do
         peers = peers .. (peers == "" and "" or ",") .. tostring(gid) .. ":" .. (pc.active and "1" or "0")
     end
+    -- WO-153: this game's own copy of a scene started (it follows the host's by 0.1-1.5 s): the
+    -- "your host is in a cutscene" notice has nothing left to offer, and F11 would be refused.
+    if active and KCD2MP.w153 and KCD2MP.w153.prompt then
+        KCD2MP.w153.prompt = nil
+        mp_log("WO153-NOTICE withdrawn: this game's own copy of the scene started")
+    end
     -- The quest layer reacts first so the line records the state AFTER the
     -- edge (a prompt hidden by this cutscene shows as prompt=0 pending=1).
     if KCD2MP_QuestOnCutscene then pcall(KCD2MP_QuestOnCutscene, active) end

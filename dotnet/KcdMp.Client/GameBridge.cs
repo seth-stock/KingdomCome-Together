@@ -874,6 +874,7 @@ public partial class GameBridge(ClientConfig config)
     {
         _questRepushDue = true;
         _w133PushDue = true;                       // WO-133: the shared-world quest gate, too
+        _ = ExecLuaAsync("if KCD2MP_W153CfgEmit then KCD2MP_W153CfgEmit() end");   // WO-153: the reborn Lua's settings win (its default is follow off)
         _dmgGuard.InvalidatePlayerGuid();          // WO-99 Phase 0
         _dmgGuardIdentityAtUtc = DateTime.MinValue;
         Console.WriteLine("[quest] mod Lua (re)initialised -- standing divergences will be re-pushed on the next re-arm");

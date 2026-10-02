@@ -582,6 +582,43 @@ seen working solo against a scripted partner; these checks need two people.
 Lines worth a look: `MP-W151` (agent log), `WO151-` (kcd.log), `FRAME` and `FAULT`
 (kcdmp-native.log; a `FAULT` line is worth a report).
 
+## WO-153 — a partner in a cutscene
+
+Built and tested without the game (`docs/WO-153-findings.md`); these checks are the first time it meets
+one. The notice is on; the bring-along is **off** until the host types `mp_scene_follow on`. Markers:
+`mark_cutscene` when a scene starts, `mark_leash` when someone is brought along. Every check names its switch.
+
+104. **The notice.** The host triggers a quest scene (a cutscene, not a conversation) while the partner
+     stands free nearby. Marker: `mark_cutscene` (both).
+     * Partner: "Your host is in a cutscene." and, below it, the two keys with a countdown, within about a
+       second. Write down whether the partner's **own** copy of the scene then started (it normally does,
+       0.1–1.5 s later), and whether the notice went when it did. Switch: `mp_scene_notice`.
+105. **Watch.** Same, with the partner standing 40 m or more from the host: press **F11** on the notice.
+     Marker: `mark_cutscene`.
+     * Partner: stands beside the host (nothing falls hurt, a rider is put on foot first), "You are beside
+       your host." Then repeat while the partner is in a conversation and while riding: the first is refused
+       with "You can't be moved right now...", the second dismounts first. Console fallback:
+       `mp_scene_watch`.
+106. **Keep playing.** The notice again; press **F12** (or do nothing for 20 s). Marker: `mark_cutscene`.
+     * Partner: nothing moves; the notice goes; the partner keeps playing. If their own copy of the scene
+       starts anyway, write that down: it is the case the start gate (findings §0.1) is for.
+107. **Brought along.** Host: `mp_scene_follow on`. Play a quest scene that **moves the host** (a teleport
+     or a placement; any kind), with the partner 60 m or more away. Marker: `mark_leash` when it happens.
+     * Partner: is placed beside the host after the scene, once, with the words "Your host's scene took
+       them elsewhere; you were brought along." (a fader-only scene may say "Your host fast-travelled.").
+     * Host log (agent.log): `MP-W153 host: the scene window closed ... -> Relocated`, then `MP-LEASH`.
+     * Switches: `mp_scene_follow`, `mp_scene_follow_m` (25), `mp_scene_follow_far_m` (150).
+108. **Not brought along when it should not.** With `mp_scene_follow on`: a scene that does not move the host
+     while the partner stands near; and a scene that ends because the host **loads a save**.
+     Marker: `mark_cutscene`.
+     * Nobody is moved. agent.log says `-> None`, or (for the load) "while this game was loading, down or travelling".
+109. **A story scene, partner left far behind.** Partner 200 m or more from the host, the host plays a story
+     scene (rendered video or ingame sequence) that does not move the host. Marker: `mark_cutscene`.
+     * Partner: brought beside the host after the scene (the "Far" case). `-> Far` in agent.log.
+
+Lines worth a look: `MP-W153` (agent log), `WO153-` (kcd.log: `NOTICE`, `END`, `ANSWER`, `TIMEOUT`,
+`RESULT`, `STATUS` from `mp_scene_status`).
+
 ## Logs to send afterwards
 
 Both machines: Report a bug in the launcher. Since 0.42.2 it also collects the
