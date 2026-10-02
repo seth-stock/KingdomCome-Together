@@ -406,4 +406,18 @@ public class Wo153Tests
         double gallopMetres = 15.0 * SceneFollowLogic.EndSampleDelayMs / 1000.0;
         Assert.True(gallopMetres < SceneFollowLogic.RelocDefaultM / 2);
     }
+
+    // ---- which scenes the window can follow ----
+
+    [Theory]
+    [InlineData("m03_intro", true)]
+    [InlineData("A1", true)]
+    [InlineData("zachrana_zastav_krvaceni", true)]
+    [InlineData("scene-with-dash", false)]      // the end-edge parser refuses it: its end would never arrive
+    [InlineData("scene.with.dot", false)]
+    [InlineData("scene name", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Only_names_the_end_edge_parser_accepts_are_tracked(string? name, bool tracked) =>
+        Assert.Equal(tracked, SceneFollowLogic.IsTrackableName(name));
 }

@@ -534,6 +534,10 @@ do
     KCD2MP_W153Result(nil)
     check("R: a nil code does not error", true)
     check("R: results are counted", KCD2MP.w153.stats.results == 9, KCD2MP.w153.stats.results)
+    local before = #TOASTS
+    KCD2MP.w153.watching = true
+    KCD2MP_W153Result("over")
+    check("R: 'over' (the host's scene ended while the watch was set up) says nothing more, and clears 'watching'", #TOASTS == before and KCD2MP.w153.watching == false)
     noErrs("R")
 end
 
