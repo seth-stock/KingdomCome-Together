@@ -348,6 +348,25 @@ do
     noErrs("N")
 end
 
+-- The race: this game's own copy of the scene starts 0.1-1.5 s after the host's, after the notice is up.
+do
+    reset(); NOW = 900
+    local mark = #LOG
+    KCD2MP_W153HostScene("1", true, "Ingame", "race", false)
+    check("N: (race) the notice is up before this game's own copy starts", KCD2MP.w153.prompt ~= nil)
+    KCD2MP_SetCutscene(true, "race")
+    check("N: this game's own copy starting withdraws the notice (once, logged)", KCD2MP.w153.prompt == nil and logCount("WO153-NOTICE withdrawn", mark) == 1)
+    press("kcd2mp_dice_bank")
+    check("N: ...so a stray F11 asks the agent nothing", #emitted("w153_watch", mark) == 0)
+    KCD2MP_SetCutscene(false, "race")
+    KCD2MP_W153HostScene("1", false, "Ingame", "race", false)
+    check("N: ...and the host's end after it says nothing (nothing was on offer)", toastCount("Your host's cutscene is over.") == 0)
+    KCD2MP_SetCutscene(true, "own-only")
+    check("N: this game's own scene with no notice up changes nothing", KCD2MP.w153.prompt == nil and logCount("WO153-NOTICE withdrawn", mark) == 1)
+    KCD2MP_SetCutscene(false, "own-only")
+    noErrs("N-race")
+end
+
 -- ================================================================ K: the keys
 
 do
