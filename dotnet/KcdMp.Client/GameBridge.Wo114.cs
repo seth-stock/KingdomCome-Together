@@ -260,14 +260,18 @@ public partial class GameBridge
         Wo114NoteHostFastTravel(FormattableString.Invariant($"this game jumped {jump:F0} m ({p.X:F0},{p.Y:F0}) -> ({_lastX:F0},{_lastY:F0}), a teleport"));
     }
 
-    /// <summary>The host arrived somewhere else (the engine's fast travel, a teleport): every joiner comes along. Deduped for 20 s.</summary>
-    private void Wo114NoteHostFastTravel(string why)
+    /// <summary>
+    /// The host arrived somewhere else (the engine's fast travel, a teleport): every joiner comes along. Deduped for 20 s.
+    /// WO-153: returns whether it asked the leash (false = deduped or mp_leash is off), so a caller can count honestly.
+    /// </summary>
+    private bool Wo114NoteHostFastTravel(string why)
     {
-        if ((DateTime.UtcNow - _leashFastTravelUtc).TotalSeconds < 20) return;
+        if ((DateTime.UtcNow - _leashFastTravelUtc).TotalSeconds < 20) return false;
         _leashFastTravelUtc = DateTime.UtcNow;
         Console.WriteLine($"MP-LEASH host: {why} -- {_leashJoinerState.Count} joiner(s) come along");
-        if (!_leashEnabled) { Console.WriteLine("MP-LEASH host: mp_leash is off -- nobody is brought along"); return; }
+        if (!_leashEnabled) { Console.WriteLine("MP-LEASH host: mp_leash is off -- nobody is brought along"); return false; }
         foreach (var id in _leashJoinerState.Keys) { var l = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic()); lock (l) l.NoteHostFastTravel(); }
+        return true;
     }
 
     /// <summary>"FastTravel: started..." / "FastTravel: ended..." on this machine (LogTailGameTransport).</summary>

@@ -710,8 +710,9 @@ public partial class GameBridge
         $"quest_safety={(_w147QuestSafety ? "on" : "off")} destructive_in={_w147DestructiveIn} already={_w147DestructiveAlready} conversation={_w147DestructiveConv} refused={_w147DestructiveRefused} corrections_skipped={_w147CorrectionsSkipped} not_own_blow={_w147NotOwnBlow} fight_watches={_w147FightWatches} guards_forgotten={_w147GuardsForgotten}");
 
     /// <summary>After a fallback placement: the ground beside the host, once this area has loaded (two tries).</summary>
-    private async Task Wo147SettleBesideHostAsync(byte seq)
+    private async Task Wo147SettleBesideHostAsync(byte seq, string? label = null)
     {
+        label ??= $"pull #{seq}";   // WO-153: a watch (no pull) says so in its own lines
         foreach (int waitMs in new[] { 1500, 3000, 4000, 6000, 10000 })
         {
             await Task.Delay(waitMs);
@@ -719,7 +720,7 @@ public partial class GameBridge
             if (hid == 0xFF || !_ghostLastPos.TryGetValue(hid, out var hp)) return;
             var pr = await _combat.JoinPlaceAsync(hp.X, hp.Y, hp.Z, LeashPlaceDistM);
             Console.WriteLine(FormattableString.Invariant(
-                $"MP-LEASH joiner: pull #{seq}: the ground beside the host {(pr is { Ok: true } ? "has loaded -- placed there" : "is not loaded yet")} ({(pr is null ? "no answer" : $"residual {pr.Residual:F2} m")})"));
+                $"MP-LEASH joiner: {label}: the ground beside the host {(pr is { Ok: true } ? "has loaded -- placed there" : "is not loaded yet")} ({(pr is null ? "no answer" : $"residual {pr.Residual:F2} m")})"));
             if (pr is { Ok: true }) return;
         }
     }

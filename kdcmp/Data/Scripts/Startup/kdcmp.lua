@@ -17647,6 +17647,21 @@ KCD2MP_W153_TEXT = {
 function KCD2MP_W153HostScene(ghostId, active, kind, name, ownPlaying)
     local w = KCD2MP.w153
     if not w.notice then return end
+    -- The host's scenes nest (a video inside a sequence: start, start, end, end). They are kept BY NAME, so only
+    -- the end of the LAST one ends the notice: an inner end must not take the offer away or say "over" early.
+    w.hostScenes = w.hostScenes or {}
+    local now = os.clock()
+    for k, at in pairs(w.hostScenes) do if now - at > 1800 then w.hostScenes[k] = nil end end   -- an end never logged
+    local key = tostring(name)
+    if active == true then
+        w.hostScenes[key] = now
+    else
+        w.hostScenes[key] = nil
+        if next(w.hostScenes) ~= nil then
+            mp_log(string.format("WO153-END the host's %s scene '%s' ended -- another of the host's scenes is still running", tostring(kind), key))
+            return
+        end
+    end
     if active == true then
         w.stats.notices = w.stats.notices + 1
         if ownPlaying == true then
@@ -17726,7 +17741,7 @@ function KCD2MP_SetSceneNotice(arg)
     local w = KCD2MP.w153
     if v ~= nil then
         w.notice = v
-        if not v then w.prompt = nil; w.watching = false end
+        if not v then w.prompt = nil; w.watching = false; w.hostScenes = {} end
     end
     mp_log("WO153-NOTICE-SWITCH mp_scene_notice " .. (w.notice and "on" or "off"))
     return true
@@ -17784,6 +17799,7 @@ function KCD2MP_W153Status()
     mp_log(string.format("WO153-STATUS notice=%s follow=%s reloc_m=%d far_m=%d prompt=%s watching=%s | notices=%d prompts=%d watch=%d keep=%d timeouts=%d results=%d own_copy=%d",
         w.notice and "on" or "off", w.follow and "on" or "off", w.relocM, w.farM, w.prompt and "yes" or "no", w.watching and "yes" or "no",
         s.notices, s.prompts, s.watch, s.keep, s.timeouts, s.results, s.ownCopy))
+    KCD2MP_EmitEvent("w153_status", "")   -- the agent writes its own counters (MP-W153 stats)
 end
 
 -- ===== WO-141: activities and animal attacks (docs/WO-141-findings.md) ============
@@ -21370,11 +21386,12 @@ local function handleAction(action, activation, value)
         if ACTS.ACCEPT_ACTIONS[action] then pcall(KCD2MP_W140Answer, true); return end
         if ACTS.DECLINE_ACTIONS[action] then pcall(KCD2MP_W140Answer, false); return end
     end
-    -- WO-153: the host's-cutscene notice. Only F11 (kcd2mp_dice_bank) means watch -- the generic accept
-    -- actions (confirm, ui_accept) are never a yes, because a yes moves the player; any decline action is "keep playing".
+    -- WO-153: the host's-cutscene notice. Only F11 (kcd2mp_dice_bank) means watch and only F12 (kcd2mp_dice_yield)
+    -- means keep playing. The generic accept actions (confirm, ui_accept) are never a yes, because a yes moves the
+    -- player, and the generic cancels (cancel, ui_cancel: opening a menu) do not dismiss the notice -- it times out.
     if KCD2MP.w153 and KCD2MP.w153.prompt and activation == "press" then
         if action == "kcd2mp_dice_bank" then pcall(KCD2MP_W153Answer, true); return end
-        if ACTS.DECLINE_ACTIONS[action] then pcall(KCD2MP_W153Answer, false); return end
+        if action == "kcd2mp_dice_yield" then pcall(KCD2MP_W153Answer, false); return end
     end
     if KCD2MP.quest and KCD2MP.quest.prompt and activation == "press" then
         if ACTS.ACCEPT_ACTIONS[action] then

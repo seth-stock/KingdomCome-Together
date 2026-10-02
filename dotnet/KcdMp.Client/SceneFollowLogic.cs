@@ -7,8 +7,10 @@ namespace KcdMp.Client;
 /// WO-153: the pure half of "the joiner comes along after the host's scene" (docs/WO-153-findings.md).
 /// GameBridge.Wo153 owns the wire, the log and the leash call; this owns the rules, and Wo153Tests pins them.
 ///
-/// A scene window is every host-side scene edge from the first start to the last end (scenes nest: a
-/// fader inside an ingame sequence). When the window closes, two observable facts decide:
+/// A scene window is every host-side scene edge from the first start to the last end, plus a short quiet
+/// period (<see cref="SettleMs"/>): scenes nest (a fader inside an ingame sequence) and chain (one sequence
+/// into the next), and a window that closed between two chained scenes would measure each half alone and
+/// lose the relocation between them. When the window closes, two observable facts decide:
 ///   * the host ended somewhere else (<see cref="RelocDefaultM"/> or more from where the window opened):
 ///     a scene that teleports or places the host. Any scene kind counts, faders included;
 ///   * the host ended a STORY scene (a rendered video or an ingame sequence) with a joiner left
@@ -24,14 +26,19 @@ public static class SceneFollowLogic
     public const float RelocDefaultM = 25f;
     /// <summary>A story scene ended with the farthest joiner this far from the host: bring them to the story.</summary>
     public const float FarDefaultM = 150f;
-    /// <summary>The window's end is read this long after the engine's release (the end placement has run).</summary>
+    /// <summary>The window closes this long after the last scene ended (the engine's end placement has run, and a chained scene would have started).</summary>
     public const int SettleMs = 2000;
-    /// <summary>A window older than this never closed (a load swallowed the end edge): it is dropped, not evaluated.</summary>
-    public const int StaleWindowMs = 10 * 60 * 1000;
+    /// <summary>A timer fires this much early at worst; <see cref="Window.TryClose"/> forgives it.</summary>
+    public const int SettleSlackMs = 150;
+    /// <summary>
+    /// A window with no edge for this long is an orphan (an end the engine never logged): the next START drops it.
+    /// An END is never refused for its age: a long scene's real end must still be evaluated.
+    /// </summary>
+    public const int StaleWindowMs = 30 * 60 * 1000;
     /// <summary>The thresholds the cvars accept, in whole metres.</summary>
     public const int MinM = 5, MaxM = 5000;
-    /// <summary>A pull this soon after the host's own story scene is worded as the scene's, not as a fast travel.</summary>
-    public const int SceneTextWindowS = 30;
+    /// <summary>A pull this soon after the host's own story scene ENDED is worded as the scene's, not as a fast travel.</summary>
+    public const int SceneTextWindowS = 10;
 
     /// <summary>The words (this project's own; the game's text is never used).</summary>
     public static class Text
@@ -43,7 +50,7 @@ public static class SceneFollowLogic
 
     /// <param name="storyScene">any scene of the window was a rendered video or an ingame sequence</param>
     /// <param name="hostMovedM">2D distance between where the window opened and where it closed</param>
-    /// <param name="farthestJoinerM">2D distance to the farthest joiner with a fresh position; null = none known</param>
+    /// <param name="farthestJoinerM">2D distance to the farthest joiner in the host's world with a fresh position; null = none known</param>
     public static Verdict Decide(bool storyScene, double hostMovedM, double? farthestJoinerM, float relocM, float farM)
     {
         if (double.IsNaN(hostMovedM) || hostMovedM < 0) return Verdict.None;
@@ -62,46 +69,66 @@ public static class SceneFollowLogic
     public static bool IsStoryScene(string type) => type is "Rendered" or "Ingame";
 
     /// <summary>
-    /// The window's bookkeeping, pure: starts open it, ends close it, and the last end returns the closed
-    /// window for evaluation. Scenes are tracked BY NAME, so a duplicate start (a re-logged edge) counts
-    /// once, and an end that matches no running scene (a duplicate release, the guard giving up and the
-    /// engine then releasing, a load) closes nothing: it can never close an outer scene early. A window
-    /// older than <see cref="StaleWindowMs"/> is dropped on the next edge instead of being evaluated
-    /// against a position from long ago.
+    /// The joiner's wording of a pull: the scene's only when the host's own story scene ENDED a moment ago
+    /// (<see cref="SceneTextWindowS"/>). A fast travel a minute later is a fast travel. Never set by a scene's
+    /// start: the pull this wording is for comes after the end.
+    /// </summary>
+    public static bool UseSceneWording(DateTime nowUtc, DateTime hostStorySceneEndedUtc) =>
+        hostStorySceneEndedUtc != DateTime.MinValue
+        && nowUtc >= hostStorySceneEndedUtc
+        && (nowUtc - hostStorySceneEndedUtc).TotalSeconds < SceneTextWindowS;
+
+    /// <summary>
+    /// The window's bookkeeping, pure. Scenes are tracked BY NAME: a duplicate start (a re-logged edge) counts
+    /// once, and an end that matches no running scene (a duplicate release, the guard giving up and the engine
+    /// then releasing, a load) changes nothing, so it can never close an outer scene early.
+    ///   Start  opens the window, or continues it (a start inside the quiet period after the last end joins the
+    ///          same window, keeping its first position and its story flag);
+    ///   End    returns true when it left no scene running: the caller then waits <see cref="SettleMs"/> and asks
+    ///          <see cref="TryClose"/>;
+    ///   TryClose  closes the window only when nothing runs and the quiet period has passed; later calls (a
+    ///          second timer for a window that continued) return null, and the last end's timer closes it.
+    ///   Reset  forgets everything (a load or a disconnect: the engine interrupts every scene).
     /// </summary>
     public sealed class Window
     {
         private readonly HashSet<string> _running = new(StringComparer.Ordinal);
-        private long _openedMs;
+        private bool _open;
+        private long _lastEdgeMs, _lastEndMs;
         private (float X, float Y) _start;
         private bool _story;
 
-        public bool Open => _running.Count > 0;
+        public bool Open => _open;
         public int Depth => _running.Count;
 
-        public void Reset() { _running.Clear(); _story = false; }
+        public void Reset() { _running.Clear(); _open = false; _story = false; }
 
-        /// <summary>A scene started. Returns true when this edge opened a new window.</summary>
+        /// <summary>A scene started. Returns true when this edge opened a NEW window.</summary>
         public bool Start(long nowMs, float x, float y, string type, string name)
         {
-            if (_running.Count > 0 && nowMs - _openedMs > StaleWindowMs) Reset();
-            bool opened = _running.Count == 0;
-            if (opened) { _openedMs = nowMs; _start = (x, y); _story = false; }
+            if (_open && nowMs - _lastEdgeMs > StaleWindowMs) Reset();   // an orphan: its end was never logged
+            bool opened = !_open;
+            if (opened) { _open = true; _start = (x, y); _story = false; }
             _running.Add(name);
             _story |= IsStoryScene(type);
+            _lastEdgeMs = nowMs;
             return opened;
         }
 
-        /// <summary>
-        /// A scene ended. Returns the closed window's facts when it was the last running one; null while
-        /// others run, or when no running scene has this name.
-        /// </summary>
-        public (float StartX, float StartY, bool Story)? End(long nowMs, string name)
+        /// <summary>A scene ended. True = no scene is running now (the window may close after the quiet period).</summary>
+        public bool End(long nowMs, string name)
         {
-            if (_running.Count == 0) return null;
-            if (nowMs - _openedMs > StaleWindowMs) { Reset(); return null; }
-            if (!_running.Remove(name)) return null;
-            if (_running.Count > 0) return null;
+            if (!_open || !_running.Remove(name)) return false;
+            _lastEdgeMs = _lastEndMs = nowMs;
+            return _running.Count == 0;
+        }
+
+        /// <summary>The window's facts when it may close now, else null.</summary>
+        public (float StartX, float StartY, bool Story)? TryClose(long nowMs)
+        {
+            if (!_open || _running.Count > 0) return null;
+            if (nowMs - _lastEndMs < SettleMs - SettleSlackMs) return null;
+            _open = false;
             return (_start.X, _start.Y, _story);
         }
     }

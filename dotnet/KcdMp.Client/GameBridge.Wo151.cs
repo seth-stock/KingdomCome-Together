@@ -520,6 +520,7 @@ public partial class GameBridge
     {
         int n = _w151Scenes.Count;
         _w151Scenes.Clear();
+        Wo153OnSceneReset(why);   // WO-153: the host's scene window does not survive a load either
         bool was = _localCutsceneActive;
         if (_localCutsceneActive) { _localCutsceneActive = false; _localCutsceneName = ""; _ = ExecLuaAsync("if KCD2MP_SetCutscene then KCD2MP_SetCutscene(false, \"\") end"); }
         _ = ExecLuaAsync($"if KCD2MP_W151SceneRelease then KCD2MP_W151SceneRelease(\"{why}\", true) end");

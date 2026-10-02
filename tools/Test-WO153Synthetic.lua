@@ -241,7 +241,7 @@ local function frame() DRAWN = {}; KCD2MP_DrawInteractionUI(); return table.conc
 local function reset()
     local w = KCD2MP.w153
     w.notice = true; w.follow = false; w.relocM = 25; w.farM = 150
-    w.prompt = nil; w.watching = false
+    w.prompt = nil; w.watching = false; w.hostScenes = {}
     w.stats = { notices = 0, prompts = 0, watch = 0, keep = 0, timeouts = 0, results = 0, ownCopy = 0 }
     if KCD2MP.w140 then KCD2MP.w140.prompt = nil end
     ERRS = {}; TOASTS = {}
@@ -348,6 +348,32 @@ do
     noErrs("N")
 end
 
+-- Nesting: the host's scenes nest (start, start, end, end); only the LAST end ends the notice.
+do
+    reset(); NOW = 1000
+    local mark = #LOG
+    KCD2MP_W153HostScene("1", true, "Ingame", "outer", false)
+    KCD2MP_W153HostScene("1", true, "Rendered", "inner", false)
+    KCD2MP_W153HostScene("1", false, "Rendered", "inner", false)
+    check("N: (nesting) the inner scene's end leaves the offer up", KCD2MP.w153.prompt ~= nil)
+    check("N: ...and says nothing", toastCount("Your host's cutscene is over.") == 0)
+    check("N: ...but logs that another scene still runs", logCount("another of the host's scenes is still running", mark) == 1)
+    press("kcd2mp_dice_bank")
+    check("N: (nesting) F11 still works after the inner end", #emitted("w153_watch", mark) == 1 and KCD2MP.w153.watching == true)
+    KCD2MP_W153HostScene("1", false, "Rendered", "never-started", false)
+    check("N: an end naming no running scene changes nothing", KCD2MP.w153.watching == true and toastCount("Your host's cutscene is over.") == 0)
+    KCD2MP_W153HostScene("1", false, "Ingame", "outer", false)
+    check("N: the LAST end clears 'watching' and says it is over, once", KCD2MP.w153.watching == false and toastCount("Your host's cutscene is over.") == 1)
+
+    reset(); NOW = 2000
+    KCD2MP_W153HostScene("1", true, "Ingame", "lost-end", false)      -- its end is never logged
+    NOW = NOW + 1801
+    KCD2MP_W153HostScene("1", true, "Ingame", "next", false)
+    KCD2MP_W153HostScene("1", false, "Ingame", "next", false)
+    check("N: a scene whose end was never logged does not hold the next one open (purged after 30 min)", KCD2MP.w153.prompt == nil and toastCount("Your host's cutscene is over.") == 1)
+    noErrs("N-nesting")
+end
+
 -- The race: this game's own copy of the scene starts 0.1-1.5 s after the host's, after the notice is up.
 do
     reset(); NOW = 900
@@ -388,8 +414,10 @@ do
     KCD2MP_W153HostScene("1", true, "Ingame", "k3", false)
     press("confirm"); press("ui_accept"); press("dialog_answer1")
     check("K: the generic accept actions never move a player (confirm, ui_accept, dialog_answer1)", KCD2MP.w153.prompt ~= nil and #emitted("w153_watch", mark) == 0)
-    press("cancel")
-    check("K: a generic decline (cancel) is keep playing", KCD2MP.w153.prompt == nil and KCD2MP.w153.stats.keep == 1 and #emitted("w153_watch", mark) == 0)
+    press("cancel"); press("ui_cancel")
+    check("K: a menu's cancel (cancel, ui_cancel) does NOT dismiss the notice -- it times out", KCD2MP.w153.prompt ~= nil and KCD2MP.w153.stats.keep == 0 and #emitted("w153_watch", mark) == 0)
+    press("kcd2mp_dice_yield")
+    check("K: only F12 dismisses it, as keep playing", KCD2MP.w153.prompt == nil and KCD2MP.w153.stats.keep == 1 and #emitted("w153_watch", mark) == 0)
 
     reset(); mark = #LOG
     KCD2MP_W153HostScene("1", true, "Ingame", "k4", false)
@@ -449,6 +477,7 @@ do
     KCD2MP_W153HostScene("1", true, "Ingame", "s", false)
     local mark = #LOG
     KCD2MP_W153Status()
+    check("S: the status also asks the agent for its own counters", #emitted("w153_status", mark) == 1)
     check("S: the status line carries every setting and counter",
         logCount("WO153-STATUS notice=on follow=off reloc_m=25 far_m=150 prompt=yes watching=no | notices=1 prompts=1 watch=0 keep=0 timeouts=0 results=0 own_copy=0", mark) == 1, LOG[#LOG])
     local clean = true

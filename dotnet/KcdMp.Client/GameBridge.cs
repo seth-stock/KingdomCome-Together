@@ -5907,6 +5907,7 @@ public partial class GameBridge(ClientConfig config)
                 return;
             case "w153_cfg":         // WO-153: mp_scene_follow / mp_scene_follow_m / mp_scene_follow_far_m (the host's)
             case "w153_watch":       // WO-153: this player's F11 on the host's-cutscene notice
+            case "w153_status":      // WO-153: mp_scene_status (the agent's counters)
                 Wo153OnEvent(name, arg);
                 return;
         }
