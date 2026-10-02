@@ -289,6 +289,9 @@ do
     check("D: out-of-range, fractional and malformed metres are refused", refused)
     check("D: ...and leave the values alone", KCD2MP.w153.relocM == 40 and KCD2MP.w153.farM == 300)
     check("D: the edge values 5 and 5000 are accepted", KCD2MP_SetSceneFollowM("5") == true and KCD2MP.w153.relocM == 5 and KCD2MP_SetSceneFollowFarM("5000") == true and KCD2MP.w153.farM == 5000)
+    check("D: the far threshold has a floor of 50 (the leash never moves a joiner within 50 m): 49 refused, 50 accepted",
+        KCD2MP_SetSceneFollowFarM("49") == false and KCD2MP.w153.farM == 5000 and KCD2MP_SetSceneFollowFarM("50") == true and KCD2MP.w153.farM == 50)
+    check("D: ...while the move threshold still accepts 5", KCD2MP_SetSceneFollowM("5") == true and KCD2MP.w153.relocM == 5)
     KCD2MP_SetSceneFollowM("%line")
     check("D: bare mp_scene_follow_m reports and keeps the value", KCD2MP.w153.relocM == 5)
     noErrs("D")
@@ -374,6 +377,28 @@ do
     noErrs("N-nesting")
 end
 
+-- Chained or nested starts: the offer is made once; whatever the player answered stands until the host's LAST scene ends.
+do
+    reset(); NOW = 1100
+    local mark = #LOG
+    KCD2MP_W153HostScene("1", true, "Ingame", "first", false)
+    check("N: (chained) the first scene makes the offer", KCD2MP.w153.prompt ~= nil and KCD2MP.w153.stats.prompts == 1 and toastCount("Your host is in a cutscene.") == 1)
+    press("kcd2mp_dice_yield")
+    check("N: (chained) F12 answers keep playing", KCD2MP.w153.prompt == nil and KCD2MP.w153.stats.keep == 1)
+    KCD2MP_W153HostScene("1", true, "Ingame", "second", false)
+    check("N: (chained) a second scene inside it does NOT override the F12: no new prompt", KCD2MP.w153.prompt == nil)
+    check("N: ...no second toast and no second count", toastCount("Your host is in a cutscene.") == 1 and KCD2MP.w153.stats.prompts == 1 and KCD2MP.w153.stats.notices == 1)
+    check("N: ...and the reason is logged", logCount("started inside another of the host's scenes -- no second offer", mark) == 1)
+    KCD2MP_W153HostScene("1", false, "Ingame", "first", false)
+    check("N: (chained) the first one ending leaves it quiet (another still runs)", KCD2MP.w153.prompt == nil and toastCount("Your host's cutscene is over.") == 0)
+    KCD2MP_W153HostScene("1", false, "Ingame", "second", false)
+    check("N: (chained) after the LAST end a scene later is a fresh offer", (function()
+        KCD2MP_W153HostScene("1", true, "Ingame", "third", false)
+        return KCD2MP.w153.prompt ~= nil and KCD2MP.w153.stats.prompts == 2
+    end)())
+    noErrs("N-chained")
+end
+
 -- The race: this game's own copy of the scene starts 0.1-1.5 s after the host's, after the notice is up.
 do
     reset(); NOW = 900
@@ -429,6 +454,7 @@ do
     KCD2MP_W153HostScene("1", true, "Ingame", "k5", false)
     KCD2MP_W153Answer(true)
     check("K: mp_scene_watch is the same as F11", #emitted("w153_watch", mark) == 1)
+    KCD2MP_W153HostScene("1", false, "Ingame", "k5", false)   -- the first scene ends; the next is a fresh offer
     KCD2MP_W153HostScene("1", true, "Ingame", "k6", false)
     KCD2MP_W153Answer(false)
     check("K: mp_scene_play is the same as F12", #emitted("w153_watch", mark) == 1 and KCD2MP.w153.stats.keep == 1)

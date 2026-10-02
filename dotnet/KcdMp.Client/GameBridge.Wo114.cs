@@ -71,6 +71,8 @@ public partial class GameBridge
     private const double LeashFreshS = 5.0;
     private const float LeashJumpM = 200f;          // a teleport, not a gallop (a horse covers ~15 m/s)
     private const float LeashPlaceDistM = 3.0f;     // WO-124's placement distance
+    /// <summary>The host's own holds under which a position jump is a load, a respawn or a travel, not an arrival (WO-153 uses the same mask).</summary>
+    private const LeashLogic.Hold HostPositionNotTheirs = LeashLogic.Hold.HostDowned | LeashLogic.Hold.HostLoading | LeashLogic.Hold.HostReloading | LeashLogic.Hold.HostTravelling;
 
     private static string On114(bool v) => v ? "on" : "off";
 
@@ -249,8 +251,7 @@ public partial class GameBridge
     private void Wo114HostFastTravelCheck(LeashLogic.Hold hostHold)
     {
         if (!_hasPushed) return;
-        var excluded = LeashLogic.Hold.HostDowned | LeashLogic.Hold.HostLoading | LeashLogic.Hold.HostReloading | LeashLogic.Hold.HostTravelling;
-        if ((hostHold & excluded) != 0) { _leashPrevLocal = null; _leashJumpQuietUntilUtc = DateTime.UtcNow.AddSeconds(5); return; }
+        if ((hostHold & HostPositionNotTheirs) != 0) { _leashPrevLocal = null; _leashJumpQuietUntilUtc = DateTime.UtcNow.AddSeconds(5); return; }
         if (DateTime.UtcNow < _leashJumpQuietUntilUtc) { _leashPrevLocal = null; return; }
         var prev = _leashPrevLocal;
         _leashPrevLocal = (_lastX, _lastY, DateTime.UtcNow);
@@ -260,18 +261,14 @@ public partial class GameBridge
         Wo114NoteHostFastTravel(FormattableString.Invariant($"this game jumped {jump:F0} m ({p.X:F0},{p.Y:F0}) -> ({_lastX:F0},{_lastY:F0}), a teleport"));
     }
 
-    /// <summary>
-    /// The host arrived somewhere else (the engine's fast travel, a teleport): every joiner comes along. Deduped for 20 s.
-    /// WO-153: returns whether it asked the leash (false = deduped or mp_leash is off), so a caller can count honestly.
-    /// </summary>
-    private bool Wo114NoteHostFastTravel(string why)
+    /// <summary>The host arrived somewhere else (the engine's fast travel, a teleport): every joiner comes along. Deduped for 20 s.</summary>
+    private void Wo114NoteHostFastTravel(string why)
     {
-        if ((DateTime.UtcNow - _leashFastTravelUtc).TotalSeconds < 20) return false;
+        if ((DateTime.UtcNow - _leashFastTravelUtc).TotalSeconds < 20) return;
         _leashFastTravelUtc = DateTime.UtcNow;
         Console.WriteLine($"MP-LEASH host: {why} -- {_leashJoinerState.Count} joiner(s) come along");
-        if (!_leashEnabled) { Console.WriteLine("MP-LEASH host: mp_leash is off -- nobody is brought along"); return false; }
+        if (!_leashEnabled) { Console.WriteLine("MP-LEASH host: mp_leash is off -- nobody is brought along"); return; }
         foreach (var id in _leashJoinerState.Keys) { var l = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic()); lock (l) l.NoteHostFastTravel(); }
-        return true;
     }
 
     /// <summary>"FastTravel: started..." / "FastTravel: ended..." on this machine (LogTailGameTransport).</summary>
