@@ -104,6 +104,9 @@ public partial class GameBridge
         long now = W153NowMs();
         if (active)
         {
+            // No position sample yet (a scene during the very first seconds): the window's start would be (0, 0) and
+            // every real position would read as a huge relocation. No window; the scene is simply not measured.
+            if (!_hasPushed) { Console.WriteLine($"MP-W153 host: a {type} scene '{name}' started before this game's first position -- not measured"); return; }
             bool opened;
             lock (_w153Window) opened = _w153Window.Start(now, _lastX, _lastY, type, name);
             if (opened) { _w153Windows++; Console.WriteLine(FormattableString.Invariant($"MP-W153 host: a scene window opens ({type} '{name}') at ({_lastX:F0}, {_lastY:F0})")); }
