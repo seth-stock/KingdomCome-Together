@@ -216,18 +216,10 @@ public sealed class WeaponSwingCatalog
             string p = Path.Combine(Path.GetDirectoryName(kcdLog)!, "Data", "Tables.pak");
             if (File.Exists(p)) return p;
         }
-        foreach (var root in KcdLogLocator.SteamLibraryRoots())
+        foreach (var dir in KcdLogLocator.CandidateDirectories())
         {
-            string common = Path.Combine(root, "steamapps", "common");
-            if (!Directory.Exists(common)) continue;
-            foreach (var dir in Directory.EnumerateDirectories(common))
-            {
-                string name = Path.GetFileName(dir);
-                if (!name.Contains("Kingdom", StringComparison.OrdinalIgnoreCase) &&
-                    !name.Contains("KCD", StringComparison.OrdinalIgnoreCase)) continue;
-                string p = Path.Combine(dir, "Data", "Tables.pak");
-                if (File.Exists(p)) return p;
-            }
+            string p = Path.Combine(dir, "Data", "Tables.pak");
+            if (File.Exists(p)) return p;
         }
         return null;
     }

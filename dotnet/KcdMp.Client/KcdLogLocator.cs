@@ -41,7 +41,7 @@ public static partial class KcdLogLocator
     }
 
     /// <summary>Game install directories worth searching, across all Steam libraries.</summary>
-    private static IEnumerable<string> CandidateDirectories()
+    public static IEnumerable<string> CandidateDirectories()
     {
         foreach (var root in SteamLibraryRoots())
         {
@@ -54,14 +54,28 @@ public static partial class KcdLogLocator
 
             foreach (var d in subdirs)
             {
-                string name = Path.GetFileName(d);
-                if (name.Contains("Kingdom", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("KCD", StringComparison.OrdinalIgnoreCase))
-                {
-                    yield return d;
-                }
+                if (IsKcd2FolderName(Path.GetFileName(d))) yield return d;
             }
         }
+    }
+
+    /// <summary>
+    /// True for a Steam folder name that can hold this mod's game: the retail
+    /// KingdomComeDeliverance2 or the Modding Tools' KCD2Mod, or any other
+    /// KCD-ish name. False for the first game's KingdomComeDeliverance, which
+    /// also has a kcd.log and a Data\Tables.pak: a player who ran it more
+    /// recently than KCD2 had its log tailed and its tables read as KCD2's
+    /// (the walk is alphabetical, and "...Deliverance" sorts before
+    /// "...Deliverance2").
+    /// </summary>
+    public static bool IsKcd2FolderName(string name)
+    {
+        bool kcdish = name.Contains("Kingdom", StringComparison.OrdinalIgnoreCase) ||
+                      name.Contains("KCD", StringComparison.OrdinalIgnoreCase);
+        if (!kcdish) return false;
+        // The first game's folder is the only KCD-ish name with no "2" and no "II" in it.
+        bool sequel = name.Contains('2') || name.Contains("II", StringComparison.Ordinal);
+        return sequel || !name.Contains("Kingdom", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Steam install dir plus every library root in libraryfolders.vdf.</summary>
