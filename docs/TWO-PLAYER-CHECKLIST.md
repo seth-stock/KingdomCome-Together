@@ -619,6 +619,37 @@ one. The notice is on; the bring-along is **off** until the host types `mp_scene
 Lines worth a look: `MP-W153` (agent log), `WO153-` (kcd.log: `NOTICE`, `END`, `ANSWER`, `TIMEOUT`,
 `RESULT`, `STATUS` from `mp_scene_status`).
 
+## WO-154 — locked story parts, keep playing, the story line
+
+0.44.0. The first time these meet two people (`docs/WO-154-findings.md`). Use a save of the **Modding Tools' build or older**
+(`docs/PLAYING-TOGETHER.md` §2). Markers: `mark_cutscene` when a scene starts, `mark_leash` when someone is brought along.
+The guide for the friends is `docs/PLAYING-TOGETHER.md`.
+
+110. **The wedding in Semine.** Play *Wedding Crashers* (M05) from its start. Marker: `mark_cutscene`.
+     * Host: "Locked story section: Wedding Crashers (the wedding in Semine). Your partners are kept within 120 m."
+     * Partner: "Your host entered Wedding Crashers ...: stay close"; if away, **brought beside the host** (not if within 50 m).
+     * Wander the partner 150 m off: the leash's warning, a 10 s countdown, then brought back.
+     * When the quest ends: "Wedding Crashers is over. You are free to roam again." Note when it was late or early.
+     * Logs: `MP-W153 story:` (agent), `WO153-STORY` (kcd.log). Switch: `mp_story_lock`, `mp_story_tether_m`.
+111. **Trosky, the move to Kuttenberg, the devil's job, the pogrom, the cardinal, the Italian Job, the final set.** The same as 110
+     for each, as far as you get. Write down which quest it was and any time the partner was **not** brought, or was brought
+     when the host was not in a locked part. Marker: `mark_leash`.
+112. **The region change.** The story move from Trosecko to Kutnohorsko (or any other map change that is not a save load).
+     * Partner: "Your host is moving to the next region ..."; after the host's world is up, brought along. Marker: `mark_load`.
+     * If the partner's game does not follow into the new map, write down exactly what it showed.
+113. **Keep playing.** Partner: `mp_scene_mode play`. The host triggers a quest cutscene. Marker: `mark_cutscene`.
+     * Partner: the notice says the own copy is skipped; **no cutscene plays on the partner's screen**; the partner keeps
+       playing; **F11** stands the partner beside the host.
+     * The partner's quest keeps moving afterwards (the host's steps reach it). If it stops: `mp_scene_mode watch` and report.
+     * kcd.log of the partner's game: `WO153-GATE enqueue #n ... REFUSED`. That line, or "enqueued", is the evidence
+       the gate never had in a solo run; send it.
+114. **Watch (the game's way).** Partner: `mp_scene_mode watch` (the default). The host triggers a quest cutscene: the notice, then the
+     partner's own copy of the scene plays. Nothing stuck.
+115. **The conversation notice.** The host talks to a villager: the partner sees "Your host is in a conversation." once, not
+     per line.
+116. **The launcher.** The line at the top: "Story: IN SYNC" with both connected; "CATCHING UP" right after a join or a
+     host reload; the locked part's name while the host is in one. On a game that is not 1.5.5 the red build warning.
+
 ## Logs to send afterwards
 
 Both machines: Report a bug in the launcher. Since 0.42.2 it also collects the

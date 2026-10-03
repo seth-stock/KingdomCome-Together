@@ -117,6 +117,11 @@ and weather. Each feature below says how far it is proven:
 | Black screens after a scene | A scene that waits on the host's people is helped along and never leaves the partner on a black screen for long | ⚠️ new in 0.43.0 |
 | Smithing and other work | The partner at a forge or grindstone shows on the other screen where they stand; nobody's station looks taken | 🧪 new in 0.43.0 |
 | Dice with villagers | The dice game after a conversation starts on the partner's screen | 🧪 |
+| The host's cutscene | The partner is told, and chooses: **F11** stand beside the host to watch, **F12** keep playing | ⚠️ new in 0.44.0 (built and tested; not yet seen with two players) |
+| Keeping playing | `mp_scene_mode play`: the partner's own copy of a scene the host's quest step started is not played (a gate in the engine's one cutscene-enqueue function). Off by default | ⚠️ new in 0.44.0 (arms and answers in the real game; a refused scene not yet seen) |
+| Locked story parts | The wedding in Semine, Trosky, the move to Kuttenberg, the devil's job, the pogrom, the cardinal, the Italian Job and the final set bring the partner to the host and keep them within 120 m until the part ends | ⚠️ new in 0.44.0 (built and tested; not yet seen with two players) |
+| Brought along | A cutscene that moves the host, or a story region change, brings the partner along; nobody within 50 m is moved | ⚠️ new in 0.44.0 |
+| The story line in the launcher | "Story: IN SYNC / DRIFTING / CATCHING UP", the locked part the host is in, and a warning when the game is not build 1.5.5 | ⚠️ new in 0.44.0 |
 
 ### Dice between players, and the tools
 
@@ -134,9 +139,11 @@ and weather. Each feature below says how far it is proven:
 - **Animals' positions:** where the host's animals are (a wolf pack, a deer)
   can differ on the partner's screen until they come close, and an animal
   from a random encounter on the host's side may be missing there.
-- **Cutscenes** play for each player separately. 0.43.0 helps a scene that waits
-  on the host's people, but a scene that waits for a quest step can still stay
-  black until the next load.
+- **Cutscenes** play for each player separately (the partner can now skip their own
+  copy, `mp_scene_mode play`, and is told when the host is in one). 0.43.0 helps a
+  scene that waits on the host's people, but a scene that waits for a quest step can
+  still stay black until the next load. The engine cannot show one player another's
+  camera: "watch" is standing beside the host.
 - **Friendly fire:** the host's blow hurts the partner, but the partner's figure
   shows no reaction yet.
 - **Wolves' bites** hurt, but the bite itself is not shown on the partner's
@@ -163,6 +170,8 @@ earlier detailed status table is kept in
    you're actually in-game.
 5. Once both loaded, ALT+TAB into the launcher and choose the "Connect" option
 
+**The full guide, for the host and to send to friends: [docs/PLAYING-TOGETHER.md](docs/PLAYING-TOGETHER.md).**
+
 Same Wi-Fi/LAN: that's it. Different houses: see
 **[docs/NETWORKING.md](docs/NETWORKING.md)** for the two ways to connect
 over the internet (a VPN overlay like Tailscale — recommended — or port
@@ -186,6 +195,12 @@ forwarding), including exactly what address and port to share.
 > missing data from your base **Kingdom Come: Deliverance II** install into
 > the Modding Tools folder. You need to own and have the base game installed
 > too, since that's where the copy comes from.
+>
+> **On Steam, the Modding tools entry's Play button runs this setup, not the game**, and it needs
+> administrator rights; if it flashes and closes, run `WorkspaceSetup.exe` as administrator, or
+> `tools\Link-GameData.ps1` (no administrator rights; both games on one drive). Start the game from the
+> launcher. The Modding Tools are build **1.5.5**; a save from a newer game (the retail game is
+> 1.5.6) is silently refused, see [docs/PLAYING-TOGETHER.md](docs/PLAYING-TOGETHER.md) §2.
 >
 > Skip this and the game will start, then immediately crash:
 > *"Database system error — 114 tables are not loaded. See log for details.
@@ -504,7 +519,10 @@ rather than hardcoding it — never add a new literal version byte to a script.
   reproduced failure, not a hypothetical one.
 - **Installer code signing** — Setup.exe is unsigned, so a first download
   shows SmartScreen's "Windows protected your PC". Click *More info* →
-  *Run anyway*.
+  *Run anyway*. Windows Defender may also remove `KCDMP_LauncherInjector.exe`
+  (it loads the plugin into the game, which scanners dislike): restore it from
+  Protection history and exclude the install folder
+  ([docs/PLAYING-TOGETHER.md](docs/PLAYING-TOGETHER.md) §6).
 - **A moved game is only half-handled** — re-running Setup finds the new path
   and re-deploys the mod, but will not overwrite a `GamePath` already set in
   your `settings.json`. The launcher notices the stale path at startup and
