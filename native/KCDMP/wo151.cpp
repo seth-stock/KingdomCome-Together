@@ -12,6 +12,7 @@
 #include "script_context.h"
 #include "weather.h"
 #include "wo138.h"
+#include "wo153.h"
 
 #include <atomic>
 #include <cmath>
@@ -177,6 +178,21 @@ uint8_t handle(const uint8_t* body, size_t len, uint8_t* out, size_t cap, size_t
             out[0] = wo138::join_held() ? 1 : 0;
             *outLen = 1;
             return ok ? kROk : kRFailed;
+        }
+        case kOpSceneGate: {
+            if (len < 4 || cap < 2) return kRBadRequest;
+            uint16_t w = 0;
+            std::memcpy(&w, body + 2, 2);
+            wo153::set_mode(body[1], w);
+            out[0] = wo153::armed() ? 1 : 0;
+            out[1] = body[1] > 2 ? 0 : body[1];
+            *outLen = 2;
+            return wo153::armed() || body[1] == 0 ? kROk : kRFailed;
+        }
+        case kOpSceneGateStatus: {
+            const int n = wo153::status_text(reinterpret_cast<char*>(out), static_cast<int>(cap));
+            *outLen = n > 0 ? static_cast<size_t>(n < static_cast<int>(cap) ? n : static_cast<int>(cap) - 1) : 0;
+            return kROk;
         }
         case kOpWeatherRead: {
             if (cap < 6) return kRBadRequest;

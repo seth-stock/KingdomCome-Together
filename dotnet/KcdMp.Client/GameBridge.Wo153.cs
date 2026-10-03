@@ -62,6 +62,7 @@ public partial class GameBridge
         Interlocked.Increment(ref _w153Gen);
         lock (_w153Window) _w153Window.Reset();
         W153ForgetHostScenes();
+        Wo153StoryReset();
         _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"connect\") end");   // a notice or scene names left by an earlier session
         _ = ExecLuaAsync("if KCD2MP_W153CfgEmit then KCD2MP_W153CfgEmit() end");
     }
@@ -72,6 +73,7 @@ public partial class GameBridge
         Interlocked.Increment(ref _w153Gen);
         lock (_w153Window) _w153Window.Reset();
         W153ForgetHostScenes();
+        Wo153StoryReset();
         _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"disconnect\") end");
     }
 
@@ -92,6 +94,8 @@ public partial class GameBridge
         bool was;
         lock (_w153Window) { was = _w153Window.Open; _w153Window.Reset(); }
         W153ForgetHostScenes();
+        lock (_w153Lock) _w153Lock.Reset();
+        _w153TetherOn = false;
         if (was) Console.WriteLine($"MP-W153 host: a scene window was open at a {why} -- forgotten (no scene survives it)");
         _ = ExecLuaAsync($"if KCD2MP_W153Reset then KCD2MP_W153Reset(\"{why}\") end");
     }
@@ -125,16 +129,20 @@ public partial class GameBridge
                         case "follow": _w153Follow = v == "on"; break;
                         case "relocm": if (SceneFollowLogic.ParseMetres(v) is float r) _w153RelocM = r; break;
                         case "farm": if (SceneFollowLogic.ParseMetres(v, SceneFollowLogic.MinFarM) is float f) _w153FarM = f; break;
+                        case "story": _w153StoryOn = v == "on"; break;
+                        case "tether": if (SceneFollowLogic.ParseMetres(v, 60) is float tm) _w153TetherM = tm; break;
+                        case "mode": _w153SceneMode = v == "play" ? 1 : 0; _w153GateSent = 255; break;
                     }
                 }
                 Console.WriteLine(FormattableString.Invariant(
-                    $"MP-W153 cfg follow={(_w153Follow ? "on" : "off")} reloc_m={_w153RelocM:F0} far_m={_w153FarM:F0} role={(!_combatRoleApplied ? "unknown" : _isDamageAuthority ? "host (decides)" : "joiner (the host's value counts)")}"));
+                    $"MP-W153 cfg story={(_w153StoryOn ? "on" : "off")} tether_m={_w153TetherM:F0} scene_mode={(_w153SceneMode == 1 ? "play" : "watch")} follow={(_w153Follow ? "on" : "off")} reloc_m={_w153RelocM:F0} far_m={_w153FarM:F0} role={(!_combatRoleApplied ? "unknown" : _isDamageAuthority ? "host (decides)" : "joiner (the host's value counts)")}"));
                 return;
             case "w153_watch":
                 _ = Wo153WatchAsync();
                 return;
             case "w153_status":
                 Console.WriteLine(Wo153StatsLine());
+                Console.WriteLine(Wo153StoryStatsLine());
                 return;
         }
     }

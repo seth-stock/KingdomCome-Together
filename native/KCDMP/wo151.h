@@ -27,6 +27,9 @@
 //   6 WeatherRead -> [count:4][len:1][name]: the last time-of-day profile a blend ran with (weather.h).
 //   7 WeatherGate [len:1][name] -> [] : a joiner's gate -- only that profile may blend (len 0 = off).
 //   8 JoinHold [on:1][maxS:2] -> [held:1]: the host's world held for a whole join (wo138::join_hold).
+//   9 SceneGate [mode:1][windowMs:2] -> [armed:1][mode:1]: WO-153, the cutscene gate (wo153.h): mode 0 off, 1 refuse the
+//       enqueue of a scene the host's mirrored quest step started here, 2 refuse all (the live check).
+//  10 SceneGateStatus -> text: the gate's counters.
 #pragma once
 #include <cstddef>
 #include <cstdint>
@@ -40,6 +43,8 @@ constexpr uint8_t kOpTestTakeDamage = 4;
 constexpr uint8_t kOpCopyFight = 5;
 constexpr uint8_t kOpWeatherRead = 6;
 constexpr uint8_t kOpWeatherGate = 7;
+constexpr uint8_t kOpSceneGate = 9;       // [mode:1][windowMs:2] -> [armed:1][mode:1] (wo153.h)
+constexpr uint8_t kOpSceneGateStatus = 10; // -> text
 constexpr uint8_t kOpJoinHold = 8;     // [on:1][maxS:2] -> [held:1]: wo138::join_hold (3.8)
 
 constexpr uint8_t kROk = 0, kRBadRequest = 1, kRNoActor = 2, kRFailed = 3;

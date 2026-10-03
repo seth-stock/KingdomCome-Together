@@ -121,4 +121,9 @@ bool set_punish_gate(bool on);
 bool punish_gate_armed();
 uint32_t punish_skipped();
 
+// WO-153: is a mirrored quest step being applied right now (main thread), and how long ago did the last one end
+// (milliseconds on GetTickCount64's clock; ~0 = never). The cutscene gate reads both.
+bool apply_active();
+uint64_t ms_since_apply_end();
+
 } // namespace kcdmp::wo137

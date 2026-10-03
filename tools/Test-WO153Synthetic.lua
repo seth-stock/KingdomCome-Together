@@ -242,6 +242,7 @@ local function reset()
     local w = KCD2MP.w153
     w.notice = true; w.follow = false; w.relocM = 25; w.farM = 150
     w.prompt = nil; w.watching = false; w.hostScenes = {}
+    w.story = true; w.tetherM = 120; w.mode = "watch"; w.lastDialogueToast = nil
     w.stats = { notices = 0, prompts = 0, watch = 0, keep = 0, timeouts = 0, results = 0, ownCopy = 0 }
     if KCD2MP.w140 then KCD2MP.w140.prompt = nil end
     ERRS = {}; TOASTS = {}
@@ -251,9 +252,15 @@ local function press(action) Player.Client.OnAction(nil, action, "press", 1); Pl
 
 -- ================================================================ D: defaults, switches, commands
 
+-- The defaults as shipped, read BEFORE any reset() (which sets its own state for the scenarios below).
+do
+    local w = KCD2MP.w153
+    check("D: as shipped the notice, the bring-along and the story lock are ON", w.notice == true and w.follow == true and w.story == true, tostring(w.notice) .. tostring(w.follow) .. tostring(w.story))
+    check("D: as shipped the scene mode is watch (the game's own copy plays) and the tether is 120 m", w.mode == "watch" and w.tetherM == 120)
+end
+
 do
     reset(); NOW = 10
-    check("D: the notice ships on, the bring-along ships OFF (the host's switch)", KCD2MP.w153.notice == true and KCD2MP.w153.follow == false)
     check("D: thresholds ship at 25 m and 150 m", KCD2MP.w153.relocM == 25 and KCD2MP.w153.farM == 150)
     local want = {
         mp_scene_notice = "KCD2MP_SetSceneNotice(%line)", mp_scene_follow = "KCD2MP_SetSceneFollow(%line)",
@@ -265,11 +272,11 @@ do
 
     local mark = #LOG
     KCD2MP_W153CfgEmit()
-    check("D: the settings line is `follow=off relocm=25 farm=150`", emitted("w153_cfg", mark)[1] == "follow=off relocm=25 farm=150", emitted("w153_cfg", mark)[1])
+    check("D: the settings line carries every setting", emitted("w153_cfg", mark)[1] == "follow=off relocm=25 farm=150 story=on tether=120 mode=watch", emitted("w153_cfg", mark)[1])
     mark = #LOG
     KCD2MP_SetSceneFollow("on")
     check("D: mp_scene_follow on: set, logged, sent to the agent", KCD2MP.w153.follow == true and logCount("WO153-FOLLOW mp_scene_follow on", mark) == 1
-        and emitted("w153_cfg", mark)[1] == "follow=on relocm=25 farm=150", emitted("w153_cfg", mark)[1])
+        and emitted("w153_cfg", mark)[1] == "follow=on relocm=25 farm=150 story=on tether=120 mode=watch", emitted("w153_cfg", mark)[1])
     KCD2MP_SetSceneFollow("")
     check("D: bare mp_scene_follow reports and changes nothing", KCD2MP.w153.follow == true)
     KCD2MP_SetSceneFollow("%line")
@@ -280,7 +287,7 @@ do
 
     mark = #LOG
     KCD2MP_SetSceneFollowM("40"); KCD2MP_SetSceneFollowFarM("300")
-    check("D: both thresholds set and sent", KCD2MP.w153.relocM == 40 and KCD2MP.w153.farM == 300 and emitted("w153_cfg", mark)[2] == "follow=off relocm=40 farm=300", emitted("w153_cfg", mark)[2])
+    check("D: both thresholds set and sent", KCD2MP.w153.relocM == 40 and KCD2MP.w153.farM == 300 and emitted("w153_cfg", mark)[2] == "follow=off relocm=40 farm=300 story=on tether=120 mode=watch", emitted("w153_cfg", mark)[2])
     local refused = true
     for _, bad in ipairs({ "4", "5001", "12.5", "abc", "-3", "1e3" }) do
         if KCD2MP_SetSceneFollowM(bad) ~= false then refused = false end
@@ -557,6 +564,93 @@ do
     end
     check("S: the project's own words are plain ASCII (nothing copied from the game)", clean)
     noErrs("S")
+end
+
+
+-- ================================================================ T: the story sections, the tether, the scene mode
+
+do
+    reset(); NOW = 3000
+    local mark = #LOG
+    check("T: the three new commands are registered", CCMDS["mp_story_lock"] and CCMDS["mp_story_lock"].body == "KCD2MP_SetStoryLock(%line)"
+        and CCMDS["mp_story_tether_m"] and CCMDS["mp_story_tether_m"].body == "KCD2MP_SetStoryTether(%line)"
+        and CCMDS["mp_scene_mode"] and CCMDS["mp_scene_mode"].body == "KCD2MP_SetSceneMode(%line)")
+
+    -- mp_story_lock
+    KCD2MP_SetStoryLock("off")
+    check("T: mp_story_lock off: set, sent to the agent", KCD2MP.w153.story == false and emitted("w153_cfg", mark)[1]:find("story=off", 1, true) ~= nil, emitted("w153_cfg", mark)[1])
+    check("T: a bad value is refused", KCD2MP_SetStoryLock("maybe") == false and KCD2MP.w153.story == false)
+    KCD2MP_SetStoryLock("on")
+    check("T: mp_story_lock on", KCD2MP.w153.story == true)
+
+    -- mp_story_tether_m: 60..5000, digits only
+    mark = #LOG
+    check("T: the tether accepts 60 and 5000 and sends it", KCD2MP_SetStoryTether("60") == true and KCD2MP.w153.tetherM == 60 and KCD2MP_SetStoryTether("5000") == true and KCD2MP.w153.tetherM == 5000)
+    local refused = true
+    for _, bad in ipairs({ "59", "5001", "12.5", "abc", "-1", "1e3", "0x80" }) do if KCD2MP_SetStoryTether(bad) ~= false then refused = false end end
+    check("T: below 60, above 5000, fractions and malformed values are refused", refused and KCD2MP.w153.tetherM == 5000)
+    KCD2MP_SetStoryTether("120")
+    check("T: ...and the cfg line carries it", emitted("w153_cfg", mark)[#emitted("w153_cfg", mark)]:find("tether=120", 1, true) ~= nil)
+
+    -- mp_scene_mode
+    mark = #LOG
+    KCD2MP_SetSceneMode("play")
+    check("T: mp_scene_mode play: set and sent", KCD2MP.w153.mode == "play" and emitted("w153_cfg", mark)[1]:find("mode=play", 1, true) ~= nil, emitted("w153_cfg", mark)[1])
+    check("T: a bad mode is refused and changes nothing", KCD2MP_SetSceneMode("sometimes") == false and KCD2MP.w153.mode == "play")
+    KCD2MP_SetSceneMode("%line")
+    check("T: bare mp_scene_mode reports", KCD2MP.w153.mode == "play")
+    KCD2MP_SetSceneMode("WATCH")
+    check("T: the value is case-insensitive", KCD2MP.w153.mode == "watch")
+
+    -- the notice's words follow the mode
+    reset(); NOW = 3100
+    KCD2MP_W153HostScene("1", true, "Ingame", "mode-words", false)
+    check("T: in watch mode the notice is the plain one", toastCount("Your host is in a cutscene.") == 1)
+    reset(); NOW = 3200; KCD2MP_SetSceneMode("play")
+    KCD2MP_W153HostScene("1", true, "Ingame", "mode-words2", false)
+    check("T: in play mode the notice says the own copy is skipped", toastCount("Your host is in a cutscene. Your own copy is skipped; keep playing.") == 1)
+    check("T: ...and the overlay carries the same words", frame():find("Your own copy is skipped", 1, true) ~= nil)
+
+    -- the story toasts
+    reset(); NOW = 3300; TOASTS = {}
+    KCD2MP_W153Story("enter", "Wedding Crashers", "the wedding in Semine")
+    check("T: a joiner is told the host entered a locked section", toastCount("Your host entered Wedding Crashers (the wedding in Semine): stay close. You are brought to them if you stray.") == 1, TOASTS[1])
+    KCD2MP_W153Story("leave", "Wedding Crashers", "")
+    check("T: ...and that it is over", toastCount("Wedding Crashers is over. You are free to roam again.") == 1)
+    KCD2MP_W153Story("level", "", "")
+    check("T: ...and that the host is moving to the next region", toastCount("Your host is moving to the next region. You are brought along when they arrive.") == 1)
+    KCD2MP_W153Story("host-enter", "Trosky", "Trosky castle")
+    check("T: the host is told its partners are kept within the tether", toastCount("Locked story section: Trosky (Trosky castle). Your partners are kept within 120 m.") == 1, TOASTS[#TOASTS])
+    KCD2MP_W153Story("host-leave", "Trosky", "completed")
+    check("T: ...and when they are free again", toastCount("Story section over: Trosky. Your partners are free to roam.") == 1)
+    local n = #TOASTS
+    KCD2MP_W153Story("bogus", "x", "y")
+    check("T: an unknown kind says nothing", #TOASTS == n)
+
+    -- the dialogue toast: once per 8 s
+    reset(); NOW = 3400; TOASTS = {}
+    KCD2MP_W153Story("dialogue", "", "")
+    KCD2MP_W153Story("dialogue", "", "")
+    check("T: the host's conversation is told once, not per edge", toastCount("Your host is in a conversation.") == 1)
+    NOW = NOW + 9
+    KCD2MP_W153Story("dialogue", "", "")
+    check("T: ...and again after 8 s", toastCount("Your host is in a conversation.") == 2)
+
+    -- the joiner-side toasts honour mp_scene_notice off; the host's own never do
+    reset(); NOW = 3500; TOASTS = {}
+    KCD2MP_SetSceneNotice("off")
+    KCD2MP_W153Story("enter", "Wedding Crashers", "x"); KCD2MP_W153Story("leave", "Wedding Crashers", ""); KCD2MP_W153Story("level", "", ""); KCD2MP_W153Story("dialogue", "", "")
+    check("T: with mp_scene_notice off a joiner is told nothing of the story", #TOASTS == 0)
+    KCD2MP_W153Story("host-enter", "Trosky", "Trosky castle")
+    check("T: ...but the host still hears its own section", #TOASTS == 1)
+    KCD2MP_SetSceneNotice("on")
+
+    -- the status line carries the new settings
+    reset(); NOW = 3600
+    mark = #LOG
+    KCD2MP_W153Status()
+    check("T: the status line carries the story settings", logCount("WO153-STATUS story=on tether_m=120 mode=watch", mark) == 1)
+    noErrs("T")
 end
 
 local pass, fail = 0, 0

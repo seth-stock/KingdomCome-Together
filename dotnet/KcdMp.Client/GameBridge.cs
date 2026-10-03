@@ -3297,6 +3297,7 @@ public partial class GameBridge(ClientConfig config)
         if (string.Equals(level, _localLevel, StringComparison.Ordinal)) return;
         _localLevel = level;
         Console.WriteLine($"[quest] level loaded: {level}");
+        Wo153OnLocalLevel(level);   // WO-153: the host's story moved to another region
         PushQuestContext();
     }
 
@@ -5255,6 +5256,12 @@ public partial class GameBridge(ClientConfig config)
                             OnPeerApproach(sbSource, qText);
                         else
                             OnPeerCatchup(sbSource, qText, begin: sbKind == Protocol.StoryBeatKindCatchupBegin);
+                    }
+                    else if (sbKind >= Protocol.StoryBeatKindSectionEnter && sbKind <= Protocol.StoryBeatKindDialogue && payloadLen == 3 + sbLen && sbLen > 0)
+                    {
+                        // WO-153: where the host's story is (a locked section, a region, a conversation): shape-checked, looked up in this
+                        // build's own table, shown as this build's own words
+                        Wo153OnPeerStory(sbSource, sbKind, Encoding.UTF8.GetString(payload, 3, sbLen));
                     }
                     else if (sbKind == Protocol.StoryBeatKindCutscene && payloadLen == 3 + sbLen && sbLen > 0)
                     {

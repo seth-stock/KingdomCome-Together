@@ -30,6 +30,7 @@ int wo141_rules_tests(int* passed);        // wo141_rules_tests.cpp
 int wo143_rules_tests(int* passed);        // wo143_rules_tests.cpp
 int wo148_x64_tests(int* passed);          // wo148_x64_tests.cpp
 int wo151_tests(int* passed);              // wo151_tests.cpp
+int wo153_rules_tests(int* passed);        // wo153_rules_tests.cpp
 
 static int g_fail = 0, g_pass = 0;
 #define CHECK(cond, ...) do { if (cond) ++g_pass; else { ++g_fail; std::printf("FAIL  %s:%d  ", __FILE__, __LINE__); std::printf(__VA_ARGS__); std::printf("\n"); } } while (0)
@@ -192,6 +193,14 @@ int main() {
         const int ff = wo151_tests(&fp);
         g_pass += fp;
         g_fail += ff;
+    }
+
+    // WO-153: the cutscene gate's rules
+    {
+        int cp = 0;
+        const int cf = wo153_rules_tests(&cp);
+        g_pass += cp;
+        g_fail += cf;
     }
 
     std::printf("%d passed, %d failed\n", g_pass, g_fail);

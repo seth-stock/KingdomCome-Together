@@ -224,6 +224,7 @@ public partial class GameBridge
         if (W137Host)
         {
             if (Wo137Rules.HostSendVeto(c) is { } veto) { Interlocked.Increment(ref _w137Vetoed); Wo137Veto("host-" + veto); return; }
+            Wo153NoteQuestChange(c);   // WO-153: which main quest the host is in (locked story sections)
             if (c.Old != c.New) Wo151NoteHostValue(c.Path, c.Old);   // WO-151 3.1: the value this State leaves behind here
             _w137HostSeen[c.Path] = (c.New, c.Port, Environment.TickCount64);
             if (_w137HostSeen.Count > 4000) Wo137TrimSeen();

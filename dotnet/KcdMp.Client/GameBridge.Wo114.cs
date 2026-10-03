@@ -123,6 +123,8 @@ public partial class GameBridge
                 else if (joiner) await Wo114JoinerTickAsync(second);
 
                 if (second) await Wo114PartnerTickAsync(host, joiner);
+                if (second && host && _sharedWorld) Wo153StoryTick();   // WO-153: a locked section the host has left alone is over
+                if (second) await Wo153GateTickAsync();                  // WO-153: the cutscene gate follows this player's choice
             }
             catch (Exception ex) { Console.WriteLine($"MP-LEASH tick failed: {ex.GetType().Name}: {ex.Message}"); }
         }
@@ -163,6 +165,7 @@ public partial class GameBridge
                     if (kv == "m=1") m = true;
                 }
                 _leashLuaBusy = (d, m, DateTime.UtcNow);
+                Wo153NoteHostDialogue(d);   // WO-153: the host began or ended a conversation
                 if (d) _w147LastDialogueUtc = DateTime.UtcNow;   // WO-147: a conversation's outcome lands as it ends
                 return;
             }
@@ -223,7 +226,7 @@ public partial class GameBridge
                 continue;
             }
             if (sendCfg) await Wo114SendAsync(id, new LeashCommand(Protocol.LeashKindConfig, (byte)(_leashEnabled ? 1 : 0),
-                                                         LeashCommand.Metres(_leashWarnM), _lastX, _lastY, _lastZ, LeashCommand.Metres(_leashPullM)));
+                                                         LeashCommand.Metres(W153WarnM), _lastX, _lastY, _lastZ, LeashCommand.Metres(W153PullM)));   // WO-153: tighter in a locked story section
 
             if ((DateTime.UtcNow - at).TotalSeconds < LeashFreshS && Wo140HostSkipsLeash(id, st.Flags)) continue;   // WO-140: not in this world
             var logic = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic());
@@ -235,7 +238,7 @@ public partial class GameBridge
             List<LeashLogic.Action> acts;
             lock (logic)
             {
-                logic.Config = new LeashLogic.Settings(_leashEnabled, _leashWarnM, _leashPullM);
+                logic.Config = new LeashLogic.Settings(_leashEnabled, W153WarnM, W153PullM);   // WO-153: tighter in a locked story section
                 // WO-147: a pull waits as long as the link needs: this machine's round trip, and how far the
                 // joiner's own samples run behind (the field's pull timed out behind a 20 s backlog).
                 logic.PullTimeoutMs = Math.Max(LeashLogic.TimeoutForRtt(_clockRttMedianMs), Wo147PeerLagTimeoutMs(id));
@@ -330,7 +333,7 @@ public partial class GameBridge
                 await Wo114SayAsync(LeashLogic.Text.HostWarn(LeashPartnerName(id)));
                 break;
             case LeashLogic.Act.Countdown:
-                Console.WriteLine($"MP-LEASH host: joiner {id} countdown {a.Arg} s (d={ds} m, pull at {_leashPullM:F0} m)");
+                Console.WriteLine($"MP-LEASH host: joiner {id} countdown {a.Arg} s (d={ds} m, pull at {W153PullM:F0} m)");
                 await Wo114SendAsync(id, new LeashCommand(Protocol.LeashKindCountdown, 0, (ushort)a.Arg, _lastX, _lastY, _lastZ, dm));
                 break;
             case LeashLogic.Act.Cancel:

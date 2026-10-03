@@ -1192,6 +1192,17 @@ public static partial class Protocol
     /// </summary>
     public const byte StoryBeatKindCutscene = 6;
 
+    // WO-153 (docs/WO-153-findings.md): the HOST tells the joiners where the story is. Informational and additive: an older
+    // receiver drops the unknown kinds. The text is shape-checked (plain tokens) and looked up in the receiver's own table; it is never shown as sent.
+    /// <summary>The host entered a locked story section: text = the main quest's code ("M05").</summary>
+    public const byte StoryBeatKindSectionEnter = 7;
+    /// <summary>The host left it: text = "M05 completed|moved|idle".</summary>
+    public const byte StoryBeatKindSectionLeave = 8;
+    /// <summary>The host's game loaded another level (a story transition): text = the level name ("kutnohorsko").</summary>
+    public const byte StoryBeatKindLevel = 9;
+    /// <summary>The host's dialogue began or ended: text = "start" | "end".</summary>
+    public const byte StoryBeatKindDialogue = 10;
+
     public static bool IsNeverSyncedNpcName(string npcName) =>
         npcName.StartsWith(NpcReservedNamePrefix, StringComparison.OrdinalIgnoreCase)
         || npcName.StartsWith(NpcDialogTwinNamePrefix, StringComparison.OrdinalIgnoreCase);

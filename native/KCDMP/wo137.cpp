@@ -383,6 +383,7 @@ std::atomic<bool> g_logAll{false};     // research: one log line per change
 std::atomic<bool> g_send_on{false};    // frames to the agent
 std::atomic<bool> g_hold{false};       // records kept back (the agent's load hold)
 std::atomic<int>  g_applyDepth{0};
+std::atomic<uint64_t> g_applyEndMs{0};   // GetTickCount64 at the last apply's end (0 = never)
 std::atomic<uint32_t> g_seq{0};
 std::atomic<uint32_t> c_recorded{0}, c_sent{0}, c_dropped{0}, c_foreign{0}, c_noPath{0};
 std::atomic<uint32_t> c_apply[10]{};
@@ -555,6 +556,7 @@ Applied apply(const char* path, const char* portNm, Val* before, Val* after) {
         g_applyDepth.fetch_add(1);
         const bool ran = call_void(trig, port);
         g_applyDepth.fetch_sub(1);
+        g_applyEndMs.store(GetTickCount64() | 1);   // |1: never 0
         if (!ran) { res = Applied::Fault; break; }
         decode(static_cast<char*>(node) + kOffStateValue, after);
         const bool same = before->valid == after->valid && before->ok == after->ok && before->i == after->i &&
@@ -1240,5 +1242,13 @@ bool set_punish_gate(bool on) {
 }
 bool punish_gate_armed() { return A.timeGate; }
 uint32_t punish_skipped() { return c_punishSkipped.load(); }
+
+bool apply_active() { return g_applyDepth.load(std::memory_order_relaxed) > 0; }
+uint64_t ms_since_apply_end() {
+    const uint64_t e = g_applyEndMs.load(std::memory_order_relaxed);
+    if (!e) return ~0ull;
+    const uint64_t now = GetTickCount64();
+    return now >= e ? now - e : 0;
+}
 
 } // namespace kcdmp::wo137

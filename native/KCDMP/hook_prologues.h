@@ -69,6 +69,12 @@ inline constexpr uint8_t kBlendToProfile[14] = {
     0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x56, 0x57, 0x41, 0x57,
 };
 
+// wo153.cpp (WO-153): GUIModule C_CutscenePlayer::EnqueueCutscene (the export).
+// mov [rsp+18h],rbx; push rdi; sub rsp,20h; mov rbx,rcx; mov rdi,rdx   (the next instruction is a RIP-relative lea)
+inline constexpr uint8_t kCutsceneEnqueue[16] = {
+    0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0x48, 0x8B, 0xFA,
+};
+
 struct Entry { const char* name; const uint8_t* bytes; size_t len; };
 inline constexpr Entry kAll[] = {
     {"motion UpdateMannequinTags", kMotionTags, sizeof kMotionTags},
@@ -79,6 +85,7 @@ inline constexpr Entry kAll[] = {
     {"wo140 SkipTime ShowDialog", kSkipTimeShow, sizeof kSkipTimeShow},
     {"wo143 NPC-state request", kNpcStateRequest, sizeof kNpcStateRequest},
     {"weather BlendToProfile", kBlendToProfile, sizeof kBlendToProfile},
+    {"wo153 EnqueueCutscene", kCutsceneEnqueue, sizeof kCutsceneEnqueue},
 };
 
 } // namespace kcdmp::hookpro

@@ -31,6 +31,7 @@
 #include "wo143.h"
 #include "wo147.h"
 #include "wo151.h"
+#include "wo153.h"
 #include "buffs.h"
 #include "log.h"
 
@@ -1381,6 +1382,7 @@ void serve(HANDLE h) {
     npcdrive::on_pipe_closed();
     main_thread::post([] { kcdmp::wo132::on_pipe_closed(); });   // WO-132: engaged copies let go (main-thread state)
     kcdmp::wo137::on_disconnect();   // WO-137: no agent -- no quest frames, no HUD proxy
+    kcdmp::wo153::on_disconnect();   // WO-153: no agent -- the cutscene gate is off
     kcdmp::wo138::on_pipe_closed();  // WO-138: no agent -- the native sender, the pause gate and the hold go off
     kcdmp::weather::on_pipe_closed();  // WO-151: no agent -- the weather gate opens
     kcdmp::wo139::on_pipe_closed();

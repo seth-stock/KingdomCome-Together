@@ -17625,13 +17625,23 @@ end
 --   WO153-NOTICE  WO153-END  WO153-ANSWER  WO153-TIMEOUT  WO153-RESULT  WO153-STATUS
 KCD2MP.w153 = KCD2MP.w153 or {}
 KCD2MP.w153.notice  = (KCD2MP.w153.notice == nil) and true or KCD2MP.w153.notice     -- mp_scene_notice
-KCD2MP.w153.follow  = (KCD2MP.w153.follow == nil) and false or KCD2MP.w153.follow    -- mp_scene_follow (host)
+KCD2MP.w153.follow  = (KCD2MP.w153.follow == nil) and true or KCD2MP.w153.follow     -- mp_scene_follow (host)
+KCD2MP.w153.story   = (KCD2MP.w153.story == nil) and true or KCD2MP.w153.story      -- mp_story_lock (host): locked story sections
+KCD2MP.w153.tetherM = KCD2MP.w153.tetherM or 120                                      -- mp_story_tether_m (host)
+KCD2MP.w153.mode    = KCD2MP.w153.mode or "watch"                                     -- mp_scene_mode (joiner): "watch" (own copy plays) | "play" (own copy skipped)
 KCD2MP.w153.relocM  = KCD2MP.w153.relocM or 25
 KCD2MP.w153.farM    = KCD2MP.w153.farM or 150
 KCD2MP.w153.promptS = 20
 KCD2MP.w153.stats = KCD2MP.w153.stats or { notices = 0, prompts = 0, watch = 0, keep = 0, timeouts = 0, results = 0, ownCopy = 0 }
 KCD2MP_W153_TEXT = {
     inScene   = "Your host is in a cutscene.",
+    inScenePlay = "Your host is in a cutscene. Your own copy is skipped; keep playing.",
+    storyHostEnter = "Locked story section: %s (%s). Your partners are kept within %d m.",
+    storyHostLeave = "Story section over: %s. Your partners are free to roam.",
+    storyEnter = "Your host entered %s (%s): stay close. You are brought to them if you stray.",
+    storyLeave = "%s is over. You are free to roam again.",
+    storyLevel = "Your host is moving to the next region. You are brought along when they arrive.",
+    storyDialogue = "Your host is in a conversation.",
     keys      = "F11 stand beside them to watch  /  F12 keep playing  (or mp_scene_watch / mp_scene_play)",
     over      = "Your host's cutscene is over.",
     placed    = "You are beside your host.",
@@ -17680,7 +17690,7 @@ function KCD2MP_W153HostScene(ghostId, active, kind, name, ownPlaying)
         w.prompt = { deadline = os.clock() + w.promptS, kind = tostring(kind), name = tostring(name) }
         w.stats.prompts = w.stats.prompts + 1
         mp_log(string.format("WO153-NOTICE the host's %s scene '%s' (F11 stand beside the host / F12 keep playing, %d s)", tostring(kind), tostring(name), w.promptS))
-        KCD2MP_ShowNativeToast(KCD2MP_W153_TEXT.inScene)
+        KCD2MP_ShowNativeToast(KCD2MP_W153SceneText())
     else
         local had = (w.prompt ~= nil) or (w.watching == true)
         w.prompt = nil
@@ -17736,7 +17746,8 @@ function KCD2MP_W153DrawUI()
         return
     end
     local left = math.ceil(p.deadline - os.clock())
-    mp_draw_row("w153_prompt", 10, 360, KCD2MP_W153_TEXT.inScene .. "  (" .. left .. "s)", 2, KCD2MP_W153_TEXT.inScene)
+    local words = KCD2MP_W153SceneText()
+    mp_draw_row("w153_prompt", 10, 360, words .. "  (" .. left .. "s)", 2, words)
     mp_draw_row("w153_prompt_keys", 10, 386, KCD2MP_W153_TEXT.keys, 1.6)
 end
 
@@ -17751,9 +17762,36 @@ function KCD2MP_W153Reset(why)
     if had then mp_log("WO153-RESET " .. tostring(why or "?") .. " -- the notice and the host's scenes are forgotten") end
 end
 
+function KCD2MP_W153SceneText()
+    return (KCD2MP.w153.mode == "play") and KCD2MP_W153_TEXT.inScenePlay or KCD2MP_W153_TEXT.inScene
+end
+
+-- The agent: where the host's story is (a locked section, a region, a conversation). kind: host-enter | host-leave (this
+-- machine is the host), enter | leave | level | dialogue (this machine is a joiner). Words only; nothing here moves anyone.
+function KCD2MP_W153Story(kind, title, why)
+    local w = KCD2MP.w153
+    local T = KCD2MP_W153_TEXT
+    local msg
+    if kind == "host-enter" then msg = string.format(T.storyHostEnter, tostring(title), tostring(why), w.tetherM)
+    elseif kind == "host-leave" then msg = string.format(T.storyHostLeave, tostring(title))
+    elseif not w.notice then return
+    elseif kind == "enter" then msg = string.format(T.storyEnter, tostring(title), tostring(why))
+    elseif kind == "leave" then msg = string.format(T.storyLeave, tostring(title))
+    elseif kind == "level" then msg = T.storyLevel
+    elseif kind == "dialogue" then
+        local now = os.clock()
+        if w.lastDialogueToast and (now - w.lastDialogueToast) < 8 then return end
+        w.lastDialogueToast = now
+        msg = T.storyDialogue
+    else return end
+    mp_log("WO153-STORY " .. tostring(kind) .. " " .. tostring(title or "") .. " " .. tostring(why or ""))
+    KCD2MP_ShowNativeToast(msg)
+end
+
 function KCD2MP_W153CfgEmit()
     local w = KCD2MP.w153
-    KCD2MP_EmitEvent("w153_cfg", string.format("follow=%s relocm=%d farm=%d", w.follow and "on" or "off", w.relocM, w.farM))
+    KCD2MP_EmitEvent("w153_cfg", string.format("follow=%s relocm=%d farm=%d story=%s tether=%d mode=%s", w.follow and "on" or "off", w.relocM, w.farM,
+        w.story and "on" or "off", w.tetherM, w.mode))
 end
 
 -- mp_scene_notice on|off (default on); bare = report.
@@ -17794,6 +17832,41 @@ function KCD2MP_W153ParseMetres(name, arg, min)
     return n, true
 end
 
+-- mp_story_lock on|off (HOST, default on): the locked story sections (the wedding, Trosky, ...) bring the joiners and hold them close.
+function KCD2MP_SetStoryLock(arg)
+    local v = KCD2MP_Wo122ParseBool(arg)
+    if v == "bad" then mp_log("mp_story_lock: expected on|off, got '" .. tostring(arg) .. "'"); return false end
+    local w = KCD2MP.w153
+    if v ~= nil then w.story = v end
+    mp_log(string.format("WO153-STORY mp_story_lock %s (tether %d m) -- %s", w.story and "on" or "off", w.tetherM,
+        w.story and "in a locked story section the joiners are brought along and kept close" or "the story sections change nothing"))
+    KCD2MP_W153CfgEmit()
+    return true
+end
+
+-- mp_story_tether_m <metres> (HOST, default 120; 60..5000): how far a joiner may stray in a locked section (the leash's own pull).
+function KCD2MP_SetStoryTether(arg)
+    local n, ok = KCD2MP_W153ParseMetres("mp_story_tether_m", arg, 60)
+    if not ok then return false end
+    local w = KCD2MP.w153
+    if n then w.tetherM = n end
+    mp_log(string.format("WO153-STORY mp_story_tether_m %d", w.tetherM))
+    KCD2MP_W153CfgEmit()
+    return true
+end
+
+-- mp_scene_mode watch|play (JOINER, default watch): "watch" = your own copy of the host's cutscene plays (the game's way);
+-- "play" = it is skipped and you keep playing (F11 on the notice still stands you beside the host).
+function KCD2MP_SetSceneMode(arg)
+    local s = tostring(arg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local w = KCD2MP.w153
+    if s == "watch" or s == "play" then w.mode = s
+    elseif s ~= "" and s ~= "%line" then mp_log("mp_scene_mode: expected watch|play, got '" .. s .. "'"); return false end
+    mp_log("WO153-MODE mp_scene_mode " .. w.mode .. " -- " .. (w.mode == "play" and "this game's own copy of the host's cutscene is skipped (needs the plugin)" or "this game plays its own copy of the host's cutscene"))
+    KCD2MP_W153CfgEmit()
+    return true
+end
+
 -- mp_scene_follow_m <metres> (HOST, default 25): the host ended a scene this far from where it began.
 function KCD2MP_SetSceneFollowM(arg)
     local n, ok = KCD2MP_W153ParseMetres("mp_scene_follow_m", arg)
@@ -17819,6 +17892,7 @@ end
 function KCD2MP_W153Status()
     local w = KCD2MP.w153
     local s = w.stats
+    mp_log(string.format("WO153-STATUS story=%s tether_m=%d mode=%s", w.story and "on" or "off", w.tetherM, w.mode))
     mp_log(string.format("WO153-STATUS notice=%s follow=%s reloc_m=%d far_m=%d prompt=%s watching=%s | notices=%d prompts=%d watch=%d keep=%d timeouts=%d results=%d own_copy=%d",
         w.notice and "on" or "off", w.follow and "on" or "off", w.relocM, w.farM, w.prompt and "yes" or "no", w.watching and "yes" or "no",
         s.notices, s.prompts, s.watch, s.keep, s.timeouts, s.results, s.ownCopy))
@@ -21069,6 +21143,9 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_scene_follow", 'KCD2MP_SetSceneFollow(%line)', "WO-153 (HOST only): after the host's cutscene moved the host, or a story scene left a joiner far away, bring the joiners along through the leash (default OFF; a joiner already within 50 m of the host is never moved): mp_scene_follow on|off")
     System.AddCCommand("mp_scene_follow_m", 'KCD2MP_SetSceneFollowM(%line)', "WO-153 (HOST): the host ended a scene this many metres from where it began = the host was moved (default 25; 5..5000)")
     System.AddCCommand("mp_scene_follow_far_m", 'KCD2MP_SetSceneFollowFarM(%line)', "WO-153 (HOST): a story scene ended with a joiner this many metres away = bring them to the story (default 150; 50..5000: the leash never moves a joiner within 50 m)")
+    System.AddCCommand("mp_story_lock", 'KCD2MP_SetStoryLock(%line)', "WO-153 (HOST): in a locked story section (the wedding, Trosky, the move to Kuttenberg, the devil's job, the pogrom, the cardinal, the Italian Job, the final set) bring the joiners to you and keep them close (default ON): mp_story_lock on|off")
+    System.AddCCommand("mp_story_tether_m", 'KCD2MP_SetStoryTether(%line)', "WO-153 (HOST): how far a joiner may stray in a locked story section before the leash pulls them back (default 120; 60..5000)")
+    System.AddCCommand("mp_scene_mode", 'KCD2MP_SetSceneMode(%line)', "WO-153 (JOINER): watch = your own copy of the host's cutscenes plays (default); play = it is skipped and you keep playing: mp_scene_mode watch|play")
     System.AddCCommand("mp_scene_watch", "KCD2MP_W153Answer(true)", "WO-153: answer the host's-cutscene notice WATCH -- stand beside the host (same as F11)")
     System.AddCCommand("mp_scene_play", "KCD2MP_W153Answer(false)", "WO-153: answer the host's-cutscene notice KEEP PLAYING (same as F12)")
     System.AddCCommand("mp_scene_status", "KCD2MP_W153Status()", "WO-153: the cutscene notice and bring-along settings and counters (WO153-STATUS)")

@@ -10,6 +10,7 @@
 #include "hits.h"
 #include "wo132.h"
 #include "wo135.h"
+#include "wo153.h"
 #include "wo137.h"
 #include "weather.h"
 #include "wo138.h"
@@ -169,6 +170,9 @@ DWORD WINAPI plugin_main(LPVOID) {
     // closed: WO135-DIALOG gate NOT armed). Off the main thread: the patch
     // suspends every other thread while it writes.
     kcdmp::wo135::install();
+    // WO-153: the cutscene gate (GUIModule C_CutscenePlayer::EnqueueCutscene; off until the agent turns it on for a
+    // joiner who chose to keep playing). Fails closed (WO153-GATE NOT armed).
+    kcdmp::wo153::install();
     // WO-137: the quest State detector (two C_StateVariable vftable slots) and the
     // Set<Value> apply. Fails closed (WO137-BUILD); silent until the agent turns it on.
     kcdmp::wo137::install();
