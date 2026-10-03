@@ -5258,7 +5258,7 @@ public partial class GameBridge(ClientConfig config)
                         else
                             OnPeerCatchup(sbSource, qText, begin: sbKind == Protocol.StoryBeatKindCatchupBegin);
                     }
-                    else if (sbKind >= Protocol.StoryBeatKindSectionEnter && sbKind <= Protocol.StoryBeatKindDialogue && payloadLen == 3 + sbLen && sbLen > 0)
+                    else if (sbKind >= Protocol.StoryBeatKindSectionEnter && sbKind <= Protocol.StoryBeatKindSceneStay && payloadLen == 3 + sbLen && sbLen > 0)
                     {
                         // WO-153: where the host's story is (a locked section, a region, a conversation): shape-checked, looked up in this
                         // build's own table, shown as this build's own words
@@ -5920,6 +5920,10 @@ public partial class GameBridge(ClientConfig config)
             case "w153_watch":       // WO-153: this player's F11 on the host's-cutscene notice
             case "w153_status":      // WO-153: mp_scene_status (the agent's counters)
                 Wo153OnEvent(name, arg);
+                return;
+            case "w155_choice":      // WO-155: this player's answer to "join the host, or stay in the open world"
+            case "w155_scene_stay":  // WO-155: this player's F12 on the host's cutscene: not brought along after it
+                Wo155OnEvent(name, arg);
                 return;
         }
 

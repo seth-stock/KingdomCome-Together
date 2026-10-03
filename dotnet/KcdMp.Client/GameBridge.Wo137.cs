@@ -320,6 +320,7 @@ public partial class GameBridge
                         Console.WriteLine($"MP-W137 joiner: the host's change numbers started again ({_w137LastHostSeq} -> {c.Seq}) -- a new host game; {n} queued change(s) of the old one dropped");
                     }
                     _w137LastHostSeq = c.Seq;
+                    if (_w155Free) { Interlocked.Increment(ref _w155HeldChanges); return; }   // WO-155: held while this player stays in the open world; the checkpoint compare after it brings them up to date
                     _w137Queue.Enqueue(c);
                     return;
                 case Protocol.QuestHostResult when Wo137Rules.TryParseResultText(m.Text, out var verdict, out int hv, out string hp, out string path):

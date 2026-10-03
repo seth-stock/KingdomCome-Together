@@ -237,7 +237,7 @@ public partial class GameBridge
     private long _w151CatchUps, _w151HeldAskSent, _w151HeldAskDropped, _w151PassedVerdicts, _w151StashedParts, _w151SceneDeferred;
 
     /// <summary>The mirror holds: a world loads (WO-136), or (catch-up on) the host reloads / a join runs.</summary>
-    private bool W151MirrorHolding => Wo136Holding || (_w151CatchUp && W137JoinerSession && (_rewinding || _jj is not null));
+    private bool W151MirrorHolding => Wo136Holding || (_w155Free && W137JoinerSession) || (_w151CatchUp && W137JoinerSession && (_rewinding || _jj is not null));   // WO-155: a friend staying in the open world is not given the host's story steps
 
     /// <summary>Joiner: the mirror (re)started -- nothing of this player's goes out until the checkpoint is compared.</summary>
     private void Wo151CatchUpStart(string why)

@@ -172,6 +172,22 @@ public sealed class LeashLogic
     /// <summary>The host arrived from a fast travel: the next free tick pulls the joiner beside it.</summary>
     public void NoteHostFastTravel() { _fastTravelPending = true; _fastTravelSinceMs = -1; }
 
+    /// <summary>
+    /// WO-155: this friend stays in the open world (or has not answered the host's story question yet): nothing about the
+    /// leash runs for them. Whatever was pending stops -- a countdown, an owed fast-travel pull, a hold -- and the warning is
+    /// armed again for when the leash applies once more. A pull already on its way is left to answer. True = a countdown was
+    /// showing (the caller cancels it on the friend's screen).
+    /// </summary>
+    public bool Suspend()
+    {
+        bool had = _remainingMs is not null;
+        _remainingMs = null; _lastSentSecond = -1; _holdNoted = Hold.None;
+        _fastTravelPending = false; _fastTravelSinceMs = -1;
+        _heldSinceMs = -1; _capped = false;
+        _warnArmed = true;
+        return had;
+    }
+
     public List<Action> Tick(long nowMs, double? distM, Hold hold)
     {
         var acts = new List<Action>();

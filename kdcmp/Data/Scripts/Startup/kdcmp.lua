@@ -17636,7 +17636,7 @@ KCD2MP.w153.stats = KCD2MP.w153.stats or { notices = 0, prompts = 0, watch = 0, 
 KCD2MP_W153_TEXT = {
     inScene   = "Your host is in a cutscene.",
     inScenePlay = "Your host is in a cutscene. Your own copy is skipped; keep playing.",
-    storyHostEnter = "Locked story section: %s (%s). Your partners are kept within %d m.",
+    storyHostEnter = "Locked story part: %s (%s). Partners choose: join you (kept within %d m) or stay in the open world.",
     storyHostLeave = "Story section over: %s. Your partners are free to roam.",
     storyEnter = "Your host entered %s (%s): stay close. You are brought to them if you stray.",
     storyLeave = "%s is over. You are free to roam again.",
@@ -17717,6 +17717,7 @@ function KCD2MP_W153Answer(watch)
         w.stats.keep = w.stats.keep + 1
         w.watching = false
         mp_log("WO153-ANSWER keep playing")
+        KCD2MP_EmitEvent("w155_scene_stay", "")   -- WO-155: the host does not bring this player along after this scene
     end
     return true
 end
@@ -17736,6 +17737,7 @@ end
 
 function KCD2MP_W153DrawUI()
     local w = KCD2MP.w153
+    if KCD2MP_W155DrawUI and KCD2MP_W155DrawUI() then return end   -- WO-155: the question (same two keys) takes the rows
     local p = w.prompt
     if not p then return end
     -- compared on the clock, not on the rounded countdown: math.ceil(-0.5) is -0, which is not < 0
@@ -17790,8 +17792,8 @@ end
 
 function KCD2MP_W153CfgEmit()
     local w = KCD2MP.w153
-    KCD2MP_EmitEvent("w153_cfg", string.format("follow=%s relocm=%d farm=%d story=%s tether=%d mode=%s", w.follow and "on" or "off", w.relocM, w.farM,
-        w.story and "on" or "off", w.tetherM, w.mode))
+    KCD2MP_EmitEvent("w153_cfg", string.format("follow=%s relocm=%d farm=%d story=%s tether=%d mode=%s join=%s", w.follow and "on" or "off", w.relocM, w.farM,
+        w.story and "on" or "off", w.tetherM, w.mode, w.joinPref or "ask"))
 end
 
 -- mp_scene_notice on|off (default on); bare = report.
@@ -17893,10 +17895,174 @@ function KCD2MP_W153Status()
     local w = KCD2MP.w153
     local s = w.stats
     mp_log(string.format("WO153-STATUS story=%s tether_m=%d mode=%s", w.story and "on" or "off", w.tetherM, w.mode))
+    if KCD2MP_W155Status then KCD2MP_W155Status() end
     mp_log(string.format("WO153-STATUS notice=%s follow=%s reloc_m=%d far_m=%d prompt=%s watching=%s | notices=%d prompts=%d watch=%d keep=%d timeouts=%d results=%d own_copy=%d",
         w.notice and "on" or "off", w.follow and "on" or "off", w.relocM, w.farM, w.prompt and "yes" or "no", w.watching and "yes" or "no",
         s.notices, s.prompts, s.watch, s.keep, s.timeouts, s.results, s.ownCopy))
     KCD2MP_EmitEvent("w153_status", "")   -- the agent writes its own counters (MP-W153 stats)
+end
+
+-- ====================================================================================
+-- WO-155 -- the host is on rails: join them, or stay in the open world (docs/WO-155-findings.md)
+-- When the host enters a locked story period (a wedding, a castle, the move to Kuttenberg, the final set ...) the agent
+-- calls KCD2MP_W155Ask: the question stays up 30 s -- F11 joins the host (you are brought beside them and kept close, and
+-- their quest steps are applied), F12 stays in the open world (nobody brings, tethers or leashes you, their quest steps are
+-- held, so the game cannot start their scenes on you). Nobody answering is a join. mp_story_join ask|join|free is the
+-- standing answer; mp_story_come / mp_story_stay answer at any time, F11 joins while you are staying in the open world.
+-- The agent owns every rule; this is words, keys and the two switches.
+--   WO155-ASK  WO155-ANSWER  WO155-TIMEOUT  WO155-DECIDED  WO155-OVER  WO155-HOST  WO155-STATUS
+KCD2MP.w153.joinPref = KCD2MP.w153.joinPref or "ask"        -- mp_story_join (friend): ask | join | free
+KCD2MP.w155 = KCD2MP.w155 or { stats = { asks = 0, join = 0, free = 0, timeouts = 0, none = 0 } }
+KCD2MP_W155_TEXT = {
+    ask        = "Your host entered %s. Join them, or stay in the open world?",
+    keys       = "F11 join your host  /  F12 stay in the open world  (or mp_story_come / mp_story_stay)",
+    joined     = "You joined your host for %s. Stay close; you are brought beside them.",
+    free       = "You are staying in the open world while your host is in %s. Nobody will bring you back.",
+    freeLabel  = "Open world: your host is in %s.   F11 / mp_story_come: join them",
+    overJoined = "%s is over. You are free to roam again.",
+    overFree   = "%s is over. You are back with your host: the leash applies again.",
+    none       = "Your host is not in a locked story part right now.",
+    hostJoin   = "%s joined you for %s.",
+    hostFree   = "%s stays in the open world for %s.",
+}
+
+-- The agent: the host entered a story period. Raised once per period (the host's repeats of the beat do not raise it again).
+function KCD2MP_W155Ask(why, seconds)
+    local w = KCD2MP.w155
+    w.free = false
+    w.why = tostring(why or "the story")
+    w.prompt = { deadline = os.clock() + (tonumber(seconds) or 30), why = w.why }
+    w.stats.asks = w.stats.asks + 1
+    mp_log(string.format("WO155-ASK the host entered %s (F11 join / F12 stay in the open world, %d s, then join)", w.why, tonumber(seconds) or 30))
+    KCD2MP_ShowNativeToast(string.format(KCD2MP_W155_TEXT.ask, w.why))
+end
+
+-- The agent: a question that was never answered (the backstop), a reset, a load.
+function KCD2MP_W155Cancel()
+    local w = KCD2MP.w155
+    if w.prompt then mp_log("WO155-CANCEL the question is withdrawn") end
+    w.prompt = nil
+end
+
+-- F11 (join) / F12 (stay): True = it answered the question or, for join, ended a stay.
+function KCD2MP_W155Answer(join)
+    local w = KCD2MP.w155
+    if not w.prompt and not (join and w.free) then return false end
+    w.prompt = nil
+    w.stats[join and "join" or "free"] = w.stats[join and "join" or "free"] + 1
+    mp_log("WO155-ANSWER " .. (join and "join the host" or "stay in the open world"))
+    KCD2MP_EmitEvent("w155_choice", join and "join key" or "free key")
+    return true
+end
+
+-- The agent: the answer took (or there was nothing to answer). choice: join | free | none.
+function KCD2MP_W155Decided(choice, why, announce)
+    local w = KCD2MP.w155
+    local T = KCD2MP_W155_TEXT
+    w.prompt = nil
+    if choice == "none" then
+        w.stats.none = w.stats.none + 1
+        KCD2MP_ShowNativeToast(T.none)
+        return
+    end
+    w.free = (choice == "free")
+    w.why = tostring(why or w.why or "the story")
+    mp_log("WO155-DECIDED " .. tostring(choice) .. " " .. w.why)
+    if announce ~= false then
+        KCD2MP_ShowNativeToast(string.format(choice == "free" and T.free or T.joined, w.why))
+    end
+end
+
+-- The agent: the host's period is over for this player. was: join | free | pending.
+function KCD2MP_W155Over(why, was)
+    local w = KCD2MP.w155
+    local T = KCD2MP_W155_TEXT
+    local hadPrompt = w.prompt ~= nil
+    w.prompt = nil
+    w.free = false
+    mp_log("WO155-OVER " .. tostring(why) .. " (" .. tostring(was) .. ")")
+    if was == "free" then KCD2MP_ShowNativeToast(string.format(T.overFree, tostring(why)))
+    elseif was == "join" then KCD2MP_ShowNativeToast(string.format(T.overJoined, tostring(why)))
+    elseif hadPrompt then mp_log("WO155-OVER the host's part ended before this player answered") end
+end
+
+-- The agent (the HOST's machine): a friend answered.
+function KCD2MP_W155Host(kind, who, why)
+    local T = KCD2MP_W155_TEXT
+    mp_log("WO155-HOST " .. tostring(kind) .. " " .. tostring(who) .. " " .. tostring(why))
+    if kind == "join" then KCD2MP_ShowNativeToast(string.format(T.hostJoin, tostring(who), tostring(why)))
+    elseif kind == "free" then KCD2MP_ShowNativeToast(string.format(T.hostFree, tostring(who), tostring(why))) end
+end
+
+-- A session started or ended, the host left, a load: no question and no stay survives it.
+function KCD2MP_W155Reset()
+    local w = KCD2MP.w155
+    if w.prompt or w.free then mp_log("WO155-RESET the question and the open-world stay are forgotten") end
+    w.prompt = nil
+    w.free = false
+end
+
+-- Draw: the question (30 s), or the quiet label while staying in the open world. True = it used the prompt rows.
+function KCD2MP_W155DrawUI()
+    local w = KCD2MP.w155
+    local p = w.prompt
+    if p then
+        -- compared on the clock, not on the rounded countdown (math.ceil(-0.5) is -0)
+        if os.clock() >= p.deadline then
+            w.prompt = nil
+            w.stats.timeouts = w.stats.timeouts + 1
+            mp_log("WO155-TIMEOUT no answer in time -- join the host")
+            KCD2MP_EmitEvent("w155_choice", "join timeout")
+            return false
+        end
+        local left = math.ceil(p.deadline - os.clock())
+        local words = string.format(KCD2MP_W155_TEXT.ask, p.why)
+        mp_draw_row("w155_prompt", 10, 360, words .. "  (" .. left .. "s)", 2, words)
+        mp_draw_row("w155_prompt_keys", 10, 386, KCD2MP_W155_TEXT.keys, 1.6)
+        return true
+    end
+    if w.free then
+        mp_draw_row("w155_free", 10, 360, string.format(KCD2MP_W155_TEXT.freeLabel, w.why or "the story"), 1.6)
+        return false   -- the label is small: a cutscene notice may still use its rows below it
+    end
+    return false
+end
+
+-- mp_story_join ask|join|free (JOINER, default ask): the standing answer to "join your host, or stay in the open world?".
+function KCD2MP_SetStoryJoin(arg)
+    local s = tostring(arg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local w = KCD2MP.w153
+    if s == "stay" or s == "open" then s = "free" end
+    if s == "ask" or s == "join" or s == "free" then w.joinPref = s
+    elseif s ~= "" and s ~= "%line" then mp_log("mp_story_join: expected ask|join|free, got '" .. s .. "'"); return false end
+    mp_log("WO155-JOIN mp_story_join " .. w.joinPref .. " -- " ..
+        (w.joinPref == "ask" and "when the host enters a locked story part you are asked: join them, or stay in the open world"
+         or w.joinPref == "join" and "you always join your host in a locked story part (brought beside them, kept close)"
+         or "you always stay in the open world while your host is in a locked story part (nobody brings or tethers you)"))
+    KCD2MP_W153CfgEmit()
+    return true
+end
+
+-- mp_story_come / mp_story_stay: answer now (no key needed), whether or not a question is up.
+function KCD2MP_StoryCome()
+    local w = KCD2MP.w155
+    w.prompt = nil
+    mp_log("WO155-ANSWER join the host (mp_story_come)")
+    KCD2MP_EmitEvent("w155_choice", "join cmd")
+end
+function KCD2MP_StoryStay()
+    local w = KCD2MP.w155
+    w.prompt = nil
+    mp_log("WO155-ANSWER stay in the open world (mp_story_stay)")
+    KCD2MP_EmitEvent("w155_choice", "free cmd")
+end
+
+function KCD2MP_W155Status()
+    local w = KCD2MP.w155
+    local s = w.stats
+    mp_log(string.format("WO155-STATUS join_pref=%s prompt=%s free=%s why=%s | asks=%d join=%d free=%d timeouts=%d none=%d",
+        KCD2MP.w153.joinPref or "ask", w.prompt and "yes" or "no", w.free and "yes" or "no", tostring(w.why or "-"),
+        s.asks, s.join, s.free, s.timeouts, s.none))
 end
 
 -- ===== WO-141: activities and animal attacks (docs/WO-141-findings.md) ============
@@ -21149,6 +21315,9 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_scene_watch", "KCD2MP_W153Answer(true)", "WO-153: answer the host's-cutscene notice WATCH -- stand beside the host (same as F11)")
     System.AddCCommand("mp_scene_play", "KCD2MP_W153Answer(false)", "WO-153: answer the host's-cutscene notice KEEP PLAYING (same as F12)")
     System.AddCCommand("mp_scene_status", "KCD2MP_W153Status()", "WO-153: the cutscene notice and bring-along settings and counters (WO153-STATUS)")
+    System.AddCCommand("mp_story_join", 'KCD2MP_SetStoryJoin(%line)', "WO-155 (JOINER): when the host is in a locked story part (the wedding, Trosky, the move to Kuttenberg, the final set ...): ask = you are asked to join them or stay in the open world (default); join = always join; free = always stay in the open world: mp_story_join ask|join|free")
+    System.AddCCommand("mp_story_come", "KCD2MP_StoryCome()", "WO-155: join your host in the locked story part they are in (same as F11): you are brought beside them and the host's quest steps apply again")
+    System.AddCCommand("mp_story_stay", "KCD2MP_StoryStay()", "WO-155: stay in the open world while your host is in a locked story part (same as F12): nobody brings or tethers you, the host's quest steps are held until it ends")
     System.AddCCommand("mp_activities", 'KCD2MP_SetActivities(%line)', "WO-141: sitting, sleeping, leaning and working (NPCs and players) show on the other screen, the game's own way (default on): mp_activities on|off")
     System.AddCCommand("mp_animal_attacks", 'KCD2MP_SetAnimalAttacks(%line)', "WO-141: the host's wolves', dogs' and boars' attacks play on the joiner's screen (default on): mp_animal_attacks on|off")
     System.AddCCommand("mp_activity_status", "KCD2MP_W141Status()", "WO-141: activities and animal attacks (WO141-STATUS here, MP-W141 stats and the DLL's line in agent.log)")
@@ -21485,6 +21654,24 @@ local function handleAction(action, activation, value)
     if KCD2MP.w140 and KCD2MP.w140.prompt and activation == "press" then
         if ACTS.ACCEPT_ACTIONS[action] then pcall(KCD2MP_W140Answer, true); return end
         if ACTS.DECLINE_ACTIONS[action] then pcall(KCD2MP_W140Answer, false); return end
+    end
+    -- WO-155: the question "join your host, or stay in the open world?" (F11 join / F12 stay) and, while staying, F11 joins. The same
+    -- two keys and the same rule as the notice below: only these two actions, never the generic accept/cancel. One press also answers a
+    -- cutscene notice that is up at the same time (the story part usually begins with one): F11 = go with the host in both, F12 = neither.
+    if KCD2MP.w155 and (KCD2MP.w155.prompt or KCD2MP.w155.free) and activation == "press" and not (KCD2MP.quest and KCD2MP.quest.prompt) then
+        if action == "kcd2mp_dice_bank" then
+            local ok, took = pcall(KCD2MP_W155Answer, true)
+            if ok and took then
+                if KCD2MP.w153 and KCD2MP.w153.prompt then pcall(KCD2MP_W153Answer, true) end
+                return
+            end
+        elseif action == "kcd2mp_dice_yield" and KCD2MP.w155.prompt then
+            local ok, took = pcall(KCD2MP_W155Answer, false)
+            if ok and took then
+                if KCD2MP.w153 and KCD2MP.w153.prompt then pcall(KCD2MP_W153Answer, false) end
+                return
+            end
+        end
     end
     -- WO-153: the host's-cutscene notice. Only F11 (kcd2mp_dice_bank) means watch and only F12 (kcd2mp_dice_yield)
     -- means keep playing. The generic accept actions (confirm, ui_accept) are never a yes, because a yes moves the

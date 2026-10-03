@@ -650,6 +650,28 @@ The guide for the friends is `docs/PLAYING-TOGETHER.md`.
 116. **The launcher.** The line at the top: "Story: IN SYNC" with both connected; "CATCHING UP" right after a join or a
      host reload; the locked part's name while the host is in one. On a game that is not 1.5.5 the red build warning.
 
+## WO-155 — the host on rails: join, or stay in the open world
+
+The first time this meets two people (`docs/WO-155-findings.md`). Use a save of the Modding Tools' build or older
+(`docs/PLAYING-TOGETHER.md` §2). Logs: `MP-W155` (agent; `MP-W155 host:` on the host), `WO155-` (kcd.log).
+
+117. **The question.** The host enters a locked story period (any: the wedding, Trosky, the final set). The friend sees "Your host
+     entered X. Join them, or stay in the open world?" with F11 / F12 and a 30 s countdown. **Nobody is moved before they answer.**
+118. **Join.** F11: the friend is brought beside the host (not if within 50 m), told so, and kept within 120 m (warning, 10 s
+     countdown, pull). Check `MP-W155 friend: JOINS` and the host's `MP-W155 host: joiner N JOINS you`.
+119. **Stay.** F12: the friend can walk 1 km away with **no warning, no countdown and no pull**. The host's log says
+     `joiner N STAYS in the open world`; the friend's screen shows the "Open world" label.
+120. **The host fast-travels while the friend stays.** The friend is **not** brought. (Outside a period, they are.)
+121. **The engine stays out of it.** While the friend stays, the host plays the period's scenes. The friend must see **no scene, no
+     input lock, no teleport**. This is the one most likely to need a fix: write down anything that moves or locks the friend, with the
+     time, and send both kcd.logs.
+122. **The end.** The period ends: the friend is told "...is over. You are back with your host: the leash applies again."; their
+     quests agree with the host's (the launcher says IN SYNC; if DRIFTING, rejoin from the main menu and report what differed).
+123. **One question for a stretch.** The final set is six quests: one question, not six; the answer stands across all of them. The
+     next period (a different one) asks again.
+124. **F12 on a host cutscene.** The friend is not brought along after it; F11 (watch) still stands them beside the host. And
+     `mp_story_join join` / `free` (the standing answers) ask nothing.
+
 ## Logs to send afterwards
 
 Both machines: Report a bug in the launcher. Since 0.42.2 it also collects the

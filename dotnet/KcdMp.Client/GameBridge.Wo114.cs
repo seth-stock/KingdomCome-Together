@@ -222,6 +222,7 @@ public partial class GameBridge
             {
                 _leashJoinerState.TryRemove(id, out _);
                 _leashByJoiner.TryRemove(id, out _);
+                Wo155Forget(id);   // WO-155: its answer and its "keep playing" go with it
                 Console.WriteLine($"MP-LEASH host: joiner {id} gone -- its leash is dropped");
                 continue;
             }
@@ -229,6 +230,7 @@ public partial class GameBridge
                                                          LeashCommand.Metres(W153WarnM), _lastX, _lastY, _lastZ, LeashCommand.Metres(W153PullM)));   // WO-153: tighter in a locked story section
 
             if ((DateTime.UtcNow - at).TotalSeconds < LeashFreshS && Wo140HostSkipsLeash(id, st.Flags)) continue;   // WO-140: not in this world
+            if (Wo155Exempt(id)) { Wo155Release(id); continue; }   // WO-155: stays in the open world for the host's story period, or has not answered yet: not leashed
             var logic = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic());
             bool stateFresh = (DateTime.UtcNow - at).TotalSeconds < LeashFreshS;
             var hold = hostHold | (stateFresh ? LeashLogic.JoinerHold(st.Flags) : LeashLogic.Hold.JoinerLoading);
@@ -271,7 +273,12 @@ public partial class GameBridge
         _leashFastTravelUtc = DateTime.UtcNow;
         Console.WriteLine($"MP-LEASH host: {why} -- {_leashJoinerState.Count} joiner(s) come along");
         if (!_leashEnabled) { Console.WriteLine("MP-LEASH host: mp_leash is off -- nobody is brought along"); return; }
-        foreach (var id in _leashJoinerState.Keys) { var l = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic()); lock (l) l.NoteHostFastTravel(); }
+        foreach (var id in _leashJoinerState.Keys)
+        {
+            if (Wo155Exempt(id)) { Interlocked.Increment(ref _w155HostSkips); Console.WriteLine($"MP-LEASH host: joiner {id} stays in the open world (or has not answered the host's story question) -- does not come along"); continue; }   // WO-155
+            var l = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic());
+            lock (l) l.NoteHostFastTravel();
+        }
     }
 
     /// <summary>"FastTravel: started..." / "FastTravel: ended..." on this machine (LogTailGameTransport).</summary>
@@ -423,6 +430,7 @@ public partial class GameBridge
         ushort f = 0;
         if (_joinedWorld) f |= Protocol.LeashFlagInWorld;
         if (_w140Separate) f |= Protocol.LeashFlagSeparate;   // WO-140: in its own world -- the host does not leash it
+        if (_w155Free) f |= Protocol.LeashFlagFreeRoam;       // WO-155: staying in the open world for the host's story period (the host's roster is what decides; this is what its log shows)
         if (_localDowned) f |= Protocol.LeashFlagDowned;
         if (_jj is not null || _rewinding || _where is GameWhere.Loading or GameWhere.Menu) f |= Protocol.LeashFlagLoading;
         if (_localCutsceneActive) f |= Protocol.LeashFlagCutscene;
@@ -530,6 +538,12 @@ public partial class GameBridge
         float residual = -1;
         try
         {
+            if (_w155Free)   // WO-155: this player chose to stay in the open world: a pull is refused (the host does not send one; this is the second lock)
+            {
+                result = Protocol.LeashResultBusy;
+                Console.WriteLine($"MP-LEASH joiner: pull #{c.Seq} ({reason}) refused -- this player stays in the open world for the host's story period");
+                return;
+            }
             _ = ExecLuaAsync("if KCD2MP_Wo114Countdown then KCD2MP_Wo114Countdown(0) end");
             // A fresh read of the dialogue/mount state right before acting.
             string busy = await AskModAsync("KCD2MP_Wo114BusyNow", 2000);

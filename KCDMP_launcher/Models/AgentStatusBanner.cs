@@ -28,12 +28,16 @@ namespace KCDMP_launcher.Models
         public bool Tether { get; set; }
         public string? GameBuild { get; set; }
         public string? BuildWarning { get; set; }
+        // WO-155: where this player stands in the host's locked story period (the agent writes the words)
+        public string RailsChoice { get; set; } = "";
+        public string RailsText { get; set; } = "";
 
-        /// <summary>The one line the launcher shows: the story sync, and the locked section when there is one. Empty when there is nothing to say.</summary>
+        /// <summary>The one line the launcher shows: the story sync, and the locked part when there is one (with the friend's choice). Empty when there is nothing to say.</summary>
         public string Line()
         {
             string s = SyncText;
-            if (Section.Length > 0) s += (s.Length > 0 ? "  |  " : "") + "In a locked part of the story: " + Section;
+            if (RailsText.Length > 0) s += (s.Length > 0 ? "  |  " : "") + RailsText;
+            else if (Section.Length > 0) s += (s.Length > 0 ? "  |  " : "") + "In a locked part of the story: " + Section;
             return s;
         }
     }

@@ -69,13 +69,36 @@ public static partial class CoopStatus
                "and a save from a newer game than this one will not load.";
     }
 
-    public static string Json(string role, string sync, string section, string sectionWhy, bool tether, string? build, string? warning)
+    /// <summary>
+    /// WO-155: where a player stands in the host's locked story period, in words ("" = no period, or nothing to say).
+    /// A friend: asking | join | free. The host: how many friends joined, stay in the open world, or are still deciding.
+    /// </summary>
+    public static string RailsText(string role, string why, string choice, int joined, int free, int asking)
     {
-        var sb = new StringBuilder(260);
+        if (why.Length == 0) return "";
+        if (role == "host")
+        {
+            if (joined + free + asking == 0) return "";
+            return $"{why}: {joined} joined you, {free} staying in the open world, {asking} deciding";
+        }
+        return choice switch
+        {
+            "asking" => $"Your host is in {why}: choose in the game (F11 join, F12 stay in the open world)",
+            "join" => $"You are with your host for {why}",
+            "free" => $"You are staying in the open world while your host is in {why} (F11 in the game joins them)",
+            _ => "",
+        };
+    }
+
+    public static string Json(string role, string sync, string section, string sectionWhy, bool tether, string? build, string? warning,
+                              string railsChoice = "", string railsText = "")
+    {
+        var sb = new StringBuilder(320);
         sb.Append('{').Append(Js.Str("role", role)).Append(',').Append(Js.Str("sync", sync)).Append(',').Append(Js.Str("syncText", SyncText(sync)))
           .Append(',').Append(Js.Str("section", section)).Append(',').Append(Js.Str("sectionWhy", sectionWhy))
           .Append(",\"tether\":").Append(tether ? "true" : "false")
-          .Append(',').Append(Js.Str("gameBuild", build)).Append(',').Append(Js.Str("buildWarning", warning)).Append('}');
+          .Append(',').Append(Js.Str("gameBuild", build)).Append(',').Append(Js.Str("buildWarning", warning))
+          .Append(',').Append(Js.Str("railsChoice", railsChoice)).Append(',').Append(Js.Str("railsText", railsText)).Append('}');
         return sb.ToString();
     }
 }

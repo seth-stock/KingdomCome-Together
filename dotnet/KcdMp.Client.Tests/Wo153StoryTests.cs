@@ -46,11 +46,18 @@ public class Wo153StoryTests
     }
 
     [Theory]
+    [InlineData("M01", "the opening of the story")]
+    [InlineData("M02", "the opening of the story")]
     [InlineData("M05", "the wedding in Semine")]
     [InlineData("M06", "Trosky castle")]
+    [InlineData("M09", "the battle of Nebakov")]
+    [InlineData("M10", "the battle of Nebakov")]
+    [InlineData("M11", "the battle of Nebakov")]
     [InlineData("M12", "Trosky castle")]
     [InlineData("M30", "the move to Kuttenberg")]
-    [InlineData("M31", "arrival in Kuttenberg")]
+    [InlineData("M31", "the move to Kuttenberg")]
+    [InlineData("M37a", "the meeting at Rattay")]
+    [InlineData("M37b", "the meeting at Rattay")]
     [InlineData("M42", "the burning of the Jewish quarter")]
     [InlineData("M45", "the cardinal")]
     [InlineData("M46", "the Italian Job")]
@@ -69,9 +76,8 @@ public class Wo153StoryTests
     }
 
     [Theory]
-    [InlineData("M01")] [InlineData("M02")] [InlineData("M03")] [InlineData("M07")] [InlineData("M08")]
-    [InlineData("M09")] [InlineData("M10")] [InlineData("M11")] [InlineData("M33")] [InlineData("M34")]
-    [InlineData("M35")] [InlineData("M37a")] [InlineData("M37b")]
+    [InlineData("M03")] [InlineData("M07")] [InlineData("M08")] [InlineData("M33")] [InlineData("M34")]
+    [InlineData("M35")]
     public void Open_world_quests_are_not_locked(string code) => Assert.False(StorySections.ByCode(code)!.Locked);
 
     [Fact]

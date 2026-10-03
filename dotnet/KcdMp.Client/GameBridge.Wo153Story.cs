@@ -49,6 +49,7 @@ public partial class GameBridge
     {
         lock (_w153Lock) _w153Lock.Reset();
         _w153TetherOn = false;
+        Wo155Reset();   // WO-155: no question, no stay, no roster survives it
         if (level == LevelSeed.Seed) _w153PrevLevel = _localLevel; else if (level == LevelSeed.Null) _w153PrevLevel = null;
         _w153GateMaybeOn = true;   // the plugin may hold a gate from a session that ended without closing the pipe: one off command is owed
         _w153GateOffFails = 0;
@@ -77,6 +78,7 @@ public partial class GameBridge
                 Interlocked.Increment(ref _w153Enters);
                 _w153TetherOn = true;
                 _w153SectionResendUtc = DateTime.UtcNow;
+                Wo155HostSync();
                 Console.WriteLine($"MP-W153 story: after a load the host's own quest is {s.Code} '{s.Title}' ({s.Why}) -- the tether is back (nobody is pulled: the joiners rejoin a load)");
                 _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionEnter, s.Code);
             }
@@ -100,6 +102,7 @@ public partial class GameBridge
         StorySection? active;
         lock (_w153Lock) { active = _w153Lock.Active; _w153Lock.Reset(); }
         _w153TetherOn = false;
+        Wo155HostSync(immediate: true);   // the lock went off: nobody waits for a grace
         if (active is not null)
         {
             Console.WriteLine($"MP-W153 story: mp_story_lock is off -- {active.Code} '{active.Title}' released, the leash is back to its own numbers");
@@ -128,6 +131,7 @@ public partial class GameBridge
         StorySection? active;
         lock (_w153Lock) { t = _w153Lock.Tick(W153NowMs()); active = _w153Lock.Active; }
         if (t is { } tr) Wo153ApplyTransition(tr);
+        Wo155HostTick();   // WO-155: a friend who has not answered in time is taken as joined
         // A joiner who connects or reconnects while the host is in a locked section would never hear of it: the beat is repeated.
         if (active is not null && _w153StoryOn && (DateTime.UtcNow - _w153SectionResendUtc).TotalSeconds >= 30)
         {
@@ -143,8 +147,9 @@ public partial class GameBridge
         {
             Interlocked.Increment(ref _w153Enters);
             _w153TetherOn = true;
+            Wo155HostSync();   // WO-155: a new period asks every friend; nobody is moved before they answer
             Console.WriteLine(FormattableString.Invariant(
-                $"MP-W153 story: the host entered {s.Code} '{s.Title}' ({s.Why}) -- every joiner is brought beside it and held within {W153PullM:F0} m (warn {W153WarnM:F0} m) until it leaves"));
+                $"MP-W153 story: the host entered {s.Code} '{s.Title}' ({s.Why}) -- each joiner that joins is brought beside it and held within {W153PullM:F0} m (warn {W153WarnM:F0} m) until it leaves; one that stays in the open world is left alone"));
             _w153SectionResendUtc = DateTime.UtcNow;
             _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionEnter, s.Code);
             _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"host-enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\", {W153PullM:F0}) end");
@@ -156,6 +161,7 @@ public partial class GameBridge
             bool still;
             lock (_w153Lock) still = _w153Lock.Active is not null;
             if (!still) _w153TetherOn = false;
+            Wo155HostSync();
             Console.WriteLine($"MP-W153 story: the host left {s.Code} '{s.Title}' ({t.Reason}) -- {(still ? "another locked section is open" : "the leash is back to its own numbers")}");
             _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionLeave, $"{s.Code} {t.Reason.Replace(' ', '_')}");
             _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"host-leave\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(t.Reason)}\") end");
@@ -228,6 +234,7 @@ public partial class GameBridge
     /// <summary>A peer's story beat (kinds 7-10) arrived: only the HOST's, only to a joiner in the host's world, and only as words.</summary>
     private void Wo153OnPeerStory(byte source, byte kind, string text)
     {
+        if (kind == Protocol.StoryBeatKindChoice || kind == Protocol.StoryBeatKindSceneStay) { Wo155OnFriendBeat(source, kind, text); return; }   // WO-155: a friend's answer, for the host
         if (!_joinedWorld || W153IsHost || _w140Separate) return;
         byte hid = W153HostId();
         if (hid == 0xFF || source != hid) return;
@@ -241,9 +248,11 @@ public partial class GameBridge
                 if (s is null || !s.Locked) return;
                 bool changed = W153GetPeer().Code != s.Code;   // the host re-sends it every 30 s for a late joiner: told once
                 W153SetPeer(s.Code, s.Title, s.Why);
+                bool asked = Wo155OnSectionBeat(s);   // WO-155: a new period is the friend's to answer (the question, or its standing answer); the repeats change nothing
                 if (!changed) return;
                 Console.WriteLine($"MP-W153 joiner: the host entered {s.Code} '{s.Title}' ({s.Why})");
-                _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\") end");
+                if (!asked && !_w155Free)   // the next section of a period this player joined: told in the section's words. A new period speaks in the question's.
+                    _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\") end");
                 break;
             }
             case Protocol.StoryBeatKindSectionLeave:
@@ -254,12 +263,12 @@ public partial class GameBridge
                 if (held != s.Code) return;   // a joiner not holding that section (a late join, the 90 s expiry, a duplicate beat) is told nothing, and a beat for another one leaves the held one standing
                 W153SetPeer("", "", "");
                 Console.WriteLine($"MP-W153 joiner: the host left {s.Code} '{s.Title}' ({(parts.Length > 1 ? parts[1] : "-")})");
-                _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"leave\", \"{EscapeLua(s.Title)}\", \"\") end");
+                Wo155OnLeaveBeat(s.Code);   // WO-155: the period is over when no section of it follows within seconds; that, not each section, is told
                 break;
             }
             case Protocol.StoryBeatKindLevel:
-                Console.WriteLine($"MP-W153 joiner: the host's game loaded the region '{parts[0]}'");
-                _ = ExecLuaAsync("if KCD2MP_W153Story then KCD2MP_W153Story(\"level\", \"\", \"\") end");
+                Console.WriteLine($"MP-W153 joiner: the host's game loaded the region '{parts[0]}'{(_w155Free ? " (this player stays in the open world: not told, not brought)" : "")}");
+                if (!_w155Free) _ = ExecLuaAsync("if KCD2MP_W153Story then KCD2MP_W153Story(\"level\", \"\", \"\") end");
                 break;
             case Protocol.StoryBeatKindDialogue:
                 if (parts[0] == "start") _ = ExecLuaAsync("if KCD2MP_W153Story then KCD2MP_W153Story(\"dialogue\", \"\", \"\") end");
@@ -293,10 +302,10 @@ public partial class GameBridge
         if (pr.Code.Length > 0 && (DateTime.UtcNow - pr.At).TotalSeconds > 90)
         {
             Console.WriteLine($"MP-W153 joiner: no word of '{pr.Title}' from the host for 90 s -- taken as over");
-            string title = pr.Title;
             W153SetPeer("", "", "");
-            _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"leave\", \"{EscapeLua(title)}\", \"\") end");
+            Wo155ForceOver();   // WO-155: the period is over now (no grace), and a friend who stayed in the open world is back
         }
+        Wo155Tick();   // WO-155: the answer repeated, an unanswered question given up, a period's end after its grace
         byte want = (_combatRoleApplied && !_isDamageAuthority && _joinedWorld && !_w140Separate && _w153SceneMode == 1) ? (byte)1 : (byte)0;
         if (want == 1) _w153GateMaybeOn = true;
         // Nothing to turn off that may not be on: no pipe traffic (the plugin starts, and returns after a closed pipe, with the gate off).
@@ -381,7 +390,13 @@ public partial class GameBridge
         string section = host ? (active?.Title ?? "") : peer.Title;
         string why = host ? (active?.Why ?? "") : peer.Why;
         string role = !inSession ? "none" : host ? "host" : "joiner";
-        return CoopStatus.Json(role, sync, section, why, host ? _w153TetherOn : section.Length > 0, _w153GameBuild, CoopStatus.BuildWarning(_w153GameBuild));
+        // WO-155: where this player stands in the host's story period (the period's words: one choice covers its quests)
+        string code = host ? (active?.Code ?? "") : peer.Code;
+        string periodWhy = StorySections.PeriodOf(code)?.Why ?? why;
+        string choice = host ? "" : W155ChoiceName();
+        var (joined, free, asking) = host ? W155Counts() : (0, 0, 0);
+        return CoopStatus.Json(role, sync, section, why, host ? _w153TetherOn : section.Length > 0, _w153GameBuild, CoopStatus.BuildWarning(_w153GameBuild),
+                               choice, CoopStatus.RailsText(role, section.Length > 0 ? periodWhy : "", choice, joined, free, asking));
     }
 
     private string W153ActiveCode() { lock (_w153Lock) return _w153Lock.Active?.Code ?? "-"; }

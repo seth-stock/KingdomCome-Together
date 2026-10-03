@@ -85,6 +85,8 @@ public partial class GameBridge
         byte hid = W153HostId();
         if (hid == 0xFF || ghostId != hid) return;
         W153ForgetHostScenes();
+        W153SetPeer("", "", "");
+        Wo155ForceOver();   // WO-155: the host's story period can never end now: a friend who stayed in the open world is back
         _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"host-left\") end");
     }
 
@@ -133,10 +135,11 @@ public partial class GameBridge
                         case "story": { bool on = v == "on"; bool was = _w153StoryOn; _w153StoryOn = on; if (was && !on) Wo153StoryOff(); break; }
                         case "tether": if (SceneFollowLogic.ParseMetres(v, 60) is float tm) _w153TetherM = tm; break;
                         case "mode": { int m = v == "play" ? 1 : 0; if (m != _w153SceneMode) { _w153SceneMode = m; _w153GateDirty = true; } break; }
+                        case "join": if (RailsRules.ParsePref(v) is { } pr) _w155Pref = (int)pr; break;   // WO-155: this player's standing answer
                     }
                 }
                 Console.WriteLine(FormattableString.Invariant(
-                    $"MP-W153 cfg story={(_w153StoryOn ? "on" : "off")} tether_m={_w153TetherM:F0} scene_mode={(_w153SceneMode == 1 ? "play" : "watch")} follow={(_w153Follow ? "on" : "off")} reloc_m={_w153RelocM:F0} far_m={_w153FarM:F0} role={(!_combatRoleApplied ? "unknown" : _isDamageAuthority ? "host (decides)" : "joiner (the host's value counts)")}"));
+                    $"MP-W153 cfg story={(_w153StoryOn ? "on" : "off")} tether_m={_w153TetherM:F0} scene_mode={(_w153SceneMode == 1 ? "play" : "watch")} story_join={RailsRules.PrefName(W155Pref)} follow={(_w153Follow ? "on" : "off")} reloc_m={_w153RelocM:F0} far_m={_w153FarM:F0} role={(!_combatRoleApplied ? "unknown" : _isDamageAuthority ? "host (decides)" : "joiner (the host's value counts)")}"));
                 return;
             case "w153_watch":
                 _ = Wo153WatchAsync();
@@ -144,6 +147,7 @@ public partial class GameBridge
             case "w153_status":
                 Console.WriteLine(Wo153StatsLine());
                 Console.WriteLine(Wo153StoryStatsLine());
+                Console.WriteLine(Wo155StatsLine());
                 return;
         }
     }
@@ -206,6 +210,7 @@ public partial class GameBridge
             }
             if (gen != Volatile.Read(ref _w153Gen)) return;
             Wo153Evaluate(c, lastType, lastName);
+            lock (_w155Lock) _w155SceneStay.Clear();   // WO-155: "keep playing" counted for this scene only
         }
         catch (Exception ex) { Console.WriteLine($"MP-W153 host: close failed: {ex.GetType().Name}: {ex.Message}"); }
     }
@@ -225,6 +230,7 @@ public partial class GameBridge
         {
             if ((DateTime.UtcNow - at).TotalSeconds >= LeashFreshS) continue;
             if ((st.Flags & Protocol.LeashFlagInWorld) == 0 || (st.Flags & Protocol.LeashFlagSeparate) != 0) continue;
+            if (Wo155Exempt(id)) continue;   // WO-155: staying in the open world: not the one who is "far from the story"
             if (Wo147LeashDistance(id, _lastX, _lastY) is double d && (farthest is null || d > farthest)) farthest = d;
         }
         var verdict = SceneFollowLogic.Decide(c.Story, moved, farthest, _w153RelocM, _w153FarM);
@@ -234,7 +240,7 @@ public partial class GameBridge
         _w153Verdicts++;
         if (!_w153Follow) { Console.WriteLine("MP-W153 host: mp_scene_follow is off -- nobody is brought along"); return; }
         if (Wo153NoteScene(FormattableString.Invariant(
-                $"a scene ({lastType} '{lastName}') {(verdict == SceneFollowLogic.Verdict.Relocated ? $"moved the host {moved:F0} m" : $"ended with a joiner {farthest:F0} m from the story")}")))
+                $"a scene ({lastType} '{lastName}') {(verdict == SceneFollowLogic.Verdict.Relocated ? $"moved the host {moved:F0} m" : $"ended with a joiner {farthest:F0} m from the story")}"), fromScene: true))
             _w153Pulls++;
     }
 
@@ -245,21 +251,26 @@ public partial class GameBridge
     /// what is owed (a joiner that was busy is still owed it for up to 120 s; asking again while it is pending changes nothing).
     /// A second relocating scene within 20 s of the first must bring the joiners along again. True = it asked the leash.
     /// </summary>
-    private bool Wo153NoteScene(string why)
+    private bool Wo153NoteScene(string why, bool fromScene = false)
     {
         if (!_w153Follow) { Console.WriteLine($"MP-W153 host: {why} -- mp_scene_follow is off: nobody is brought along"); return false; }
         if (!_leashEnabled) { Console.WriteLine($"MP-W153 host: {why} -- mp_leash is off: nobody is brought along"); return false; }
         // Not a joiner in its OWN world (WO-140: the host's coordinates mean nothing there, and the leash tick skips it; a pull left
         // pending would fire if it rejoined within 120 s). A joiner loading or busy IS owed the pull, as for a real fast travel.
-        int n = 0;
+        // WO-155: nor a friend who stays in the open world for the host's story period, or has not answered its question yet (it is
+        // brought the moment it joins), nor one who said "keep playing" to THIS scene.
+        int n = 0, skipped = 0;
         foreach (var (id, (st, _)) in _leashJoinerState)
         {
             if ((st.Flags & Protocol.LeashFlagSeparate) != 0) continue;
+            bool stay = false;
+            if (fromScene) lock (_w155Lock) stay = _w155SceneStay.Take(id, W153NowMs());
+            if (stay || Wo155Exempt(id)) { skipped++; Interlocked.Increment(ref _w155HostSkips); continue; }
             var l = _leashByJoiner.GetOrAdd(id, _ => new LeashLogic());
             lock (l) l.NoteHostFastTravel();
             n++;
         }
-        Console.WriteLine($"MP-W153 host: {why} -- {n} joiner(s) come along (the leash decides who: nobody within 50 m, nobody busy)");
+        Console.WriteLine($"MP-W153 host: {why} -- {n} joiner(s) come along (the leash decides who: nobody within 50 m, nobody busy){(skipped > 0 ? $"; {skipped} not moved (staying in the open world, not answered yet, or keeping playing)" : "")}");
         return n > 0;
     }
 
@@ -275,6 +286,7 @@ public partial class GameBridge
         if (!_joinedWorld || W153IsHost || _w140Separate) return;
         byte hid = W153HostId();
         if (hid == 0xFF || source != hid) return;
+        if (_w155Free && active) return;   // WO-155: this player stays in the open world: no notice of the host's scenes. Their END edges still pass, so a scene that began before the choice is not left in the tables
         // The host's story scenes running now, by name (the mod keeps the same list for the notice). The wording of a pull right
         // after is for the moment the LAST of them ended: an inner scene's end, or a scene that started again, is not that.
         lock (_w153HostScenes)
@@ -289,7 +301,8 @@ public partial class GameBridge
 
     /// <summary>The pull's wording: just after the host's own story scene ended it was the scene, not a fast travel.</summary>
     private string Wo153PulledText(bool fastTravelReason) =>
-        fastTravelReason && SceneFollowLogic.UseSceneWording(DateTime.UtcNow, _w153HostStoryEndUtc)
+        fastTravelReason && W155TakeJoinedWording() ? RailsRules.JoinedText   // WO-155: the pull that follows "join" (once)
+        : fastTravelReason && SceneFollowLogic.UseSceneWording(DateTime.UtcNow, _w153HostStoryEndUtc)
             ? SceneFollowLogic.Text.JoinerPulledScene
             : fastTravelReason ? LeashLogic.Text.JoinerPulledFastTravel : LeashLogic.Text.JoinerPulledDistance;
 

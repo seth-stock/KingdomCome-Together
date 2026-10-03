@@ -245,6 +245,9 @@ local function reset()
     w.story = true; w.tetherM = 120; w.mode = "watch"; w.lastDialogueToast = nil
     w.stats = { notices = 0, prompts = 0, watch = 0, keep = 0, timeouts = 0, results = 0, ownCopy = 0 }
     if KCD2MP.w140 then KCD2MP.w140.prompt = nil end
+    w.joinPref = "ask"
+    KCD2MP.w155.prompt = nil; KCD2MP.w155.free = false; KCD2MP.w155.why = nil
+    KCD2MP.w155.stats = { asks = 0, join = 0, free = 0, timeouts = 0, none = 0 }
     ERRS = {}; TOASTS = {}
 end
 local function toastCount(text) local n = 0; for _, t in ipairs(TOASTS) do if t == text then n = n + 1 end end return n end
@@ -272,11 +275,11 @@ do
 
     local mark = #LOG
     KCD2MP_W153CfgEmit()
-    check("D: the settings line carries every setting", emitted("w153_cfg", mark)[1] == "follow=off relocm=25 farm=150 story=on tether=120 mode=watch", emitted("w153_cfg", mark)[1])
+    check("D: the settings line carries every setting", emitted("w153_cfg", mark)[1] == "follow=off relocm=25 farm=150 story=on tether=120 mode=watch join=ask", emitted("w153_cfg", mark)[1])
     mark = #LOG
     KCD2MP_SetSceneFollow("on")
     check("D: mp_scene_follow on: set, logged, sent to the agent", KCD2MP.w153.follow == true and logCount("WO153-FOLLOW mp_scene_follow on", mark) == 1
-        and emitted("w153_cfg", mark)[1] == "follow=on relocm=25 farm=150 story=on tether=120 mode=watch", emitted("w153_cfg", mark)[1])
+        and emitted("w153_cfg", mark)[1] == "follow=on relocm=25 farm=150 story=on tether=120 mode=watch join=ask", emitted("w153_cfg", mark)[1])
     KCD2MP_SetSceneFollow("")
     check("D: bare mp_scene_follow reports and changes nothing", KCD2MP.w153.follow == true)
     KCD2MP_SetSceneFollow("%line")
@@ -287,7 +290,7 @@ do
 
     mark = #LOG
     KCD2MP_SetSceneFollowM("40"); KCD2MP_SetSceneFollowFarM("300")
-    check("D: both thresholds set and sent", KCD2MP.w153.relocM == 40 and KCD2MP.w153.farM == 300 and emitted("w153_cfg", mark)[2] == "follow=off relocm=40 farm=300 story=on tether=120 mode=watch", emitted("w153_cfg", mark)[2])
+    check("D: both thresholds set and sent", KCD2MP.w153.relocM == 40 and KCD2MP.w153.farM == 300 and emitted("w153_cfg", mark)[2] == "follow=off relocm=40 farm=300 story=on tether=120 mode=watch join=ask", emitted("w153_cfg", mark)[2])
     local refused = true
     for _, bad in ipairs({ "4", "5001", "12.5", "abc", "-3", "1e3" }) do
         if KCD2MP_SetSceneFollowM(bad) ~= false then refused = false end
@@ -620,9 +623,9 @@ do
     KCD2MP_W153Story("level", "", "")
     check("T: ...and that the host is moving to the next region", toastCount("Your host is moving to the next region. You are brought along when they arrive.") == 1)
     KCD2MP_W153Story("host-enter", "Trosky", "Trosky castle")
-    check("T: the host is told its partners are kept within the tether", toastCount("Locked story section: Trosky (Trosky castle). Your partners are kept within 120 m.") == 1, TOASTS[#TOASTS])
+    check("T: the host is told its partners are kept within the tether", toastCount("Locked story part: Trosky (Trosky castle). Partners choose: join you (kept within 120 m) or stay in the open world.") == 1, TOASTS[#TOASTS])
     KCD2MP_W153Story("host-enter", "Trosky", "Trosky castle", 80)
-    check("T: the host hears the EFFECTIVE distance when the leash is already tighter than the tether", toastCount("Locked story section: Trosky (Trosky castle). Your partners are kept within 80 m.") == 1, TOASTS[#TOASTS])
+    check("T: the host hears the EFFECTIVE distance when the leash is already tighter than the tether", toastCount("Locked story part: Trosky (Trosky castle). Partners choose: join you (kept within 80 m) or stay in the open world.") == 1, TOASTS[#TOASTS])
     KCD2MP_W153Story("host-leave", "Trosky", "completed")
     check("T: ...and when they are free again", toastCount("Story section over: Trosky. Your partners are free to roam.") == 1)
     local n = #TOASTS
@@ -653,6 +656,136 @@ do
     KCD2MP_W153Status()
     check("T: the status line carries the story settings", logCount("WO153-STATUS story=on tether_m=120 mode=watch", mark) == 1)
     noErrs("T")
+end
+
+-- ================================================================ J: WO-155 -- join the host, or stay in the open world
+
+do
+    local w = KCD2MP.w153
+    check("J: as shipped a friend is asked (mp_story_join ask)", w.joinPref == "ask")
+    check("J: the three commands are registered", CCMDS["mp_story_join"] ~= nil and CCMDS["mp_story_come"] ~= nil and CCMDS["mp_story_stay"] ~= nil)
+    check("J: ...and mp_story_join takes the rest of the line", CCMDS["mp_story_join"].body:find("%line", 1, true) ~= nil)
+
+    -- the question
+    reset(); NOW = 5000; TOASTS = {}
+    KCD2MP_W155Ask("the final set", 30)
+    check("J: the question is up and says what the host is in", KCD2MP.w155.prompt ~= nil and toastCount("Your host entered the final set. Join them, or stay in the open world?") == 1, TOASTS[1])
+    local f = frame()
+    check("J: the overlay shows the question with its countdown", f:find("Your host entered the final set. Join them, or stay in the open world?  (30s)", 1, true) ~= nil, f)
+    check("J: ...and both keys", f:find("F11 join your host  /  F12 stay in the open world", 1, true) ~= nil)
+    NOW = NOW + 10
+    check("J: the countdown runs", frame():find("(20s)", 1, true) ~= nil)
+
+    -- F11 / F12
+    local mark = #LOG
+    press("kcd2mp_dice_bank")
+    check("J: F11 answers join", KCD2MP.w155.prompt == nil and #emitted("w155_choice", mark) == 1 and emitted("w155_choice", mark)[1] == "join key", emitted("w155_choice", mark)[1])
+    reset(); NOW = 5100; KCD2MP_W155Ask("the final set", 30); mark = #LOG
+    press("kcd2mp_dice_yield")
+    check("J: F12 answers stay in the open world", KCD2MP.w155.prompt == nil and emitted("w155_choice", mark)[1] == "free key", emitted("w155_choice", mark)[1])
+    reset(); NOW = 5200; KCD2MP_W155Ask("the final set", 30); mark = #LOG
+    press("confirm"); press("ui_accept"); press("cancel"); press("ui_cancel"); press("dialog_answer1")
+    check("J: the generic accept and cancel actions never answer it", KCD2MP.w155.prompt ~= nil and #emitted("w155_choice", mark) == 0)
+
+    -- nobody answering is a join
+    reset(); NOW = 5300; KCD2MP_W155Ask("the final set", 30); mark = #LOG
+    NOW = NOW + 29; frame()
+    check("J: still waiting at 29 s", KCD2MP.w155.prompt ~= nil and #emitted("w155_choice", mark) == 0)
+    NOW = NOW + 2; frame()
+    check("J: at 30 s no answer is a join", KCD2MP.w155.prompt == nil and emitted("w155_choice", mark)[1] == "join timeout", emitted("w155_choice", mark)[1])
+    check("J: ...counted", KCD2MP.w155.stats.timeouts == 1)
+
+    -- the agent's answer: staying
+    reset(); NOW = 5400; TOASTS = {}
+    KCD2MP_W155Decided("free", "the final set", true)
+    check("J: staying is confirmed in words", toastCount("You are staying in the open world while your host is in the final set. Nobody will bring you back.") == 1, TOASTS[1])
+    f = frame()
+    check("J: while staying a quiet label says so and how to join", f:find("Open world: your host is in the final set.   F11 / mp_story_come: join them", 1, true) ~= nil, f)
+    mark = #LOG
+    press("kcd2mp_dice_yield")
+    check("J: F12 while staying does nothing (already staying)", #emitted("w155_choice", mark) == 0)
+    press("confirm"); press("ui_accept")
+    check("J: the generic accept never joins", #emitted("w155_choice", mark) == 0)
+    press("kcd2mp_dice_bank")
+    check("J: F11 while staying joins", emitted("w155_choice", mark)[1] == "join key", emitted("w155_choice", mark)[1])
+    TOASTS = {}
+    KCD2MP_W155Decided("join", "the final set", true)
+    check("J: joining is confirmed in words and the label is gone", toastCount("You joined your host for the final set. Stay close; you are brought beside them.") == 1 and KCD2MP.w155.free == false and frame():find("Open world", 1, true) == nil)
+    TOASTS = {}
+    KCD2MP_W155Decided("free", "the final set", false)
+    check("J: a standing answer need not be announced twice (announce=false is quiet)", #TOASTS == 0 and KCD2MP.w155.free == true)
+    KCD2MP_W155Decided("none", "", true)
+    check("J: no period open says so", toastCount("Your host is not in a locked story part right now.") == 1 and KCD2MP.w155.free == true)
+
+    -- the end
+    reset(); NOW = 5500; TOASTS = {}; KCD2MP.w155.free = true
+    KCD2MP_W155Over("the final set", "free")
+    check("J: the end for someone who stayed says the leash is back", toastCount("the final set is over. You are back with your host: the leash applies again.") == 1 and KCD2MP.w155.free == false, TOASTS[1])
+    TOASTS = {}
+    KCD2MP_W155Over("the final set", "join")
+    check("J: the end for someone who joined says they are free to roam", toastCount("the final set is over. You are free to roam again.") == 1)
+    KCD2MP_W155Ask("x", 30)
+    KCD2MP_W155Over("x", "pending")
+    check("J: the end of a part never answered withdraws the question quietly", KCD2MP.w155.prompt == nil)
+
+    -- the question and a cutscene notice together: one press answers both
+    reset(); NOW = 5600
+    KCD2MP.w153.prompt = { deadline = NOW + 20, kind = "Ingame", name = "wedding" }
+    KCD2MP_W155Ask("the wedding in Semine and Trosky castle", 30)
+    mark = #LOG
+    press("kcd2mp_dice_bank")
+    check("J: F11 joins AND stands the friend beside the host for the scene", emitted("w155_choice", mark)[1] == "join key" and #emitted("w153_watch", mark) == 1 and KCD2MP.w153.prompt == nil)
+    reset(); NOW = 5700
+    KCD2MP.w153.prompt = { deadline = NOW + 20, kind = "Ingame", name = "wedding" }
+    KCD2MP_W155Ask("the wedding in Semine and Trosky castle", 30)
+    mark = #LOG
+    press("kcd2mp_dice_yield")
+    check("J: F12 stays AND keeps playing through the scene (and is not brought along after it)", emitted("w155_choice", mark)[1] == "free key" and #emitted("w155_scene_stay", mark) == 1 and KCD2MP.w153.prompt == nil)
+
+    -- F12 on the host's cutscene alone: not brought along after it
+    reset(); NOW = 5800
+    KCD2MP.w153.prompt = { deadline = NOW + 20, kind = "Ingame", name = "ride" }
+    mark = #LOG
+    press("kcd2mp_dice_yield")
+    check("J: F12 on a cutscene notice tells the agent not to bring this player along after it", #emitted("w155_scene_stay", mark) == 1)
+    reset(); NOW = 5900
+    KCD2MP.w153.prompt = { deadline = NOW + 20, kind = "Ingame", name = "ride" }
+    mark = #LOG
+    press("kcd2mp_dice_bank")
+    check("J: ...and F11 (watch) does not", #emitted("w155_scene_stay", mark) == 0 and #emitted("w153_watch", mark) == 1)
+
+    -- the commands
+    reset(); NOW = 6000; mark = #LOG
+    KCD2MP_StoryCome(); KCD2MP_StoryStay()
+    local e = emitted("w155_choice", mark)
+    check("J: mp_story_come / mp_story_stay answer at any time", #e == 2 and e[1] == "join cmd" and e[2] == "free cmd", table.concat(e, ","))
+    reset(); mark = #LOG
+    check("J: mp_story_join free", KCD2MP_SetStoryJoin("free") == true and KCD2MP.w153.joinPref == "free")
+    local cfg = emitted("w153_cfg", mark)
+    check("J: ...is carried to the agent", #cfg >= 1 and cfg[#cfg]:find("join=free", 1, true) ~= nil, cfg[#cfg])
+    check("J: mp_story_join stay is free", KCD2MP_SetStoryJoin("stay") == true and KCD2MP.w153.joinPref == "free")
+    check("J: mp_story_join join", KCD2MP_SetStoryJoin("join") == true and KCD2MP.w153.joinPref == "join")
+    check("J: mp_story_join ask", KCD2MP_SetStoryJoin("ASK") == true and KCD2MP.w153.joinPref == "ask")
+    check("J: a bad word is refused and nothing changes", KCD2MP_SetStoryJoin("maybe") == false and KCD2MP.w153.joinPref == "ask")
+    check("J: a bare call reports and keeps it", KCD2MP_SetStoryJoin("%line") == true and KCD2MP.w153.joinPref == "ask")
+
+    -- the host's side of the words
+    reset(); NOW = 6100; TOASTS = {}
+    KCD2MP_W155Host("join", "Alice", "the final set")
+    KCD2MP_W155Host("free", "Bob", "the final set")
+    check("J: the host is told who joined", toastCount("Alice joined you for the final set.") == 1)
+    check("J: ...and who stays in the open world", toastCount("Bob stays in the open world for the final set.") == 1)
+
+    -- reset
+    reset(); KCD2MP_W155Ask("x", 30); KCD2MP.w155.free = true
+    KCD2MP_W155Reset()
+    check("J: a session end or a load forgets the question and the stay", KCD2MP.w155.prompt == nil and KCD2MP.w155.free == false)
+
+    -- the status line
+    reset(); NOW = 6200; mark = #LOG
+    KCD2MP_W153Status()
+    check("J: the status line carries the choice", logCount("WO155-STATUS join_pref=ask prompt=no free=no", mark) == 1)
+    noErrs("J")
 end
 
 local pass, fail = 0, 0

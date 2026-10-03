@@ -1203,6 +1203,12 @@ public static partial class Protocol
     /// <summary>The host's dialogue began or ended: text = "start" | "end".</summary>
     public const byte StoryBeatKindDialogue = 10;
 
+    // WO-155 (docs/WO-155-findings.md): a FRIEND answers the host. The relay passes them on like every beat; only the host reads them.
+    /// <summary>A friend's answer to a locked story period: text = "M47 join" | "M47 free" (any section code of the period names it). Repeated every 20 s while it lasts.</summary>
+    public const byte StoryBeatKindChoice = 11;
+    /// <summary>A friend said "keep playing" to the host's cutscene: do not bring them along after it. text = "stay".</summary>
+    public const byte StoryBeatKindSceneStay = 12;
+
     public static bool IsNeverSyncedNpcName(string npcName) =>
         npcName.StartsWith(NpcReservedNamePrefix, StringComparison.OrdinalIgnoreCase)
         || npcName.StartsWith(NpcDialogTwinNamePrefix, StringComparison.OrdinalIgnoreCase);

@@ -17,7 +17,8 @@ Steam items.** The mod refuses to connect two different versions.
 > 4. Open **Kingdom Come: Together** (the desktop shortcut). The host gives you an **address and port**
 >    (for example `100.64.12.3:7778`): **ADD SERVER**, paste it, **JOIN SERVER**.
 > 5. When the launcher asks, load into the game, then press **CONNECT** in the launcher. The first time it asks
->    **Bring my character** or **Start fresh**.
+>    **Bring my character** or **Start fresh**. When the host's story goes "on rails" you are asked: **F11** join them,
+>    **F12** stay in the open world.
 > 6. Use the launcher to start the game. **Never start it from Steam's Play button** (that runs the setup tool).
 
 ---
@@ -30,16 +31,21 @@ the clock and the weather. New in 0.44.0:
 * When the **host is in a cutscene** you are told, and you choose: **F11** to stand beside them and watch from your own
   camera, **F12** (or do nothing for 20 seconds) to keep playing. By default the game also plays *its own copy* of their
   cutscene on your screen; `mp_scene_mode play` (§5) skips that so you keep playing.
-* In the story parts that **lock the host into one place** — the wedding in Semine, Trosky castle, the move to Kuttenberg,
-  the devil's job, the burning of the Jewish quarter, the cardinal, the Italian Job, the final set — you are **brought to the
-  host when it starts and kept within 120 m** of them until it ends. A message tells you so.
+* In the story parts that **put the host on rails** — the opening, the wedding in Semine and Trosky castle, the battle of Nebakov,
+  the move to Kuttenberg, the devil's job, the meeting at Rattay, the burning of the Jewish quarter, the cardinal, the Italian Job,
+  the final set — **you choose**. A question appears on your screen: **F11 join your host** or **F12 stay in the open world**
+  (30 seconds; no answer counts as joining). Joining brings you beside the host and keeps you within 120 m of them until the part
+  ends. Staying leaves you alone for as long as that part lasts: nothing brings you, tethers you or pulls you back, and the host's
+  story steps are held so the game cannot start their scenes on you. You are told when it ends, and **F11 joins at any time**.
+  One question covers a whole stretch (the final set is six quests; you are asked once). `mp_story_join` (§5) makes it a standing answer.
 * When a cutscene **moves the host** somewhere else, or a story region changes, you are **brought along**. Nobody within
   50 m of the host is ever moved.
 * The launcher shows **Story: IN SYNC / DRIFTING / CATCHING UP**, the locked part the host is in, and a warning if your
   game is not the build the mod was verified on.
 
-What is not covered: side quests, DLC and the non-Henry stretches of the story; "locked" is a judgement from the quest
-data, not something the game tells us. **Nothing in 0.44.0 has been played by two people yet**; please send the logs
+What is not covered: side quests, DLC and the stretches where the host plays as someone else (nobody can be placed beside a
+different character, so nobody is moved); "locked" is a judgement from the quest data, not something the game tells us
+(`docs/WO-155-findings.md` lists every quest and why). **Nothing in 0.44.0, and not the join-or-stay choice, has been played by two people yet**; please send the logs
 (§7) if anything looks wrong.
 
 ## 2. The game build, and your saves — read this
@@ -97,9 +103,11 @@ You normally type nothing. Everything below is optional.
 
 | Command | Who | What it does |
 |---|---|---|
+| `mp_story_join ask` / `join` / `free` | friend | what to do when the host's story goes on rails: `ask` (default) = the question; `join` = always go with the host; `free` = always stay in the open world |
+| `mp_story_come` / `mp_story_stay` | friend | answer now, with or without the question (same as F11 / F12) |
 | `mp_scene_mode play` / `watch` | friend | `watch` (default): your own copy of the host's cutscene plays too. `play`: it is skipped and you keep playing |
 | `mp_scene_notice on` / `off` | friend | the "your host is in a cutscene" message and its keys (default on) |
-| `mp_story_lock on` / `off` | host | the locked story parts bring the friends and hold them close (default on) |
+| `mp_story_lock on` / `off` | host | the locked story parts ask each friend to join (those who join are brought and held close; those who stay are left alone) (default on) |
 | `mp_story_tether_m 120` | host | how far a friend may stray in a locked part, 60–5000 m |
 | `mp_scene_follow on` / `off` | host | bring the friends along after a cutscene moved the host (default on) |
 | `mp_scene_follow_m 25`, `mp_scene_follow_far_m 150` | host | how far counts as "moved" and as "far" |

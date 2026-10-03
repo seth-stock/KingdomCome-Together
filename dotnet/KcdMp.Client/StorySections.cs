@@ -14,6 +14,9 @@ public sealed record StorySection(string Code, string Quest, string Level, strin
     public int Order { get; init; }
 }
 
+/// <summary>WO-155: a locked stretch of the story. <paramref name="Id"/> = the code of its first section.</summary>
+public sealed record StoryPeriod(string Id, string Why, IReadOnlyList<string> Codes);
+
 /// <summary>The 32 main quests, in story order.</summary>
 public static class StorySections
 {
@@ -22,25 +25,25 @@ public static class StorySections
     // (docs/WO-149-cutscene-census.md: FilterInput locks, LockUp, player switches, scripted fights) and the user's list.
     private static readonly StorySection[] Table =
     {
-        new("M01", "prepadeni", "trosecko", "Easy Riders", false, ""),
-        new("M02", "zachrana", "trosecko", "Fortuna", false, ""),
+        new("M01", "prepadeni", "trosecko", "Easy Riders", true, "the opening of the story"),
+        new("M02", "zachrana", "trosecko", "Fortuna", true, "the opening of the story"),
         new("M03", "socky", "trosecko", "Laboratores", false, ""),
         new("M05", "svatba", "trosecko", "Wedding Crashers", true, "the wedding in Semine"),
         new("M06", "naTroskach", "trosecko", "For Whom the Bell Tolls", true, "Trosky castle"),
         new("M07", "nebakovPruzkum", "trosecko", "Back in the Saddle", false, ""),
         new("M08", "mucirna", "trosecko", "Necessary Evil", false, ""),
-        new("M09", "utokNaNebakov", "trosecko", "For Victory!", false, ""),
-        new("M10", "bohutovaVlozka", "trosecko", "Divine Messenger", false, ""),
-        new("M11", "nebakovObrana", "trosecko", "The Finger of God", false, ""),
+        new("M09", "utokNaNebakov", "trosecko", "For Victory!", true, "the battle of Nebakov"),
+        new("M10", "bohutovaVlozka", "trosecko", "Divine Messenger", true, "the battle of Nebakov"),
+        new("M11", "nebakovObrana", "trosecko", "The Finger of God", true, "the battle of Nebakov"),
         new("M12", "vezniNaTroskach", "trosecko", "Storm", true, "Trosky castle"),
         new("M30", "posledniPomazani", "kutnohorsko", "Last Rites", true, "the move to Kuttenberg"),
-        new("M31", "prijezdNaSuchdol", "kutnohorsko", "The Sword and the Quill", true, "arrival in Kuttenberg"),
+        new("M31", "prijezdNaSuchdol", "kutnohorsko", "The Sword and the Quill", true, "the move to Kuttenberg"),
         new("M32", "sedmStatecnych", "kutnohorsko", "Speak of the Devil", true, "the devil's job"),
         new("M33", "hledaniLichtenstejna", "kutnohorsko", "Into the Underworld", false, ""),
         new("M34", "kralovskeStribro", "kutnohorsko", "Via Argentum", false, ""),
         new("M35", "zachranaPtacka", "kutnohorsko", "Taking French Leave", false, ""),
-        new("M37a", "setkaniVRatbori1", "kutnohorsko", "The King's Gambit", false, ""),
-        new("M37b", "setkaniVRatbori2", "kutnohorsko", "The Feast", false, ""),
+        new("M37a", "setkaniVRatbori1", "kutnohorsko", "The King's Gambit", true, "the meeting at Rattay"),
+        new("M37b", "setkaniVRatbori2", "kutnohorsko", "The Feast", true, "the meeting at Rattay"),
         new("M38", "sedmStatecnych2", "kutnohorsko", "The Devil's Pack", true, "the devil's job"),
         new("M42", "pogrom", "kutnohorsko", "Exodus", true, "the burning of the Jewish quarter"),
         new("M44a", "zikmunduvTabor", "kutnohorsko", "The Lion's Den", true, "Sigismund's camp"),
@@ -66,6 +69,42 @@ public static class StorySections
 
     public static StorySection? ByCode(string? code) =>
         All.FirstOrDefault(s => string.Equals(s.Code, code, StringComparison.OrdinalIgnoreCase));
+
+    // ---- WO-155: periods -- what a friend chooses about ----
+    // A friend does not choose per quest: "the final set" is six quests and one stretch of story. A PERIOD is a run of
+    // consecutive locked sections that read as one thing: the same Why, or a section that continues the one before it
+    // (the wedding runs into Trosky; the move to Kuttenberg is two quests). An open quest between two locked ones ends the period.
+    private static readonly HashSet<string> JoinsPrevious = new(StringComparer.OrdinalIgnoreCase) { "M06", "M31" };
+
+    /// <summary>The locked stretches of the story, in order.</summary>
+    public static IReadOnlyList<StoryPeriod> Periods { get; } = BuildPeriods();
+
+    private static readonly Dictionary<string, StoryPeriod> PeriodByCode = Periods.SelectMany(p => p.Codes.Select(c => (c, p)))
+        .ToDictionary(x => x.c, x => x.p, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The period a section belongs to; null for an open quest or an unknown code.</summary>
+    public static StoryPeriod? PeriodOf(string? code) => code is not null && PeriodByCode.TryGetValue(code, out var p) ? p : null;
+
+    private static IReadOnlyList<StoryPeriod> BuildPeriods()
+    {
+        var list = new List<StoryPeriod>();
+        List<StorySection>? run = null;
+        void Flush()
+        {
+            if (run is null) return;
+            string why = string.Join(" and ", run.Select(s => s.Why).Distinct());
+            list.Add(new StoryPeriod(run[0].Code, why, run.Select(s => s.Code).ToArray()));
+            run = null;
+        }
+        foreach (var s in All)
+        {
+            if (!s.Locked) { Flush(); continue; }
+            if (run is not null && (run[^1].Why == s.Why || JoinsPrevious.Contains(s.Code))) run.Add(s);
+            else { Flush(); run = [s]; }
+        }
+        Flush();
+        return list;
+    }
 
     /// <summary>
     /// The main quest a quest-State path belongs to: "Barbora.trosecko.svatba.hibernovana_cast.x" -> the svatba section.
