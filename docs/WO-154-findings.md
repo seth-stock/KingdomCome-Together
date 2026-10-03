@@ -105,13 +105,13 @@ Declined with reasons: none that were real were left open.
 | What | Result |
 |---|---|
 | `dotnet build KCD2-MP.sln` | 0 errors |
-| `KcdMp.Client.Tests` | see the last line of this section |
+| `KcdMp.Client.Tests` / `KcdMp.Relay.Tests` / `KcdMp.Farkle.Tests` | 1007 / 62 / 59, 0 failed |
 | Native tests | 389 / 389 (21 new: the gate's rules and the prologue's instruction boundary) |
 | `Test-WO153Synthetic.ps1` | 123 / 123 |
 | All 43 offline Lua suites | 0 failed |
 | The three static checks | exit 0 |
 | The plugin and the gate in the real game | armed, answers, no Lua errors **(observed)** |
-| The frame-rate soak (the installer's gate) | see `tools/perf/soak-record.json` |
+| The frame-rate soak (the installer's gate) | PASS, with the mod 55.7 → 58.7 FPS, without 55.3 → 59.7, stat stack 0, no FAULT, 50 rows each (`tools/perf/soak-record.json`) **(observed)** |
 | A real scene refused by the gate; the story sections; the launcher banners; two people | **not observed** |
 
 ## 6. What a live run with two people must show (the checklist items 110–116)
