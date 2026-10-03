@@ -23,7 +23,7 @@ namespace KcdMp.Client;
 /// GET /version-status -> { "myReleaseVersion": "0.9.5", "peers": [{"ghostId":1,"releaseVersion":"0.9.4"}] }
 /// </summary>
 public sealed class VersionIpcServer(Func<KeyValuePair<byte, string>[]> getPeers, int port, Func<string>? getJoinStatus = null, Action<string>? onJoinChoice = null,
-    Func<string>? getConnectionStatus = null)
+    Func<string>? getConnectionStatus = null, Func<string>? getCoopStatus = null)
 {
     private readonly HttpListener _listener = new();
     private CancellationTokenSource? _cts;
@@ -147,6 +147,18 @@ public sealed class VersionIpcServer(Func<KeyValuePair<byte, string>[]> getPeers
             if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/connection-status" && getConnectionStatus is not null)
             {
                 var bytes = Encoding.UTF8.GetBytes(getConnectionStatus());
+                res.StatusCode = 200;
+                res.ContentType = "application/json";
+                res.ContentLength64 = bytes.Length;
+                await res.OutputStream.WriteAsync(bytes);
+                res.Close();
+                return;
+            }
+
+            // WO-154: the co-op story in plain words: in sync / drifting / catching up, the locked section the host is in, the game-build warning.
+            if (req.HttpMethod == "GET" && req.Url?.AbsolutePath == "/coop-status" && getCoopStatus is not null)
+            {
+                var bytes = Encoding.UTF8.GetBytes(getCoopStatus());
                 res.StatusCode = 200;
                 res.ContentType = "application/json";
                 res.ContentLength64 = bytes.Length;

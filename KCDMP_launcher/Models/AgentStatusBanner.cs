@@ -17,6 +17,27 @@ namespace KCDMP_launcher.Models
         public int Failures { get; set; }
     }
 
+    // WO-154: mirrors CoopStatus.Json (dotnet/KcdMp.Client/CoopStatus.cs), GET /coop-status.
+    public class CoopStatusData
+    {
+        public string Role { get; set; } = "none";
+        public string Sync { get; set; } = "solo";
+        public string SyncText { get; set; } = "";
+        public string Section { get; set; } = "";
+        public string SectionWhy { get; set; } = "";
+        public bool Tether { get; set; }
+        public string? GameBuild { get; set; }
+        public string? BuildWarning { get; set; }
+
+        /// <summary>The one line the launcher shows: the story sync, and the locked section when there is one. Empty when there is nothing to say.</summary>
+        public string Line()
+        {
+            string s = SyncText;
+            if (Section.Length > 0) s += (s.Length > 0 ? "  |  " : "") + "In a locked part of the story: " + Section;
+            return s;
+        }
+    }
+
     // Mirrors GameBridge.JoinStatusJson (dotnet/KcdMp.Client/GameBridge.Wo123.cs, WO-123).
     public class JoinStatusData
     {

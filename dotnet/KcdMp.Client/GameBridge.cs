@@ -1127,8 +1127,9 @@ public partial class GameBridge(ClientConfig config)
         // connection status) lives as long as the agent, not one connection, so
         // a failure BEFORE the first connection can be shown too.
         _versionIpcServer = new VersionIpcServer(() => _ghostReleaseVersions.ToArray(), config.VersionIpcPort, JoinStatusJson, Wo125OnLauncherChoice,
-            AgentConnectionStatus.Json);
+            AgentConnectionStatus.Json, Wo153CoopStatusJson);   // WO-154: + /coop-status
         _versionIpcServer.Start();
+        _ = Wo153ReadGameBuildAsync(config.GameApiBase);
         AgentConnectionStatus.Set("waiting-for-game", string.IsNullOrWhiteSpace(config.SteamCode) ? "direct" : "steam", "Waiting for the game...");
 
         try

@@ -45,6 +45,7 @@ public partial class GameBridge
         _w153PrevLevel = null;
         _w153GateSent = 255;
         _w153LastHostDialogue = false;
+        _w153PeerSection = ""; _w153PeerSectionWhy = "";
     }
 
     // ---------------------------------------------------------------- the host: where the story is
@@ -155,6 +156,7 @@ public partial class GameBridge
             {
                 var s = StorySections.ByCode(parts[0]);
                 if (s is null || !s.Locked) return;
+                _w153PeerSection = s.Title; _w153PeerSectionWhy = s.Why;
                 Console.WriteLine($"MP-W153 joiner: the host entered {s.Code} '{s.Title}' ({s.Why})");
                 _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\") end");
                 break;
@@ -163,6 +165,7 @@ public partial class GameBridge
             {
                 var s = StorySections.ByCode(parts[0]);
                 if (s is null) return;
+                _w153PeerSection = ""; _w153PeerSectionWhy = "";
                 Console.WriteLine($"MP-W153 joiner: the host left {s.Code} '{s.Title}' ({(parts.Length > 1 ? parts[1] : "-")})");
                 _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"leave\", \"{EscapeLua(s.Title)}\", \"\") end");
                 break;
@@ -193,6 +196,47 @@ public partial class GameBridge
         if (want != _w153GateSent)
             Console.WriteLine($"MP-W153 gate: {(want == 1 ? "ON" : "off")} -- {(want == 1 ? "this game's own copy of a scene the host's step starts is not played" : "this game plays its own copies as before")}; plugin {(r.Value.Ok ? "armed" : "has no gate (not armed)")}");
         _w153GateSent = want;
+    }
+
+    // ---------------------------------------------------------------- the launcher: GET /coop-status
+
+    private string? _w153GameBuild;
+    private string _w153PeerSection = "", _w153PeerSectionWhy = "";   // the HOST's locked section, as a joiner heard it
+
+    /// <summary>The game's own build (wh_sys_GameReleaseVersion), read once the game's API answers; the launcher warns when it is not one the mod was verified on.</summary>
+    private async Task Wo153ReadGameBuildAsync(string apiBase)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        for (int i = 0; i < 120 && _w153GameBuild is null; i++)
+        {
+            try
+            {
+                string raw = await http.GetStringAsync($"{apiBase}/api/System/Console/GetCvarValue?name=wh_sys_GameReleaseVersion");
+                if (CoopStatus.ParseBuild(raw) is { } b)
+                {
+                    _w153GameBuild = b;
+                    string? warn = CoopStatus.BuildWarning(b);
+                    Console.WriteLine($"MP-W153 game build {b} ({CoopStatus.Pretty(b)}){(warn is null ? " -- a build the mod was verified on" : " -- WARNING: " + warn)}");
+                    return;
+                }
+            }
+            catch { }
+            await Task.Delay(5000);
+        }
+    }
+
+    private string Wo153CoopStatusJson()
+    {
+        bool host = W153IsHost;
+        bool inSession = _combatRoleApplied;
+        int peers = Wo134Peers().Count();
+        string sync = CoopStatus.SyncState(inSession, peers > 0, host, _w151CaughtUp, _storyDivergenceTold.Count);
+        StorySection? active;
+        lock (_w153Lock) active = _w153Lock.Active;
+        string section = host ? (active?.Title ?? "") : _w153PeerSection;
+        string why = host ? (active?.Why ?? "") : _w153PeerSectionWhy;
+        string role = !inSession ? "none" : host ? "host" : "joiner";
+        return CoopStatus.Json(role, sync, section, why, host ? _w153TetherOn : section.Length > 0, _w153GameBuild, CoopStatus.BuildWarning(_w153GameBuild));
     }
 
     private string Wo153StoryStatsLine() =>

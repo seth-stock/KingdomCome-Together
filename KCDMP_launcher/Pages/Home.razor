@@ -190,6 +190,22 @@
     </div>
 }
 
+@if (!string.IsNullOrEmpty(coopStatusLine))
+{
+    @* WO-154: the co-op story in plain words: in sync / drifting / catching up, and the locked section the host is in *@
+    <div class="coop-status-banner" style="position: fixed; left: 50%; top: 10px; transform: translateX(-50%); padding: 6px 18px; background: rgba(20, 14, 8, 0.88); border: 1px solid #8a6d3b; color: #e8d9b5; font-size: 14px; z-index: 40;">
+        @coopStatusLine
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(buildWarningLine))
+{
+    @* WO-154: this game is not a build the mod was verified on *@
+    <div class="build-warning-banner" style="position: fixed; left: 50%; top: @(string.IsNullOrEmpty(coopStatusLine) ? "10px" : "46px"); transform: translateX(-50%); max-width: 80%; padding: 6px 18px; background: rgba(60, 24, 14, 0.92); border: 1px solid #a0522d; color: #f1d9c4; font-size: 13px; z-index: 40;">
+        @buildWarningLine
+    </div>
+}
+
 @if (!string.IsNullOrEmpty(connStatusLine))
 {
     @* WO-127: the agent's connection in plain words (never raw exception text) *@

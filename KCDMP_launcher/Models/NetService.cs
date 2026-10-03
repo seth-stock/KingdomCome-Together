@@ -276,6 +276,13 @@ namespace KCDMP_launcher.Services
             }
         }
 
+        /// <summary>WO-154: the co-op story line and the game-build warning (GET /coop-status). Null while the agent is not up.</summary>
+        public async Task<CoopStatusData?> GetCoopStatusAsync(int port)
+        {
+            try { return await _httpClient.GetFromJsonAsync<CoopStatusData>($"http://localhost:{port}/coop-status"); }
+            catch { return null; }
+        }
+
         /// <summary>
         /// WO-123: the agent's world-transfer state (GET /join-status on the
         /// same listener as /version-status). Null while the agent is not up.

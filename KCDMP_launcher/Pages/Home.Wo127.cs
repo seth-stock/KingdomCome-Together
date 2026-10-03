@@ -283,6 +283,7 @@ namespace KCDMP_launcher.Pages
         private readonly Stopwatch agentClock = Stopwatch.StartNew();
         private CancellationTokenSource? agentPollCts;
         private bool agentPollErrorLogged;
+        private string coopStatusLine = "", buildWarningLine = "";   // WO-154: "Story: IN SYNC" and the game-build warning
 
         private void SyncAgentBanner()
         {
@@ -303,6 +304,14 @@ namespace KCDMP_launcher.Pages
                 {
                     var cs = alive ? await NetService.GetConnectionStatusAsync(settings.VersionIpcPort) : null;
                     var js = alive ? await NetService.GetJoinStatusAsync(settings.VersionIpcPort) : null;
+                    var coop = alive ? await NetService.GetCoopStatusAsync(settings.VersionIpcPort) : null;   // WO-154
+                    string coopLine = coop?.Line() ?? "", buildWarn = coop?.BuildWarning ?? "";
+                    if (coopLine != coopStatusLine || buildWarn != buildWarningLine)
+                    {
+                        coopStatusLine = coopLine; buildWarningLine = buildWarn;
+                        if (coopLine.Length > 0 || buildWarn.Length > 0) Log.Information("Coop status: {Line} | build warning: {Warn}", coopLine, buildWarn);
+                        await InvokeAsync(StateHasChanged);
+                    }
                     // Steam failed: offer the address right here, in this same launch.
                     if (cs is { State: "failed", Via: "steam" } && !steamFallbackShown && cs.Kind != "Lost")
                     {
