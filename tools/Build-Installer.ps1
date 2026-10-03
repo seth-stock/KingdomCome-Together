@@ -43,7 +43,8 @@ function Get-Iscc {
     if ($onPath) { return $onPath.Source }
     foreach ($candidate in @(
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+        "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"   # winget / the installer's per-user choice
     )) {
         if (Test-Path $candidate) { return $candidate }
     }
