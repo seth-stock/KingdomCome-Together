@@ -40,17 +40,58 @@ public partial class GameBridge
     private float W153WarnM => StoryLock.Tether(_leashWarnM, _leashPullM, _w153TetherOn, _w153TetherM).WarnM;
     private float W153PullM => StoryLock.Tether(_leashWarnM, _leashPullM, _w153TetherOn, _w153TetherM).PullM;
 
-    /// <param name="seedLevel">a new connection: the level this game is in now is where the next region change starts from. A load or a
-    /// disconnect: the level banner that follows is not a story transition, so the next one only seeds it.</param>
-    private void Wo153StoryReset(bool seedLevel = false)
+    private enum LevelSeed { Null, Seed, Keep }
+
+    /// <param name="level">Seed = a new connection: the level this game is in now is where the next region change starts from.
+    /// Keep = a load: its own level event came first (OnLocalLevel runs during the load, before GameplayStarted), so what it set stands.
+    /// Null = a disconnect: the next level event only seeds it.</param>
+    private void Wo153StoryReset(LevelSeed level = LevelSeed.Null)
     {
         lock (_w153Lock) _w153Lock.Reset();
         _w153TetherOn = false;
-        _w153PrevLevel = seedLevel ? _localLevel : null;
+        if (level == LevelSeed.Seed) _w153PrevLevel = _localLevel; else if (level == LevelSeed.Null) _w153PrevLevel = null;
         _w153GateMaybeOn = true;   // the plugin may hold a gate from a session that ended without closing the pipe: one off command is owed
         _w153GateOffFails = 0;
         _w153LastHostDialogue = false;
-        _w153PeerSection = ""; _w153PeerSectionWhy = ""; _w153PeerSectionCode = "";
+        W153SetPeer("", "", "");
+    }
+
+    /// <summary>
+    /// After a load the host is wherever its save put it, with no State changing yet: the section it is in is read from the quest its own
+    /// checkpoint names (the same marker the story divergence uses), so the tether is back without waiting for the next step. No bring-along:
+    /// the joiners rejoin a load on their own.
+    /// </summary>
+    private async Task Wo153SeedFromQuestAsync()
+    {
+        try
+        {
+            int gen = Volatile.Read(ref _w153Gen);
+            await Task.Delay(6000);
+            if (gen != Volatile.Read(ref _w153Gen) || !W153IsHost || !_w153StoryOn || _localQuest is not { } q || _localLevel is not { } lvl) return;
+            var s = StorySections.ByQuest(q);
+            if (s is null || !s.Locked || !string.Equals(s.Level, lvl, StringComparison.OrdinalIgnoreCase)) return;
+            IReadOnlyList<StoryLock.Transition> ts;
+            lock (_w153Lock) ts = _w153Lock.Note($"Barbora.{lvl}.{s.Quest}.loaded", W153NowMs());
+            foreach (var t in ts.Where(x => x.Kind == StoryLock.Kind.Enter))
+            {
+                Interlocked.Increment(ref _w153Enters);
+                _w153TetherOn = true;
+                _w153SectionResendUtc = DateTime.UtcNow;
+                Console.WriteLine($"MP-W153 story: after a load the host's own quest is {s.Code} '{s.Title}' ({s.Why}) -- the tether is back (nobody is pulled: the joiners rejoin a load)");
+                _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionEnter, s.Code);
+            }
+        }
+        catch (Exception ex) { Console.WriteLine($"MP-W153 story: reseed failed: {ex.GetType().Name}: {ex.Message}"); }
+    }
+
+    private void Wo153SendGateOff()
+    {
+        if (!_w153GateMaybeOn) return;
+        _ = Task.Run(async () =>
+        {
+            try { var r = await _combat.Wo151Async(9, [0, (byte)(GateWindowMs & 0xFF), (byte)(GateWindowMs >> 8)]); if (r is not null) { _w153GateSent = 0; _w153GateMaybeOn = false; } }
+            catch { }
+        });
     }
 
     /// <summary>mp_story_lock was switched off: a section the host is in is released now (the tether, the launcher line), not at the idle time.</summary>
@@ -136,17 +177,16 @@ public partial class GameBridge
         _ = Wo153AfterLevelAsync(level);
     }
 
-    private DateTime _w153StoryNoteUtc = DateTime.MinValue;
-
     /// <summary>
     /// A story reason to bring the joiners along (a locked section entered, a region changed). One transition can raise both (the move to
-    /// Kuttenberg enters a section, and a region that loads quickly follows within seconds): one note per 15 s for the story, never for the scene follow, whose second relocation
-    /// must pull again. Honours mp_scene_follow like every bring-along.
+    /// Kuttenberg enters a section and loads a level), and each is asked. Honours mp_scene_follow like every bring-along.
     /// </summary>
     private void Wo153NoteStory(string why)
     {
-        if ((DateTime.UtcNow - _w153StoryNoteUtc).TotalSeconds < 15) { Console.WriteLine($"MP-W153 story: {why} -- asked a moment ago for the same transition"); return; }
-        if (Wo153NoteScene(why)) _w153StoryNoteUtc = DateTime.UtcNow;   // a refusal (follow off, leash off, nobody to ask) spends nothing
+        // No throttle: a section entered and a region loaded a moment apart (the move to Kuttenberg), or two sections back to back, each ask the
+        // leash, which is idempotent while a pull is pending and never moves a joiner already within 50 m. A second ask costs nothing; a dropped one
+        // would strand a joiner who strayed in between.
+        Wo153NoteScene(why);
     }
 
     private async Task Wo153AfterLevelAsync(string level)
@@ -173,6 +213,7 @@ public partial class GameBridge
     /// <summary>The mod's once-a-second dialogue read (wo114_busy d=): the host began or ended a conversation.</summary>
     private void Wo153NoteHostDialogue(bool dialogue)
     {
+        if (W153IsHost) lock (_w153Lock) _w153Lock.Touch(W153NowMs());   // a conversation is the host still being in the section
         if (!W153IsHost || dialogue == _w153LastHostDialogue) return;
         _w153LastHostDialogue = dialogue;
         var now = DateTime.UtcNow;
@@ -198,8 +239,8 @@ public partial class GameBridge
             {
                 var s = StorySections.ByCode(parts[0]);
                 if (s is null || !s.Locked) return;
-                bool changed = _w153PeerSectionCode != s.Code;   // the host re-sends it every 30 s for a late joiner: told once
-                _w153PeerSection = s.Title; _w153PeerSectionWhy = s.Why; _w153PeerSectionCode = s.Code; _w153PeerSectionAtUtc = DateTime.UtcNow;
+                bool changed = W153GetPeer().Code != s.Code;   // the host re-sends it every 30 s for a late joiner: told once
+                W153SetPeer(s.Code, s.Title, s.Why);
                 if (!changed) return;
                 Console.WriteLine($"MP-W153 joiner: the host entered {s.Code} '{s.Title}' ({s.Why})");
                 _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\") end");
@@ -209,8 +250,9 @@ public partial class GameBridge
             {
                 var s = StorySections.ByCode(parts[0]);
                 if (s is null) return;
-                if (_w153PeerSectionCode.Length > 0 && _w153PeerSectionCode != s.Code) return;   // a late or duplicate beat for another section: the held one stands
-                _w153PeerSection = ""; _w153PeerSectionWhy = ""; _w153PeerSectionCode = "";
+                var held = W153GetPeer().Code;
+                if (held != s.Code) return;   // a joiner not holding that section (a late join, the 90 s expiry, a duplicate beat) is told nothing, and a beat for another one leaves the held one standing
+                W153SetPeer("", "", "");
                 Console.WriteLine($"MP-W153 joiner: the host left {s.Code} '{s.Title}' ({(parts.Length > 1 ? parts[1] : "-")})");
                 _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"leave\", \"{EscapeLua(s.Title)}\", \"\") end");
                 break;
@@ -235,13 +277,24 @@ public partial class GameBridge
     private volatile bool _w153GateDirty;   // the choice changed: say so at the next tick
     private const int GateWindowMs = 1500;
 
+    private void W153SetPeer(string code, string title, string why)
+    {
+        lock (_w153PeerLock) { _w153PeerSectionCode = code; _w153PeerSection = title; _w153PeerSectionWhy = why; _w153PeerSectionAtUtc = code.Length > 0 ? DateTime.UtcNow : DateTime.MinValue; }
+    }
+
+    private (string Code, string Title, string Why, DateTime At) W153GetPeer()
+    {
+        lock (_w153PeerLock) return (_w153PeerSectionCode, _w153PeerSection, _w153PeerSectionWhy, _w153PeerSectionAtUtc);
+    }
+
     private void Wo153GateTick()
     {
-        if (_w153PeerSectionCode.Length > 0 && (DateTime.UtcNow - _w153PeerSectionAtUtc).TotalSeconds > 90)
+        var pr = W153GetPeer();
+        if (pr.Code.Length > 0 && (DateTime.UtcNow - pr.At).TotalSeconds > 90)
         {
-            Console.WriteLine($"MP-W153 joiner: no word of '{_w153PeerSection}' from the host for 90 s -- taken as over");
-            string title = _w153PeerSection;
-            _w153PeerSection = ""; _w153PeerSectionWhy = ""; _w153PeerSectionCode = "";
+            Console.WriteLine($"MP-W153 joiner: no word of '{pr.Title}' from the host for 90 s -- taken as over");
+            string title = pr.Title;
+            W153SetPeer("", "", "");
             _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"leave\", \"{EscapeLua(title)}\", \"\") end");
         }
         byte want = (_combatRoleApplied && !_isDamageAuthority && _joinedWorld && !_w140Separate && _w153SceneMode == 1) ? (byte)1 : (byte)0;
@@ -277,16 +330,16 @@ public partial class GameBridge
     // ---------------------------------------------------------------- the launcher: GET /coop-status
 
     private string? _w153GameBuild;
-    private string _w153PeerSection = "", _w153PeerSectionWhy = "", _w153PeerSectionCode = "";   // the HOST's locked section, as a joiner heard it
+    private readonly object _w153PeerLock = new();
+    private string _w153PeerSection = "", _w153PeerSectionWhy = "", _w153PeerSectionCode = "";   // the HOST's locked section, as a joiner heard it (written and read together under _w153PeerLock)
     private DateTime _w153PeerSectionAtUtc = DateTime.MinValue;   // the host repeats it every 30 s; 90 s of silence = it is over (a lost Leave beat)
 
     /// <summary>The game's own build (wh_sys_GameReleaseVersion), read once the game's API answers; the launcher warns when it is not one the mod was verified on.</summary>
     private int _w153BuildReader;
-    private string _w153ApiBase = "http://localhost:1403";
+    private int _w153BuildFails;
 
     private async Task Wo153ReadGameBuildAsync(string apiBase)
     {
-        _w153ApiBase = apiBase;
         if (Interlocked.Exchange(ref _w153BuildReader, 1) == 1) return;   // one reader
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         try
@@ -298,6 +351,7 @@ public partial class GameBridge
                 string raw = await http.GetStringAsync($"{apiBase}/api/System/Console/GetCvarValue?name=wh_sys_GameReleaseVersion");
                 if (CoopStatus.ParseBuild(raw) is { } b)
                 {
+                    _w153BuildFails = 0;
                     if (b != _w153GameBuild)   // first read, or a new game process on another build
                     {
                         _w153GameBuild = b;
@@ -308,7 +362,7 @@ public partial class GameBridge
                     continue;
                 }
             }
-            catch { }
+            catch { if (++_w153BuildFails >= 3 && _w153GameBuild is not null) { Console.WriteLine("MP-W153 game build: the game stopped answering -- the build is forgotten until it does"); _w153GameBuild = null; } }
             await Task.Delay(i < 24 ? 5000 : 30000);   // the game may start long after the agent: no cap, slower after two minutes (and an answered read waits a minute)
         }
         }
@@ -323,8 +377,9 @@ public partial class GameBridge
         string sync = CoopStatus.SyncState(inSession, peers > 0, host, _w151CaughtUp, _storyDivergenceTold.Count);
         StorySection? active;
         lock (_w153Lock) active = _w153Lock.Active;
-        string section = host ? (active?.Title ?? "") : _w153PeerSection;
-        string why = host ? (active?.Why ?? "") : _w153PeerSectionWhy;
+        var peer = W153GetPeer();
+        string section = host ? (active?.Title ?? "") : peer.Title;
+        string why = host ? (active?.Why ?? "") : peer.Why;
         string role = !inSession ? "none" : host ? "host" : "joiner";
         return CoopStatus.Json(role, sync, section, why, host ? _w153TetherOn : section.Length > 0, _w153GameBuild, CoopStatus.BuildWarning(_w153GameBuild));
     }

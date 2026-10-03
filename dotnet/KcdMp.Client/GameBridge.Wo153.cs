@@ -62,7 +62,7 @@ public partial class GameBridge
         Interlocked.Increment(ref _w153Gen);
         lock (_w153Window) _w153Window.Reset();
         W153ForgetHostScenes();
-        Wo153StoryReset(seedLevel: true);
+        Wo153StoryReset(LevelSeed.Seed);
         _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"connect\") end");   // a notice or scene names left by an earlier session
         _ = ExecLuaAsync("if KCD2MP_W153CfgEmit then KCD2MP_W153CfgEmit() end");
     }
@@ -73,7 +73,8 @@ public partial class GameBridge
         Interlocked.Increment(ref _w153Gen);
         lock (_w153Window) _w153Window.Reset();
         W153ForgetHostScenes();
-        Wo153StoryReset();
+        Wo153SendGateOff();   // the pipe stays open across sessions: the gate is turned off here, not left for a closed pipe to do
+        Wo153StoryReset(LevelSeed.Null);
         _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"disconnect\") end");
     }
 
@@ -94,7 +95,8 @@ public partial class GameBridge
         bool was;
         lock (_w153Window) { was = _w153Window.Open; _w153Window.Reset(); }
         W153ForgetHostScenes();
-        Wo153StoryReset();   // the one reset: the section, the tether, the level seed, the gate's owed off, the peer section
+        Wo153StoryReset(LevelSeed.Keep);   // the one reset: the section, the tether, the gate's owed off, the peer section; the level its own event seeded stands
+        if (why == "load") _ = Wo153SeedFromQuestAsync();
         if (was) Console.WriteLine($"MP-W153 host: a scene window was open at a {why} -- forgotten (no scene survives it)");
         _ = ExecLuaAsync($"if KCD2MP_W153Reset then KCD2MP_W153Reset(\"{why}\") end");
     }
@@ -171,6 +173,7 @@ public partial class GameBridge
             // No position sample yet (a scene during the very first seconds): the window's start would be (0, 0) and
             // every real position would read as a huge relocation. No window; the scene is simply not measured.
             if (!_hasPushed) { Console.WriteLine($"MP-W153 host: a {type} scene '{name}' started before this game's first position -- not measured"); return; }
+            lock (_w153Lock) _w153Lock.Touch(now);   // a scene is the host still being in its section
             bool opened;
             lock (_w153Window) opened = _w153Window.Start(now, _lastX, _lastY, type, name);
             if (opened) { _w153Windows++; Console.WriteLine(FormattableString.Invariant($"MP-W153 host: a scene window opens ({type} '{name}') at ({_lastX:F0}, {_lastY:F0})")); }

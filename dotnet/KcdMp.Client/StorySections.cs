@@ -91,12 +91,12 @@ public static class StorySections
 ///   * A change in a LATER main quest, locked or not, means the earlier section is over (an earlier quest's background
 ///     States keep ticking and are ignored: they would make the section flap).
 ///   * A change whose path names the quest's end leaves it.
-///   * Nothing from the section for <see cref="IdleMs"/> leaves it.
+///   * Nothing from the section (no State, no conversation, no scene) for <see cref="IdleMs"/> leaves it.
 ///   * A load, a disconnect or a world change forgets it (<see cref="Reset"/>).
 /// </summary>
 public sealed class StoryLock
 {
-    public const int IdleMs = 25 * 60 * 1000;
+    public const int IdleMs = 40 * 60 * 1000;
 
     /// <summary>
     /// The leash's warning and pull distances while a locked section holds the joiners close: the tighter of the host's own and the
@@ -158,6 +158,9 @@ public sealed class StoryLock
         }
         return outl;
     }
+
+    /// <summary>The host did something in the section that is not a quest State (a conversation, a scene): it is still there.</summary>
+    public void Touch(long nowMs) { if (_active is not null) _lastMs = nowMs; }
 
     /// <summary>Called about once a second: a section the host has not touched for <see cref="IdleMs"/> is over.</summary>
     public Transition? Tick(long nowMs)

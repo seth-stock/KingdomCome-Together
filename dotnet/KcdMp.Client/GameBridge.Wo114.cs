@@ -635,7 +635,7 @@ public partial class GameBridge
                 if ((st.Flags & Protocol.LeashFlagInWorld) != 0 && (DateTime.UtcNow - at).TotalSeconds < LeashFreshS) { pick = id; break; }
             pick ??= _ghostLastPos.Where(k => (DateTime.UtcNow - k.Value.AtUtc).TotalSeconds < LeashFreshS).Select(k => (byte?)k.Key).OrderBy(k => k).FirstOrDefault();
             if (pick is byte p && _ghostLastPos.TryGetValue(p, out var gp) && (DateTime.UtcNow - gp.AtUtc).TotalSeconds < LeashFreshS)
-            { valid = true; x = gp.X; y = gp.Y; z = gp.Z; radius = _leashWarnM; }
+            { valid = true; x = gp.X; y = gp.Y; z = gp.Z; radius = W153WarnM; }
         }
         else if (joiner && _joinedWorld && _leashHostOn)
         {
