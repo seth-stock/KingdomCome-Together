@@ -13,8 +13,9 @@
 // which pulses the State's own Set<Value> port with a counter held up around the call. The graph is
 // single-threaded and runs the consumers inside that call, so an enqueue made by it happens while the
 // counter is up. A scene a node schedules for later (a delay, a timer) happens outside it; the window after
-// the apply (default 3 s) covers a short deferral and is the only place this can refuse something that was not
-// the host's doing.
+// the apply (default 1.5 s) covers a short deferral and is the only place this can refuse something that was not
+// the host's doing: a scene this player starts themselves (a sleep, a fast travel) in the same moment as a mirrored
+// step. It is short for that reason, and the whole gate is opt-in (mp_scene_mode play).
 
 #include <cstdint>
 
@@ -26,7 +27,7 @@ enum class Mode : uint8_t {
     All = 2,        // refuse every enqueue: the live check only (the agent never sets it in a session)
 };
 
-constexpr uint16_t kDefaultWindowMs = 3000, kMinWindowMs = 0, kMaxWindowMs = 10000;
+constexpr uint16_t kDefaultWindowMs = 1500, kMinWindowMs = 0, kMaxWindowMs = 10000;
 constexpr uint64_t kNever = ~0ull;   // "no apply has ever ended"
 
 inline Mode mode_from(uint8_t v) { return v == 1 ? Mode::FollowHost : v == 2 ? Mode::All : Mode::Off; }

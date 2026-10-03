@@ -107,7 +107,7 @@ public sealed class StoryLock
         if (!on) return (warnM, pullM);
         float pull = Math.Min(pullM, tetherM);
         float warn = Math.Min(warnM, Math.Max(50f, tetherM - 30f));
-        if (warn >= pull) warn = Math.Max(50f, pull - 1f);   // the leash needs the warning below the pull
+        if (warn >= pull) warn = Math.Max(1f, pull - 1f);   // the leash needs the warning below the pull, whatever the host's own numbers
         return (warn, pull);
     }
 
@@ -119,7 +119,13 @@ public sealed class StoryLock
 
     public StorySection? Active => _active;
 
-    public void Reset() { _active = null; }
+    // The furthest the host has got (the highest main-quest order it has changed a State in), and the sections it finished.
+    // Both stop an earlier quest's leftover States -- a cleanup node after the quest ended, a background timer of a quest long
+    // behind -- from re-entering a section the host is no longer in.
+    private int _maxOrder = -1;
+    private readonly HashSet<string> _done = new(StringComparer.Ordinal);
+
+    public void Reset() { _active = null; _maxOrder = -1; _done.Clear(); }
 
     /// <summary>One quest State change of the host. Returns what changed: nothing, a Leave, an Enter, or a Leave then an Enter (the host moved from one locked section to the next).</summary>
     public IReadOnlyList<Transition> Note(string? path, long nowMs)
@@ -127,19 +133,25 @@ public sealed class StoryLock
         var s = StorySections.FromPath(path);
         if (s is null) return Array.Empty<Transition>();
         var outl = new List<Transition>(2);
+        bool end = StorySections.IsEndPath(path);
+        if (_done.Contains(s.Code)) return outl;   // a quest the host finished: what it still changes is cleanup, not the host being in it
         if (_active is { } a)
         {
             if (s.Code == a.Code)
             {
-                if (StorySections.IsEndPath(path)) { _active = null; outl.Add(new(Kind.Leave, a, "completed")); return outl; }
+                if (end) { _active = null; _done.Add(a.Code); outl.Add(new(Kind.Leave, a, "completed")); return outl; }
                 _lastMs = nowMs;
                 return outl;
             }
-            if (s.Order <= a.Order) return outl;   // an earlier quest's background State: nothing
+            if (s.Order < a.Order) return outl;   // an earlier quest's background State: nothing
             _active = null;
+            _done.Add(a.Code);
             outl.Add(new(Kind.Leave, a, "moved on"));
         }
-        if (s.Locked && !StorySections.IsEndPath(path))
+        else if (s.Order < _maxOrder) return outl;   // earlier than where the host has already been
+        if (end) { _done.Add(s.Code); return outl; }
+        if (s.Order > _maxOrder) _maxOrder = s.Order;
+        if (s.Locked)
         {
             _active = s; _lastMs = nowMs;
             outl.Add(new(Kind.Enter, s, ""));

@@ -17617,11 +17617,11 @@ end
 --     the generic accept actions (confirm, ui_accept) never move a player.
 --   * The HOST's agent brings every joiner along when a scene window closes with the host
 --     somewhere else, or after a story scene with a joiner left far away (mp_scene_follow,
---     default OFF; the thresholds mp_scene_follow_m / mp_scene_follow_far_m). It is the
+--     default ON; the thresholds mp_scene_follow_m / mp_scene_follow_far_m). It is the
 --     leash's own pull; the agent owns the rule (SceneFollowLogic), the mod only holds the switches.
 --   * Nothing here ever moves anyone at a scene's start, and nothing ends or skips a scene.
 -- Switches: mp_scene_notice on|off (default ON: words only, until F11), mp_scene_follow on|off
--- (HOST, default OFF), mp_scene_follow_m <m> (25), mp_scene_follow_far_m <m> (150).
+-- (HOST, default ON), mp_scene_follow_m <m> (25), mp_scene_follow_far_m <m> (150).
 --   WO153-NOTICE  WO153-END  WO153-ANSWER  WO153-TIMEOUT  WO153-RESULT  WO153-STATUS
 KCD2MP.w153 = KCD2MP.w153 or {}
 KCD2MP.w153.notice  = (KCD2MP.w153.notice == nil) and true or KCD2MP.w153.notice     -- mp_scene_notice
@@ -17768,11 +17768,11 @@ end
 
 -- The agent: where the host's story is (a locked section, a region, a conversation). kind: host-enter | host-leave (this
 -- machine is the host), enter | leave | level | dialogue (this machine is a joiner). Words only; nothing here moves anyone.
-function KCD2MP_W153Story(kind, title, why)
+function KCD2MP_W153Story(kind, title, why, pullM)
     local w = KCD2MP.w153
     local T = KCD2MP_W153_TEXT
     local msg
-    if kind == "host-enter" then msg = string.format(T.storyHostEnter, tostring(title), tostring(why), w.tetherM)
+    if kind == "host-enter" then msg = string.format(T.storyHostEnter, tostring(title), tostring(why), tonumber(pullM) or w.tetherM)   -- the EFFECTIVE distance (the leash may already be tighter)
     elseif kind == "host-leave" then msg = string.format(T.storyHostLeave, tostring(title))
     elseif not w.notice then return
     elseif kind == "enter" then msg = string.format(T.storyEnter, tostring(title), tostring(why))
@@ -17807,7 +17807,7 @@ function KCD2MP_SetSceneNotice(arg)
     return true
 end
 
--- mp_scene_follow on|off (HOST; default off); bare = report. Only the host's value counts.
+-- mp_scene_follow on|off (HOST; default ON); bare = report. Only the host's value counts.
 function KCD2MP_SetSceneFollow(arg)
     local v = KCD2MP_Wo122ParseBool(arg)
     if v == "bad" then mp_log("mp_scene_follow: expected on|off, got '" .. tostring(arg) .. "'"); return false end
@@ -21140,7 +21140,7 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_sleep_no", "KCD2MP_W140Answer(false)", "WO-140: answer the other player's sleep request NO (same as F12)")
     System.AddCCommand("mp_sleep_vote", 'KCD2MP_SetSleepVote(%line)', "WO-140: in a shared world a sleep or a wait waits for everyone's yes (default on): mp_sleep_vote on|off")
     System.AddCCommand("mp_scene_notice", 'KCD2MP_SetSceneNotice(%line)', "WO-153: tell this player when the host is in a cutscene, with F11 to stand beside the host and watch (default on): mp_scene_notice on|off")
-    System.AddCCommand("mp_scene_follow", 'KCD2MP_SetSceneFollow(%line)', "WO-153 (HOST only): after the host's cutscene moved the host, or a story scene left a joiner far away, bring the joiners along through the leash (default OFF; a joiner already within 50 m of the host is never moved): mp_scene_follow on|off")
+    System.AddCCommand("mp_scene_follow", 'KCD2MP_SetSceneFollow(%line)', "WO-153 (HOST only): after the host's cutscene moved the host, or a story scene left a joiner far away, bring the joiners along through the leash (default ON; a joiner already within 50 m of the host is never moved): mp_scene_follow on|off")
     System.AddCCommand("mp_scene_follow_m", 'KCD2MP_SetSceneFollowM(%line)', "WO-153 (HOST): the host ended a scene this many metres from where it began = the host was moved (default 25; 5..5000)")
     System.AddCCommand("mp_scene_follow_far_m", 'KCD2MP_SetSceneFollowFarM(%line)', "WO-153 (HOST): a story scene ended with a joiner this many metres away = bring them to the story (default 150; 50..5000: the leash never moves a joiner within 50 m)")
     System.AddCCommand("mp_story_lock", 'KCD2MP_SetStoryLock(%line)', "WO-153 (HOST): in a locked story section (the wedding, Trosky, the move to Kuttenberg, the devil's job, the pogrom, the cardinal, the Italian Job, the final set) bring the joiners to you and keep them close (default ON): mp_story_lock on|off")

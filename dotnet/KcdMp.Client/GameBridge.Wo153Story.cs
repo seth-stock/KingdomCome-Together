@@ -45,7 +45,7 @@ public partial class GameBridge
         _w153PrevLevel = null;
         _w153GateSent = 255;
         _w153LastHostDialogue = false;
-        _w153PeerSection = ""; _w153PeerSectionWhy = "";
+        _w153PeerSection = ""; _w153PeerSectionWhy = ""; _w153PeerSectionCode = "";
     }
 
     // ---------------------------------------------------------------- the host: where the story is
@@ -60,11 +60,20 @@ public partial class GameBridge
     }
 
     /// <summary>About once a second on the host (the leash loop): a section the host has not touched for a long time is over.</summary>
+    private DateTime _w153SectionResendUtc = DateTime.MinValue;
+
     private void Wo153StoryTick()
     {
         StoryLock.Transition? t;
-        lock (_w153Lock) t = _w153Lock.Tick(W153NowMs());
+        StorySection? active;
+        lock (_w153Lock) { t = _w153Lock.Tick(W153NowMs()); active = _w153Lock.Active; }
         if (t is { } tr) Wo153ApplyTransition(tr);
+        // A joiner who connects or reconnects while the host is in a locked section would never hear of it: the beat is repeated.
+        if (active is not null && _w153StoryOn && (DateTime.UtcNow - _w153SectionResendUtc).TotalSeconds >= 30)
+        {
+            _w153SectionResendUtc = DateTime.UtcNow;
+            _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionEnter, active.Code);
+        }
     }
 
     private void Wo153ApplyTransition(StoryLock.Transition t)
@@ -76,9 +85,10 @@ public partial class GameBridge
             _w153TetherOn = true;
             Console.WriteLine(FormattableString.Invariant(
                 $"MP-W153 story: the host entered {s.Code} '{s.Title}' ({s.Why}) -- every joiner is brought beside it and held within {W153PullM:F0} m (warn {W153WarnM:F0} m) until it leaves"));
+            _w153SectionResendUtc = DateTime.UtcNow;
             _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionEnter, s.Code);
-            _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"host-enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\") end");
-            Wo153NoteScene($"the host entered a locked story section ({s.Code} {s.Title})");
+            _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"host-enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\", {W153PullM:F0}) end");
+            Wo153NoteStory($"the host entered a locked story section ({s.Code} {s.Title})");
         }
         else if (t.Kind == StoryLock.Kind.Leave)
         {
@@ -99,12 +109,26 @@ public partial class GameBridge
     {
         string? prev = _w153PrevLevel;
         _w153PrevLevel = level;
-        if (!W153IsHost || !_sharedWorld || prev is null || string.Equals(prev, level, StringComparison.Ordinal)) return;
+        if (!W153IsHost || !_sharedWorld || !_w153StoryOn || prev is null || string.Equals(prev, level, StringComparison.Ordinal)) return;
         if (_hostLoadAnnounced) { Console.WriteLine($"MP-W153 story: the host's level is now {level} (a save load: the joiners rejoin, nobody is pulled)"); return; }
         Interlocked.Increment(ref _w153Levels);
         Console.WriteLine($"MP-W153 story: the host moved from level {prev} to {level} -- the joiners are told and brought along once the host's world is up");
         if (SceneFollowLogic.IsTrackableName(level)) _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindLevel, level);
         _ = Wo153AfterLevelAsync(level);
+    }
+
+    private DateTime _w153StoryNoteUtc = DateTime.MinValue;
+
+    /// <summary>
+    /// A story reason to bring the joiners along (a locked section entered, a region changed). One transition can raise both (the move to
+    /// Kuttenberg enters a section and loads a level): one note per 15 s for the story, never for the scene follow, whose second relocation
+    /// must pull again. Honours mp_scene_follow like every bring-along.
+    /// </summary>
+    private void Wo153NoteStory(string why)
+    {
+        if ((DateTime.UtcNow - _w153StoryNoteUtc).TotalSeconds < 15) { Console.WriteLine($"MP-W153 story: {why} -- asked a moment ago for the same transition"); return; }
+        _w153StoryNoteUtc = DateTime.UtcNow;
+        Wo153NoteScene(why);
     }
 
     private async Task Wo153AfterLevelAsync(string level)
@@ -121,7 +145,7 @@ public partial class GameBridge
             }
             await Task.Delay(3000);   // the first positions of the new region
             if (gen != Volatile.Read(ref _w153Gen) || !W153IsHost) return;
-            Wo153NoteScene($"the host's world changed region ({level})");
+            Wo153NoteStory($"the host's world changed region ({level})");
         }
         catch (Exception ex) { Console.WriteLine($"MP-W153 story: level follow failed: {ex.GetType().Name}: {ex.Message}"); }
     }
@@ -156,7 +180,9 @@ public partial class GameBridge
             {
                 var s = StorySections.ByCode(parts[0]);
                 if (s is null || !s.Locked) return;
-                _w153PeerSection = s.Title; _w153PeerSectionWhy = s.Why;
+                bool changed = _w153PeerSectionCode != s.Code;   // the host re-sends it every 30 s for a late joiner: told once
+                _w153PeerSection = s.Title; _w153PeerSectionWhy = s.Why; _w153PeerSectionCode = s.Code;
+                if (!changed) return;
                 Console.WriteLine($"MP-W153 joiner: the host entered {s.Code} '{s.Title}' ({s.Why})");
                 _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\") end");
                 break;
@@ -165,7 +191,8 @@ public partial class GameBridge
             {
                 var s = StorySections.ByCode(parts[0]);
                 if (s is null) return;
-                _w153PeerSection = ""; _w153PeerSectionWhy = "";
+                if (_w153PeerSectionCode.Length > 0 && _w153PeerSectionCode != s.Code) return;   // a late or duplicate beat for another section: the held one stands
+                _w153PeerSection = ""; _w153PeerSectionWhy = ""; _w153PeerSectionCode = "";
                 Console.WriteLine($"MP-W153 joiner: the host left {s.Code} '{s.Title}' ({(parts.Length > 1 ? parts[1] : "-")})");
                 _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"leave\", \"{EscapeLua(s.Title)}\", \"\") end");
                 break;
@@ -186,28 +213,50 @@ public partial class GameBridge
     /// About once a second (the leash loop), and at once after a change: the native cutscene gate follows this player's
     /// choice. Armed only for a joiner in the host's world who chose mp_scene_mode play; off for everyone else, always.
     /// </summary>
-    private async Task Wo153GateTickAsync()
+    private int _w153GateBusy;
+    private const int GateWindowMs = 1500;
+
+    private void Wo153GateTick()
     {
         byte want = (_combatRoleApplied && !_isDamageAuthority && _joinedWorld && !_w140Separate && _w153SceneMode == 1) ? (byte)1 : (byte)0;
+        // Nothing to turn off that was never turned on (the plugin starts, and returns after a closed pipe, with the gate off): no pipe traffic.
+        if (want == 0 && _w153GateSent is 255 or 0) { _w153GateSent = 0; return; }
         if (want == _w153GateSent && (DateTime.UtcNow - _w153GateSentUtc).TotalSeconds < 30) return;
+        if ((DateTime.UtcNow - _w153GateSentUtc).TotalSeconds < 5) return;   // a failed ask waits 5 s: no plugin, a hung pipe
+        if (Interlocked.Exchange(ref _w153GateBusy, 1) == 1) return;
         _w153GateSentUtc = DateTime.UtcNow;
-        var r = await _combat.Wo151Async(9, [want, (byte)(3000 & 0xFF), (byte)(3000 >> 8)]);
-        if (r is null) return;   // no plugin yet: asked again at the next tick
-        if (want != _w153GateSent)
-            Console.WriteLine($"MP-W153 gate: {(want == 1 ? "ON" : "off")} -- {(want == 1 ? "this game's own copy of a scene the host's step starts is not played" : "this game plays its own copies as before")}; plugin {(r.Value.Ok ? "armed" : "has no gate (not armed)")}");
-        _w153GateSent = want;
+        _ = Task.Run(async () =>   // its own task: a slow pipe never delays the leash tick that runs the pulls and the tether
+        {
+            try
+            {
+                var r = await _combat.Wo151Async(9, [want, (byte)(GateWindowMs & 0xFF), (byte)(GateWindowMs >> 8)]);
+                if (r is null) return;   // no plugin yet: asked again in 5 s
+                if (want != _w153GateSent)
+                    Console.WriteLine($"MP-W153 gate: {(want == 1 ? "ON" : "off")} -- {(want == 1 ? "this game's own copy of a scene the host's step starts is not played" : "this game plays its own copies as before")}; plugin {(r.Value.Ok ? "armed" : "has no gate (not armed)")}");
+                _w153GateSent = want;
+            }
+            catch (Exception ex) { Console.WriteLine($"MP-W153 gate: {ex.GetType().Name}: {ex.Message}"); }
+            finally { Volatile.Write(ref _w153GateBusy, 0); }
+        });
     }
 
     // ---------------------------------------------------------------- the launcher: GET /coop-status
 
     private string? _w153GameBuild;
-    private string _w153PeerSection = "", _w153PeerSectionWhy = "";   // the HOST's locked section, as a joiner heard it
+    private string _w153PeerSection = "", _w153PeerSectionWhy = "", _w153PeerSectionCode = "";   // the HOST's locked section, as a joiner heard it
 
     /// <summary>The game's own build (wh_sys_GameReleaseVersion), read once the game's API answers; the launcher warns when it is not one the mod was verified on.</summary>
+    private int _w153BuildReader;
+    private string _w153ApiBase = "http://localhost:1403";
+
     private async Task Wo153ReadGameBuildAsync(string apiBase)
     {
+        _w153ApiBase = apiBase;
+        if (Interlocked.Exchange(ref _w153BuildReader, 1) == 1) return;   // one reader
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-        for (int i = 0; i < 120 && _w153GameBuild is null; i++)
+        try
+        {
+        for (int i = 0; _w153GameBuild is null; i++)
         {
             try
             {
@@ -221,8 +270,10 @@ public partial class GameBridge
                 }
             }
             catch { }
-            await Task.Delay(5000);
+            await Task.Delay(i < 24 ? 5000 : 30000);   // the game may start long after the agent: no cap, slower after two minutes
         }
+        }
+        finally { Volatile.Write(ref _w153BuildReader, 0); }
     }
 
     private string Wo153CoopStatusJson()

@@ -302,9 +302,12 @@ namespace KCDMP_launcher.Pages
                 try { alive = agent is not null && !agent.HasExited; } catch { alive = false; }
                 try
                 {
-                    var cs = alive ? await NetService.GetConnectionStatusAsync(settings.VersionIpcPort) : null;
-                    var js = alive ? await NetService.GetJoinStatusAsync(settings.VersionIpcPort) : null;
-                    var coop = alive ? await NetService.GetCoopStatusAsync(settings.VersionIpcPort) : null;   // WO-154
+                    // the three endpoints are independent and on one local listener: asked together, so a slow agent costs one wait, not three
+                    var csTask = alive ? NetService.GetConnectionStatusAsync(settings.VersionIpcPort) : Task.FromResult<ConnectionStatusData?>(null);
+                    var jsTask = alive ? NetService.GetJoinStatusAsync(settings.VersionIpcPort) : Task.FromResult<JoinStatusData?>(null);
+                    var coopTask = alive ? NetService.GetCoopStatusAsync(settings.VersionIpcPort) : Task.FromResult<CoopStatusData?>(null);   // WO-154
+                    await Task.WhenAll(csTask, jsTask, coopTask);
+                    var cs = csTask.Result; var js = jsTask.Result; var coop = coopTask.Result;
                     string coopLine = coop?.Line() ?? "", buildWarn = coop?.BuildWarning ?? "";
                     if (coopLine != coopStatusLine || buildWarn != buildWarningLine)
                     {

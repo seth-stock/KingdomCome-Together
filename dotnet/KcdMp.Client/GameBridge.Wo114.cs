@@ -124,7 +124,7 @@ public partial class GameBridge
 
                 if (second) await Wo114PartnerTickAsync(host, joiner);
                 if (second && host && _sharedWorld) Wo153StoryTick();   // WO-153: a locked section the host has left alone is over
-                if (second) await Wo153GateTickAsync();                  // WO-153: the cutscene gate follows this player's choice
+                if (second) Wo153GateTick();                             // WO-153: the cutscene gate follows this player's choice (its own task)
             }
             catch (Exception ex) { Console.WriteLine($"MP-LEASH tick failed: {ex.GetType().Name}: {ex.Message}"); }
         }

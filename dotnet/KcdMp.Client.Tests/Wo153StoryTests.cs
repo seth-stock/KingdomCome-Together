@@ -261,4 +261,82 @@ public class Wo153StoryTests
                 Assert.True(w < p, $"tether {tether} pull {pull}: warn {w} pull {p}");
             }
     }
+
+    // ---- review: a section the host left must not be re-entered by leftovers ----
+
+    [Fact]
+    public void A_finished_quests_leftover_states_do_not_re_enter_its_section()
+    {
+        var l = new StoryLock();
+        l.Note(Wed, 1);
+        l.Note("Barbora.trosecko.svatba.endQuest", 2);                  // completed
+        Assert.Null(l.Active);
+        Assert.Empty(l.Note("Barbora.trosecko.svatba.cleanup.x", 3));   // a cleanup node after the end
+        Assert.Empty(l.Note(Wed, 4));
+        Assert.Null(l.Active);
+    }
+
+    [Fact]
+    public void An_earlier_quest_never_re_enters_after_the_host_moved_on()
+    {
+        var l = new StoryLock();
+        l.Note(Wed, 1);                                                  // M05
+        l.Note("Barbora.trosecko.vezniNaTroskach.x", 2);                 // M12: moved on, entered
+        l.Note("Barbora.trosecko.vezniNaTroskach.endQuest", 3);          // M12 completed: nothing active
+        Assert.Null(l.Active);
+        Assert.Empty(l.Note(Wed, 4));                                    // M05's background State
+        Assert.Empty(l.Note("Barbora.trosecko.naTroskach.x", 5));        // M06, earlier than M12
+        Assert.Null(l.Active);
+    }
+
+    [Fact]
+    public void A_later_quest_still_enters_after_an_earlier_one_completed()
+    {
+        var l = new StoryLock();
+        l.Note(Wed, 1);
+        l.Note("Barbora.trosecko.svatba.endQuest", 2);
+        var t = l.Note("Barbora.trosecko.naTroskach.x", 3);
+        Assert.Single(t);
+        Assert.Equal("M06", t[0].Section!.Code);
+    }
+
+    [Fact]
+    public void After_an_idle_leave_new_activity_in_the_same_quest_re_enters()
+    {
+        var l = new StoryLock();
+        l.Note(Wed, 0);
+        Assert.NotNull(l.Tick(StoryLock.IdleMs + 1));
+        Assert.Single(l.Note(Wed, StoryLock.IdleMs + 5));                // the host came back to it
+    }
+
+    [Fact]
+    public void Reset_forgets_what_was_finished_and_how_far_the_host_got()
+    {
+        var l = new StoryLock();
+        l.Note("Barbora.trosecko.naTroskach.x", 1);
+        l.Note("Barbora.trosecko.naTroskach.endQuest", 2);
+        l.Note("Barbora.trosecko.vezniNaTroskach.x", 3);
+        l.Reset();                                                       // the host loaded an earlier save
+        Assert.Single(l.Note(Wed, 4));                                   // M05 enters again
+        Assert.Single(l.Note("Barbora.trosecko.naTroskach.y", 5).Where(x => x.Kind == StoryLock.Kind.Enter));
+    }
+
+    [Theory]
+    [InlineData(600f, 40f, true, 120f)]    // the host's own pull at or under 50 m
+    [InlineData(100f, 50f, true, 60f)]
+    [InlineData(45f, 50f, true, 5000f)]
+    [InlineData(30f, 30f, true, 120f)]
+    public void The_warning_stays_under_the_pull_even_for_a_very_tight_host_leash(float warn, float pull, bool on, float tether)
+    {
+        var (w, p) = StoryLock.Tether(warn, pull, on, tether);
+        Assert.True(w < p, $"warn {w} pull {p}");
+        Assert.True(w >= 1f);
+    }
+
+    [Fact]
+    public void A_host_pull_of_40_gives_a_warning_of_39()
+    {
+        var (w, p) = StoryLock.Tether(600f, 40f, true, 120f);
+        Assert.Equal((39f, 40f), (w, p));
+    }
 }

@@ -48,7 +48,7 @@ int wo153_rules_tests(int* passed) {
     // the window is clamped to what the agent may ask
     KCHECK(clamp_window(0) == 0 && clamp_window(3000) == 3000 && clamp_window(10000) == 10000, "in range");
     KCHECK(clamp_window(10001) == kMaxWindowMs && clamp_window(65535) == kMaxWindowMs && clamp_window(1000000) == kMaxWindowMs, "clamped");
-    KCHECK(kDefaultWindowMs == 3000, "default window");
+    KCHECK(kDefaultWindowMs == 1500, "default window: short, so a scene the player starts is not caught");
 
     *passed = g_pass;
     return g_fail;

@@ -16,7 +16,7 @@ namespace KcdMp.Client;
 ///   * The HOST, when a scene window closes with the host somewhere else, or after a story scene with a
 ///     joiner left far away, brings every joiner along through the leash's own pull (WO-114/147: the
 ///     dismount, the placement beside the host, the busy refusals, the 50 m "already beside" rule). Only
-///     with mp_scene_follow on.
+///     with mp_scene_follow on (the default).
 ///   * Nothing here moves anyone at a scene's START, nothing ends or skips a scene, and nothing here is a
 ///     second pull mechanism: the host asks the leash (LeashLogic.NoteHostFastTravel), the joiner's "watch"
 ///     is the leash's placement under the leash's own refusals, with the leash's own bookkeeping
@@ -27,7 +27,7 @@ namespace KcdMp.Client;
 public partial class GameBridge
 {
     // ---- the host's settings (mirrors of the mod's KCD2MP.w153; Lua emits w153_cfg) ----
-    private volatile bool _w153Follow;                                   // mp_scene_follow, default OFF
+    private volatile bool _w153Follow = true;                           // mp_scene_follow, default ON (the mod's Lua sends its own at connect)
     private float _w153RelocM = SceneFollowLogic.RelocDefaultM;          // mp_scene_follow_m
     private float _w153FarM = SceneFollowLogic.FarDefaultM;              // mp_scene_follow_far_m
 
@@ -63,6 +63,8 @@ public partial class GameBridge
         lock (_w153Window) _w153Window.Reset();
         W153ForgetHostScenes();
         Wo153StoryReset();
+        _w153GameBuild = null;   // a new connection may be a new game process, and another build
+        _ = Wo153ReadGameBuildAsync(_w153ApiBase);
         _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"connect\") end");   // a notice or scene names left by an earlier session
         _ = ExecLuaAsync("if KCD2MP_W153CfgEmit then KCD2MP_W153CfgEmit() end");
     }
@@ -245,6 +247,7 @@ public partial class GameBridge
     /// </summary>
     private bool Wo153NoteScene(string why)
     {
+        if (!_w153Follow) { Console.WriteLine($"MP-W153 host: {why} -- mp_scene_follow is off: nobody is brought along"); return false; }
         if (!_leashEnabled) { Console.WriteLine($"MP-W153 host: {why} -- mp_leash is off: nobody is brought along"); return false; }
         // Not a joiner in its OWN world (WO-140: the host's coordinates mean nothing there, and the leash tick skips it; a pull left
         // pending would fire if it rejoined within 120 s). A joiner loading or busy IS owed the pull, as for a real fast travel.

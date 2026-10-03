@@ -621,6 +621,8 @@ do
     check("T: ...and that the host is moving to the next region", toastCount("Your host is moving to the next region. You are brought along when they arrive.") == 1)
     KCD2MP_W153Story("host-enter", "Trosky", "Trosky castle")
     check("T: the host is told its partners are kept within the tether", toastCount("Locked story section: Trosky (Trosky castle). Your partners are kept within 120 m.") == 1, TOASTS[#TOASTS])
+    KCD2MP_W153Story("host-enter", "Trosky", "Trosky castle", 80)
+    check("T: the host hears the EFFECTIVE distance when the leash is already tighter than the tether", toastCount("Locked story section: Trosky (Trosky castle). Your partners are kept within 80 m.") == 1, TOASTS[#TOASTS])
     KCD2MP_W153Story("host-leave", "Trosky", "completed")
     check("T: ...and when they are free again", toastCount("Story section over: Trosky. Your partners are free to roam.") == 1)
     local n = #TOASTS
