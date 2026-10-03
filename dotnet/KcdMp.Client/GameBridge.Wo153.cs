@@ -62,9 +62,7 @@ public partial class GameBridge
         Interlocked.Increment(ref _w153Gen);
         lock (_w153Window) _w153Window.Reset();
         W153ForgetHostScenes();
-        Wo153StoryReset();
-        _w153GameBuild = null;   // a new connection may be a new game process, and another build
-        _ = Wo153ReadGameBuildAsync(_w153ApiBase);
+        Wo153StoryReset(seedLevel: true);
         _ = ExecLuaAsync("if KCD2MP_W153Reset then KCD2MP_W153Reset(\"connect\") end");   // a notice or scene names left by an earlier session
         _ = ExecLuaAsync("if KCD2MP_W153CfgEmit then KCD2MP_W153CfgEmit() end");
     }
@@ -96,8 +94,7 @@ public partial class GameBridge
         bool was;
         lock (_w153Window) { was = _w153Window.Open; _w153Window.Reset(); }
         W153ForgetHostScenes();
-        lock (_w153Lock) _w153Lock.Reset();
-        _w153TetherOn = false;
+        Wo153StoryReset();   // the one reset: the section, the tether, the level seed, the gate's owed off, the peer section
         if (was) Console.WriteLine($"MP-W153 host: a scene window was open at a {why} -- forgotten (no scene survives it)");
         _ = ExecLuaAsync($"if KCD2MP_W153Reset then KCD2MP_W153Reset(\"{why}\") end");
     }
@@ -131,9 +128,9 @@ public partial class GameBridge
                         case "follow": _w153Follow = v == "on"; break;
                         case "relocm": if (SceneFollowLogic.ParseMetres(v) is float r) _w153RelocM = r; break;
                         case "farm": if (SceneFollowLogic.ParseMetres(v, SceneFollowLogic.MinFarM) is float f) _w153FarM = f; break;
-                        case "story": _w153StoryOn = v == "on"; break;
+                        case "story": { bool on = v == "on"; bool was = _w153StoryOn; _w153StoryOn = on; if (was && !on) Wo153StoryOff(); break; }
                         case "tether": if (SceneFollowLogic.ParseMetres(v, 60) is float tm) _w153TetherM = tm; break;
-                        case "mode": _w153SceneMode = v == "play" ? 1 : 0; _w153GateSent = 255; break;
+                        case "mode": { int m = v == "play" ? 1 : 0; if (m != _w153SceneMode) { _w153SceneMode = m; _w153GateDirty = true; } break; }
                     }
                 }
                 Console.WriteLine(FormattableString.Invariant(
