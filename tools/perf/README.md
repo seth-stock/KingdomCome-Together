@@ -37,6 +37,14 @@ python tools/perf/soak.py verdict --mod tools/perf/runs/mod1.json --vanilla tool
   was removed, while the DLL's own cost (`FRAME ... ours_us_mean`) stayed at 0.7 ms; the
   focused rerun held 71 FPS to the end.
 * A dropped console connection is retried (the first 0.43.0 attempt died at 72 s on one).
+* **Warm the game up for 3 minutes in the world before the soak, the same for both runs** (0.45.0). The game's own frame rate rises about
+  10 % over its first five minutes in this scene, with or without the mod (0.45.0 trial runs: mod 57.1 -> 62.6 and 57.0 -> 63.3, vanilla
+  56.7 -> 62.4 and 59.5 -> 63.4): started cold, the "last 2 minutes within 10 % of the first 2" rule sits on its own boundary and fails on noise
+  (an 11 % RISE failed it). Warmed up, the pair passed: mod 59.9 -> 65.0, vanilla 59.5 -> 63.4.
+* **Steam must be running before the game starts**, or the game stops at a "License not verified / No SteamApps" dialog.
+* **A single stat-stack reading above 0 is not by itself a leak.** The reader samples the main thread from outside, so it can catch the
+  game mid-call: one 0.45.0 mod run read 1 and 3 in two rows (back to 0 at once, 0 at the end), and a run of the game WITHOUT the mod read 3
+  once. A leak grows and stays; the rule still requires 0 in every row, and a flagged run is repeated, not argued with.
 
 ## The stat-stack reader
 

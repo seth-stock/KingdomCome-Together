@@ -141,7 +141,9 @@ Totals: 38 new tests over the whole catalog (`Wo156Tests`, `Wo156NestingTests`);
 | `Wo156Tests` (36) + nesting (2): count and uniqueness, titles, every locking quest found by its own State path (including the ones kept in folders), wrong level refused, enter/leave/idle by tier for every locking quest, the named missions lock, every player-switch quest locks, no open side quest hides heavy scripted content, periods are runs of the story's order, the whole playthrough | all pass **(unit)** |
 | `Wo153StoryTests` (rewritten, 94) + `Wo155Tests` (93 + 7) + `Wo155WiringTests` (37) | all pass; tether only in a rails section **(wiring)** |
 | Agent tests (`KcdMp.Client.Tests`) | 1204 / 1204 |
-| The engine's reaction; two players; the launcher banner | **not observed** |
+| The new console commands and the question/stay/end functions, in the real engine (Modding Tools 1.5.5, solo) | `mp_story_join`, `mp_story_come`, `mp_story_stay`, `mp_scene_status`, `mp_story_lock` answer; the question, the stay label and the end run through the draw hooks: 0 Lua errors **(observed)** |
+| The frame-rate soak (the installer's gate), 0.45.0 | PASS: with the mod 59.9 -> 65.0 FPS, without 59.5 -> 63.4, stat stack 0 in every row, no FAULT, 52 rows each (`tools/perf/soak-record.json`) **(observed)**; the earlier trial runs and why they were not the record are in `tools/perf/README.md` |
+| The engine's reaction to a held quest mirror; two players; the launcher banner | **not observed** |
 
 ## 7. Sources
 
