@@ -104,11 +104,29 @@ public class Wo155WiringTests
         public bool Exempt(byte friend) => Call<bool>("Wo155Exempt", friend);
     }
 
-    private const string FinalSetPath = "Barbora.kutnohorsko.erik.start";
+    private const string FinalAct = "the final act: from the cardinal's ambush to the end of the game";
+    private const string FinalSetPath = "Barbora.kutnohorsko.erik.start";   // M47, rails: the first State enters
     private const string FinalSetNext = "Barbora.kutnohorsko.oblehaniSuchdole.start";
-    private const string FinalSetEnd = "Barbora.kutnohorsko.finale.endQuest";
+    private const string FinalSetEnd = "Barbora.kutnohorsko.oblehaniSuchdole.endQuest";   // the active section's own end
 
     // ================================================================ the host
+
+    [Fact]
+    public void Only_a_rails_section_tethers_the_friends_a_mixed_one_leaves_them_on_the_ordinary_leash()
+    {
+        var r = new Rig();
+        r.Host(1);
+        r.HostEnters("Barbora.trosecko.svatba.hibernovana_cast.a");      // M05 mixed: the first two changes enter nothing
+        r.HostEnters("Barbora.trosecko.svatba.hibernovana_cast.b");
+        Assert.False(r.Get<bool>("_w153TetherOn"));
+        r.HostEnters("Barbora.trosecko.svatba.hibernovana_cast.c");      // the third: entered, but a mixed quest has free stretches: no tether
+        Assert.Equal("M05", r.Get<StoryLock>("_w153Lock").Active!.Code);
+        Assert.False(r.Get<bool>("_w153TetherOn"));
+        var r2 = new Rig();
+        r2.Host(1);
+        r2.HostEnters(FinalSetPath);                                     // M47 rails
+        Assert.True(r2.Get<bool>("_w153TetherOn"));
+    }
 
     [Fact]
     public void A_new_story_period_exempts_every_friend_and_moves_nobody_until_they_answer()
@@ -231,11 +249,11 @@ public class Wo155WiringTests
     {
         var r = new Rig();
         r.Host(1, 2);
-        r.HostEnters("Barbora.trosecko.svatba.start");                      // M05
-        r.Call("Wo155OnFriendBeat", (byte)2, Protocol.StoryBeatKindChoice, "M05 free");
-        r.Call("Wo155OnFriendBeat", (byte)1, Protocol.StoryBeatKindChoice, "M05 join");
-        r.HostEnters("Barbora.trosecko.svatba.endQuest");                   // M05 ends: nothing active for a moment
-        r.HostEnters("Barbora.trosecko.naTroskach.start");                  // M06 begins: the same period (the wedding runs into Trosky)
+        r.HostEnters("Barbora.kutnohorsko.prepadeniVlasskehoDvora.start");   // M46, rails
+        r.Call("Wo155OnFriendBeat", (byte)2, Protocol.StoryBeatKindChoice, "M46 free");
+        r.Call("Wo155OnFriendBeat", (byte)1, Protocol.StoryBeatKindChoice, "M46 join");
+        r.HostEnters("Barbora.kutnohorsko.prepadeniVlasskehoDvora.endQuest");   // M46 ends: nothing active for a moment
+        r.HostEnters(FinalSetPath);                                         // M47 begins: the same period (the final act)
         Assert.True(r.Exempt(2));
         Assert.False(r.Exempt(1));                                          // answers stood; nobody was asked again
     }
@@ -271,13 +289,13 @@ public class Wo155WiringTests
         var r = new Rig();
         r.Host(1);
         r.HostEnters(FinalSetPath);
-        r.Call("Wo155OnFriendBeat", (byte)1, Protocol.StoryBeatKindChoice, "M45 free");
-        Assert.True(r.Exempt(1));                                           // still pending for the final set, not free for the cardinal
+        r.Call("Wo155OnFriendBeat", (byte)1, Protocol.StoryBeatKindChoice, "M42 free");
+        Assert.True(r.Exempt(1));                                           // still pending for the final act, not free for the burning of the Jewish quarter
         Assert.Equal(RailsChoice.Pending, r.Get<RailsRoster>("_w155Roster").ChoiceOf(1));
     }
 
     [Theory]
-    [InlineData("")] [InlineData("M47")] [InlineData("M47 maybe")] [InlineData("M03 join")] [InlineData("nonsense words here")]
+    [InlineData("")] [InlineData("M47")] [InlineData("M47 maybe")] [InlineData("M07 join")] [InlineData("nonsense words here")]
     public void A_malformed_answer_is_dropped(string text)
     {
         var r = new Rig();
@@ -348,7 +366,7 @@ public class Wo155WiringTests
     {
         var (r, host) = FriendRig();
         r.Call("Wo153OnPeerStory", host, Protocol.StoryBeatKindSectionEnter, "M47");
-        Assert.True(r.LuaHas("KCD2MP_W155Ask(\"the final set\", 30)"));
+        Assert.True(r.LuaHas("KCD2MP_W155Ask(\"" + FinalAct + "\", 30)"));
         int asks = r.Game.Lua.Count(l => l.Contains("KCD2MP_W155Ask"));
         r.Call("Wo153OnPeerStory", host, Protocol.StoryBeatKindSectionEnter, "M47");      // the host repeats it every 30 s
         r.Call("Wo153OnPeerStory", host, Protocol.StoryBeatKindSectionEnter, "M48a");     // the next section of the same period
@@ -365,10 +383,10 @@ public class Wo155WiringTests
         Assert.False(r.Prop<bool>("W151MirrorHolding"));
         r.Call("Wo155OnEvent", "w155_choice", "free key");
         Assert.True(r.Get<bool>("_w155Free"));
-        Assert.Contains(r.Beats, b => b.Kind == Protocol.StoryBeatKindChoice && b.Text == "M47 free");
+        Assert.Contains(r.Beats, b => b.Kind == Protocol.StoryBeatKindChoice && b.Text == "M45 free");
         Assert.True(r.Prop<bool>("W151MirrorHolding"));                                     // the host's quest steps are held
         Assert.NotEqual(0, r.Call<ushort>("JoinerLeashFlags") & Protocol.LeashFlagFreeRoam);
-        Assert.True(r.LuaHas("KCD2MP_W155Decided(\"free\", \"the final set\""));
+        Assert.True(r.LuaHas("KCD2MP_W155Decided(\"free\", \"" + FinalAct + "\""));
         Assert.Equal("free", r.Call<string>("W155ChoiceName"));
         // a pull is refused
         r.Call("Wo114PullAsync", new LeashCommand(Protocol.LeashKindPull, 7, Protocol.LeashReasonDistance, 1, 2, 3, 700));
@@ -385,7 +403,7 @@ public class Wo155WiringTests
         Assert.False(r.Get<bool>("_w155Free"));
         Assert.False(r.Prop<bool>("W151MirrorHolding"));
         Assert.Equal(0, r.Call<ushort>("JoinerLeashFlags") & Protocol.LeashFlagFreeRoam);
-        Assert.Contains(r.Beats, b => b.Kind == Protocol.StoryBeatKindChoice && b.Text == "M47 join");
+        Assert.Contains(r.Beats, b => b.Kind == Protocol.StoryBeatKindChoice && b.Text == "M45 join");
         Assert.Equal(RailsRules.JoinedText, r.Call<string>("Wo153PulledText", true));
         Assert.NotEqual(RailsRules.JoinedText, r.Call<string>("Wo153PulledText", true));   // once: a later, unrelated fast travel keeps its own words
     }
@@ -456,7 +474,7 @@ public class Wo155WiringTests
         r.Call("Wo155ForceOver");                                                                    // the grace ran out / the host went quiet
         Assert.False(r.Get<bool>("_w155Free"));
         Assert.False(r.Prop<bool>("W151MirrorHolding"));
-        Assert.True(r.LuaHas("KCD2MP_W155Over(\"the final set\", \"free\")"));
+        Assert.True(r.LuaHas("KCD2MP_W155Over(\"" + FinalAct + "\", \"free\")"));
         Assert.Equal("", r.Call<string>("W155ChoiceName"));
     }
 
@@ -536,12 +554,12 @@ public class Wo155WiringTests
         r.Call("Wo155OnEvent", "w155_choice", "free key");
         string j = r.Call<string>("Wo153CoopStatusJson");
         Assert.Contains("\"railsChoice\":\"free\"", j);
-        Assert.Contains("staying in the open world while your host is in the final set", j);
+        Assert.Contains("staying in the open world while your host is in " + FinalAct, j);
         var h = new Rig();
         h.Host(1, 2);
         h.HostEnters(FinalSetPath);
         h.Call("Wo155OnFriendBeat", (byte)1, Protocol.StoryBeatKindChoice, "M47 join");
         string hj = h.Call<string>("Wo153CoopStatusJson");
-        Assert.Contains("the final set: 1 joined you, 0 staying in the open world, 1 deciding", hj);
+        Assert.Contains(FinalAct + ": 1 joined you, 0 staying in the open world, 1 deciding", hj);
     }
 }

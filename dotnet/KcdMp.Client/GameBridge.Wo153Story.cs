@@ -36,7 +36,15 @@ public partial class GameBridge
     private DateTime _w153GateSentUtc = DateTime.MinValue, _w153DialogueSentUtc = DateTime.MinValue;
     private bool _w153LastHostDialogue;
 
-    /// <summary>The leash's numbers while a locked section holds the joiners close: the tighter of the host's own and the tether's.</summary>
+    /// <summary>WO-156: only a RAILS section tethers the joiners; a mixed one leaves them on the ordinary leash.</summary>
+    private void Wo153SyncTether()
+    {
+        StorySection? a;
+        lock (_w153Lock) a = _w153Lock.Active;
+        _w153TetherOn = a is { Tier: StoryTier.Rails };
+    }
+
+    /// <summary>The leash's numbers while a rails section holds the joiners close: the tighter of the host's own and the tether's.</summary>
     private float W153WarnM => StoryLock.Tether(_leashWarnM, _leashPullM, _w153TetherOn, _w153TetherM).WarnM;
     private float W153PullM => StoryLock.Tether(_leashWarnM, _leashPullM, _w153TetherOn, _w153TetherM).PullM;
 
@@ -70,13 +78,16 @@ public partial class GameBridge
             await Task.Delay(6000);
             if (gen != Volatile.Read(ref _w153Gen) || !W153IsHost || !_w153StoryOn || _localQuest is not { } q || _localLevel is not { } lvl) return;
             var s = StorySections.ByQuest(q);
-            if (s is null || !s.Locked || !string.Equals(s.Level, lvl, StringComparison.OrdinalIgnoreCase)) return;
+            // Only a quest staged throughout is seeded from the checkpoint. The checkpoint names the quest the story is at, not where the host
+            // stands: in a mixed quest it may be in a free stretch, and a quest with markers has an open part before its staged one. Those
+            // wait for the host's own States (a burst, a marker module), which a load restarts.
+            if (s is null || s.Tier != StoryTier.Rails || s.Markers.Count > 0 || !string.Equals(s.Level, lvl, StringComparison.OrdinalIgnoreCase)) return;
             IReadOnlyList<StoryLock.Transition> ts;
             lock (_w153Lock) ts = _w153Lock.Note($"Barbora.{lvl}.{s.Quest}.loaded", W153NowMs());
             foreach (var t in ts.Where(x => x.Kind == StoryLock.Kind.Enter))
             {
                 Interlocked.Increment(ref _w153Enters);
-                _w153TetherOn = true;
+                Wo153SyncTether();
                 _w153SectionResendUtc = DateTime.UtcNow;
                 Wo155HostSync();
                 Console.WriteLine($"MP-W153 story: after a load the host's own quest is {s.Code} '{s.Title}' ({s.Why}) -- the tether is back (nobody is pulled: the joiners rejoin a load)");
@@ -146,10 +157,10 @@ public partial class GameBridge
         if (t.Kind == StoryLock.Kind.Enter)
         {
             Interlocked.Increment(ref _w153Enters);
-            _w153TetherOn = true;
+            Wo153SyncTether();
             Wo155HostSync();   // WO-155: a new period asks every friend; nobody is moved before they answer
             Console.WriteLine(FormattableString.Invariant(
-                $"MP-W153 story: the host entered {s.Code} '{s.Title}' ({s.Why}) -- each joiner that joins is brought beside it and held within {W153PullM:F0} m (warn {W153WarnM:F0} m) until it leaves; one that stays in the open world is left alone"));
+                $"MP-W153 story: the host entered {s.Code} '{s.Title}' ({s.Why}; {s.Kind}, {s.Tier.ToString().ToLowerInvariant()}) -- each joiner that joins is brought beside it{(_w153TetherOn ? FormattableString.Invariant($" and held within {W153PullM:F0} m (warn {W153WarnM:F0} m)") : " (the ordinary leash applies: a mixed quest has free stretches)")} until it leaves; one that stays in the open world is left alone"));
             _w153SectionResendUtc = DateTime.UtcNow;
             _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionEnter, s.Code);
             _ = ExecLuaAsync($"if KCD2MP_W153Story then KCD2MP_W153Story(\"host-enter\", \"{EscapeLua(s.Title)}\", \"{EscapeLua(s.Why)}\", {W153PullM:F0}) end");
@@ -160,7 +171,7 @@ public partial class GameBridge
             Interlocked.Increment(ref _w153Leaves);
             bool still;
             lock (_w153Lock) still = _w153Lock.Active is not null;
-            if (!still) _w153TetherOn = false;
+            Wo153SyncTether();
             Wo155HostSync();
             Console.WriteLine($"MP-W153 story: the host left {s.Code} '{s.Title}' ({t.Reason}) -- {(still ? "another locked section is open" : "the leash is back to its own numbers")}");
             _ = _sendStoryBeat?.Invoke(Protocol.StoryBeatKindSectionLeave, $"{s.Code} {t.Reason.Replace(' ', '_')}");
@@ -395,7 +406,7 @@ public partial class GameBridge
         string periodWhy = StorySections.PeriodOf(code)?.Why ?? why;
         string choice = host ? "" : W155ChoiceName();
         var (joined, free, asking) = host ? W155Counts() : (0, 0, 0);
-        return CoopStatus.Json(role, sync, section, why, host ? _w153TetherOn : section.Length > 0, _w153GameBuild, CoopStatus.BuildWarning(_w153GameBuild),
+        return CoopStatus.Json(role, sync, section, why, host ? _w153TetherOn : StorySections.ByCode(peer.Code) is { Tier: StoryTier.Rails }, _w153GameBuild, CoopStatus.BuildWarning(_w153GameBuild),
                                choice, CoopStatus.RailsText(role, section.Length > 0 ? periodWhy : "", choice, joined, free, asking));
     }
 

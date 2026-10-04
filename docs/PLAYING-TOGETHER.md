@@ -1,8 +1,8 @@
 # Playing together — the guide for the host and for the friends
 
-Kingdom Come: Together 0.44.0. Unofficial; not affiliated with or endorsed by Warhorse Studios or PLAION.
+Kingdom Come: Together 0.45.0. Unofficial; not affiliated with or endorsed by Warhorse Studios or PLAION.
 
-**Everyone — the host and every friend — needs the same build (0.44.0), the same game build (see §2), and the same two
+**Everyone — the host and every friend — needs the same build (0.45.0), the same game build (see §2), and the same two
 Steam items.** The mod refuses to connect two different versions.
 
 ---
@@ -12,7 +12,7 @@ Steam items.** The mod refuses to connect two different versions.
 > 1. In Steam, install **Kingdom Come: Deliverance II** and the free **Kingdom Come: Deliverance II Modding tools**
 >    (a separate item in your library).
 > 2. Run the modding tools' one-time setup (§3 below). Skip it and the game crashes with "114 tables are not loaded".
-> 3. Download `KingdomComeTogether-Setup-0.44.0.exe` from the host (not from anywhere else), run it. Windows will warn
+> 3. Download `KingdomComeTogether-Setup-0.45.0.exe` from the host (not from anywhere else), run it. Windows will warn
 >    that it is unsigned: **More info → Run anyway**. If Defender removes a file, do §6.
 > 4. Open **Kingdom Come: Together** (the desktop shortcut). The host gives you an **address and port**
 >    (for example `100.64.12.3:7778`): **ADD SERVER**, paste it, **JOIN SERVER**.
@@ -26,18 +26,22 @@ Steam items.** The mod refuses to connect two different versions.
 ## 1. What you get
 
 You play the host's world together: you see each other, fight together, talk to the host's people, and share the quests,
-the clock and the weather. New in 0.44.0:
+the clock and the weather. New in 0.44.0 and 0.45.0:
 
 * When the **host is in a cutscene** you are told, and you choose: **F11** to stand beside them and watch from your own
   camera, **F12** (or do nothing for 20 seconds) to keep playing. By default the game also plays *its own copy* of their
   cutscene on your screen; `mp_scene_mode play` (§5) skips that so you keep playing.
-* In the story parts that **put the host on rails** — the opening, the wedding in Semine and Trosky castle, the battle of Nebakov,
-  the move to Kuttenberg, the devil's job, the meeting at Rattay, the burning of the Jewish quarter, the cardinal, the Italian Job,
-  the final set — **you choose**. A question appears on your screen: **F11 join your host** or **F12 stay in the open world**
+* Whenever the **host goes on rails** — the story's scripted stretches (the prologue, the opening, the wedding in Semine, the Nebakov
+  campaign, the Dry Devil's two jobs, the council at Raborsch, the burning of the Jewish quarter, Sigismund's camp, and **the final act**, from the
+  Ruthard Palace courtyard to the end of the game, when the open world is locked), and also a tournament, a fight club bout, a heist or another
+  staged side quest or activity — **you choose**. Every quest of the game is catalogued (`docs/WO-156-quest-gating.md`). A question appears
+  on your screen: **F11 join your host** or **F12 stay in the open world**
   (30 seconds; no answer counts as joining). Joining brings you beside the host and keeps you within 120 m of them until the part
   ends. Staying leaves you alone for as long as that part lasts: nothing brings you, tethers you or pulls you back, and the host's
   story steps are held so the game cannot start their scenes on you. You are told when it ends, and **F11 joins at any time**.
-  One question covers a whole stretch (the final set is six quests; you are asked once). `mp_story_join` (§5) makes it a standing answer.
+  One question covers a whole stretch (the final act is nine quests; you are asked once). In quests that alternate scripted and free parts
+  you are not tethered (only the ordinary leash applies); in quests staged throughout, joining also keeps you within 120 m.
+  `mp_story_join` (§5) makes it a standing answer.
 * When a cutscene **moves the host** somewhere else, or a story region changes, you are **brought along**. Nobody within
   50 m of the host is ever moved.
 * The launcher shows **Story: IN SYNC / DRIFTING / CATCHING UP**, the locked part the host is in, and a warning if your
@@ -45,7 +49,7 @@ the clock and the weather. New in 0.44.0:
 
 What is not covered: side quests, DLC and the stretches where the host plays as someone else (nobody can be placed beside a
 different character, so nobody is moved); "locked" is a judgement from the quest data, not something the game tells us
-(`docs/WO-155-findings.md` lists every quest and why). **Nothing in 0.44.0, and not the join-or-stay choice, has been played by two people yet**; please send the logs
+(`docs/WO-156-quest-gating-table.md` lists every quest and why). **Nothing new in 0.44.0 or 0.45.0 has been played by two people yet**; please send the logs
 (§7) if anything looks wrong.
 
 ## 2. The game build, and your saves — read this
@@ -130,7 +134,7 @@ reaching you. If a quest ever stops moving for you, switch it back (`mp_scene_mo
 
 ## 7. If something goes wrong
 
-* Not connecting: the host's launcher says HOST GAME is active? Same port? Same version (0.44.0)? Both on Tailscale and shown
+* Not connecting: the host's launcher says HOST GAME is active? Same port? Same version (0.45.0)? Both on Tailscale and shown
   as online? Firewall allowed? See `docs/NETWORKING.md`.
 * "Database system error — 114 tables are not loaded": §3 was not done.
 * The game starts and nothing of the mod is there: you started it from Steam instead of the launcher, or the mod is not in

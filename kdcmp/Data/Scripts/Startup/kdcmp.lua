@@ -17834,7 +17834,7 @@ function KCD2MP_W153ParseMetres(name, arg, min)
     return n, true
 end
 
--- mp_story_lock on|off (HOST, default on): the locked story sections (the wedding, Trosky, ...) bring the joiners and hold them close.
+-- mp_story_lock on|off (HOST, default on): the locked story sections (WO-156: any quest that keeps the player on rails) ask the joiners to join; those who join are brought along (a rails section also holds them close).
 function KCD2MP_SetStoryLock(arg)
     local v = KCD2MP_Wo122ParseBool(arg)
     if v == "bad" then mp_log("mp_story_lock: expected on|off, got '" .. tostring(arg) .. "'"); return false end
@@ -17904,7 +17904,7 @@ end
 
 -- ====================================================================================
 -- WO-155 -- the host is on rails: join them, or stay in the open world (docs/WO-155-findings.md)
--- When the host enters a locked story period (a wedding, a castle, the move to Kuttenberg, the final set ...) the agent
+-- When the host enters a locked story period (any quest that keeps the player on rails, WO-156: a wedding, a siege, a heist, a tournament, the final act ...) the agent
 -- calls KCD2MP_W155Ask: the question stays up 30 s -- F11 joins the host (you are brought beside them and kept close, and
 -- their quest steps are applied), F12 stays in the open world (nobody brings, tethers or leashes you, their quest steps are
 -- held, so the game cannot start their scenes on you). Nobody answering is a join. mp_story_join ask|join|free is the
@@ -21309,13 +21309,13 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_scene_follow", 'KCD2MP_SetSceneFollow(%line)', "WO-153 (HOST only): after the host's cutscene moved the host, or a story scene left a joiner far away, bring the joiners along through the leash (default ON; a joiner already within 50 m of the host is never moved): mp_scene_follow on|off")
     System.AddCCommand("mp_scene_follow_m", 'KCD2MP_SetSceneFollowM(%line)', "WO-153 (HOST): the host ended a scene this many metres from where it began = the host was moved (default 25; 5..5000)")
     System.AddCCommand("mp_scene_follow_far_m", 'KCD2MP_SetSceneFollowFarM(%line)', "WO-153 (HOST): a story scene ended with a joiner this many metres away = bring them to the story (default 150; 50..5000: the leash never moves a joiner within 50 m)")
-    System.AddCCommand("mp_story_lock", 'KCD2MP_SetStoryLock(%line)', "WO-153 (HOST): in a locked story section (the wedding, Trosky, the move to Kuttenberg, the devil's job, the pogrom, the cardinal, the Italian Job, the final set) bring the joiners to you and keep them close (default ON): mp_story_lock on|off")
+    System.AddCCommand("mp_story_lock", 'KCD2MP_SetStoryLock(%line)', "WO-153/156 (HOST): in a locked story section (any quest that puts the player on rails: a main-story set piece, a siege, a heist, a tournament, a fight club bout ... the whole game is catalogued: docs/WO-156-quest-gating.md) bring the joiners to you and keep them close (default ON): mp_story_lock on|off")
     System.AddCCommand("mp_story_tether_m", 'KCD2MP_SetStoryTether(%line)', "WO-153 (HOST): how far a joiner may stray in a locked story section before the leash pulls them back (default 120; 60..5000)")
     System.AddCCommand("mp_scene_mode", 'KCD2MP_SetSceneMode(%line)', "WO-153 (JOINER): watch = your own copy of the host's cutscenes plays (default); play = it is skipped and you keep playing: mp_scene_mode watch|play")
     System.AddCCommand("mp_scene_watch", "KCD2MP_W153Answer(true)", "WO-153: answer the host's-cutscene notice WATCH -- stand beside the host (same as F11)")
     System.AddCCommand("mp_scene_play", "KCD2MP_W153Answer(false)", "WO-153: answer the host's-cutscene notice KEEP PLAYING (same as F12)")
     System.AddCCommand("mp_scene_status", "KCD2MP_W153Status()", "WO-153: the cutscene notice and bring-along settings and counters (WO153-STATUS)")
-    System.AddCCommand("mp_story_join", 'KCD2MP_SetStoryJoin(%line)', "WO-155 (JOINER): when the host is in a locked story part (the wedding, Trosky, the move to Kuttenberg, the final set ...): ask = you are asked to join them or stay in the open world (default); join = always join; free = always stay in the open world: mp_story_join ask|join|free")
+    System.AddCCommand("mp_story_join", 'KCD2MP_SetStoryJoin(%line)', "WO-155/156 (JOINER): when the host is on rails in any quest (a main-story set piece, a siege, a heist, a tournament ...): ask = you are asked to join them or stay in the open world (default); join = always join; free = always stay in the open world: mp_story_join ask|join|free")
     System.AddCCommand("mp_story_come", "KCD2MP_StoryCome()", "WO-155: join your host in the locked story part they are in (same as F11): you are brought beside them and the host's quest steps apply again")
     System.AddCCommand("mp_story_stay", "KCD2MP_StoryStay()", "WO-155: stay in the open world while your host is in a locked story part (same as F12): nobody brings or tethers you, the host's quest steps are held until it ends")
     System.AddCCommand("mp_activities", 'KCD2MP_SetActivities(%line)', "WO-141: sitting, sleeping, leaning and working (NPCs and players) show on the other screen, the game's own way (default on): mp_activities on|off")

@@ -14,30 +14,34 @@ public class Wo155Tests
     [Fact]
     public void Periods_are_runs_of_consecutive_locked_sections()
     {
-        var ids = StorySections.Periods.Select(p => p.Id).ToArray();
-        Assert.Equal(new[] { "M01", "M05", "M09", "M12", "M30", "M32", "M37a", "M38", "M42", "M44a", "M44b", "M45", "M46", "M47" }, ids);
+        // the main periods, in the game's order (a period is the quests that share one question); every other quest is its own, after them
+        var ids = StorySections.Periods.Select(p => p.Id).Take(13).ToArray();
+        Assert.Equal(new[] { "M30", "M01", "M05", "M08", "M09", "M32", "M33", "M34", "M35", "M37a", "M42", "M44a", "M44b" }, ids);
+        Assert.Equal("M45", StorySections.Periods.Select(p => p.Id).ElementAt(13));
     }
 
     [Theory]
-    [InlineData("M01", "M01")] [InlineData("M02", "M01")]
+    [InlineData("M30", "M30")]                                      // the prologue, played as Godwin
+    [InlineData("M01", "M01")] [InlineData("M02", "M01")] [InlineData("M03", "M01")]   // the opening is three quests
     [InlineData("M05", "M05")] [InlineData("M06", "M05")]           // the wedding runs into Trosky
-    [InlineData("M09", "M09")] [InlineData("M10", "M09")] [InlineData("M11", "M09")]
-    [InlineData("M12", "M12")]
-    [InlineData("M30", "M30")] [InlineData("M31", "M30")]           // the move to Kuttenberg is two quests
+    [InlineData("M08", "M08")]
+    [InlineData("M09", "M09")] [InlineData("M10", "M09")] [InlineData("M11", "M09")] [InlineData("M12", "M09")]   // the Nebakov campaign: four quests
+    [InlineData("M32", "M32")] [InlineData("M44b", "M44b")]         // the two Dry Devil jobs, each its own
     [InlineData("M37a", "M37a")] [InlineData("M37b", "M37a")]
-    [InlineData("M47", "M47")] [InlineData("M48a", "M47")] [InlineData("M48b", "M47")] [InlineData("M48c", "M47")]
-    [InlineData("M49", "M47")] [InlineData("M50", "M47")] [InlineData("M51", "M47")]   // the final set: six quests, one choice
+    [InlineData("M45", "M45")] [InlineData("M46", "M45")] [InlineData("M47", "M45")] [InlineData("M48a", "M45")] [InlineData("M48b", "M45")]
+    [InlineData("M48c", "M45")] [InlineData("M49", "M45")] [InlineData("M50", "M45")] [InlineData("M51", "M45")]   // the final act: nine quests, one choice
+    [InlineData("A30", "A30")] [InlineData("S49", "S49")]            // a side quest or an activity is its own
     public void A_section_belongs_to_its_period(string code, string period) => Assert.Equal(period, StorySections.PeriodOf(code)!.Id);
 
     [Theory]
-    [InlineData("M03")] [InlineData("M07")] [InlineData("M08")] [InlineData("M33")] [InlineData("M34")] [InlineData("M35")]
+    [InlineData("M07")] [InlineData("M31")] [InlineData("M38")] [InlineData("S14")] [InlineData("U05")] [InlineData("A04")]
     [InlineData("M99")] [InlineData("")] [InlineData(null)]
     public void An_open_quest_or_unknown_code_has_no_period(string? code) => Assert.Null(StorySections.PeriodOf(code));
 
     [Fact]
     public void Every_locked_section_is_in_exactly_one_period_and_no_open_one_is()
     {
-        foreach (var s in StorySections.All)
+        foreach (var s in StorySections.Everything)
         {
             int n = StorySections.Periods.Count(p => p.Codes.Contains(s.Code));
             Assert.Equal(s.Locked ? 1 : 0, n);
@@ -48,16 +52,16 @@ public class Wo155Tests
     public void A_period_says_what_it_is_in_the_hosts_words()
     {
         Assert.Equal("the wedding in Semine and Trosky castle", StorySections.PeriodOf("M06")!.Why);
-        Assert.Equal("the final set", StorySections.PeriodOf("M51")!.Why);
-        Assert.Equal("the move to Kuttenberg", StorySections.PeriodOf("M31")!.Why);
-        Assert.Equal("the battle of Nebakov", StorySections.PeriodOf("M10")!.Why);
+        Assert.Equal("the final act: from the cardinal's ambush to the end of the game", StorySections.PeriodOf("M51")!.Why);
+        Assert.Equal("the Dry Devil's rescue: Speak of the Devil", StorySections.PeriodOf("M32")!.Why);
+        Assert.Equal("the Nebakov campaign: For Victory!, Divine Messenger, The Finger of God and Storm", StorySections.PeriodOf("M10")!.Why);
     }
 
     // ---------------------------------------------------------------- the wire text
 
     [Theory]
-    [InlineData("M47 join", "M47", RailsChoice.Join)]
-    [InlineData("M51 free", "M47", RailsChoice.Free)]
+    [InlineData("M47 join", "M45", RailsChoice.Join)]
+    [InlineData("M51 free", "M45", RailsChoice.Free)]
     [InlineData("M06 join", "M05", RailsChoice.Join)]
     public void An_answer_names_its_period(string text, string period, RailsChoice choice)
     {
@@ -67,13 +71,13 @@ public class Wo155Tests
     }
 
     [Theory]
-    [InlineData("")] [InlineData("M47")] [InlineData("M47 pending")] [InlineData("M47 join extra")] [InlineData("M03 join")]
+    [InlineData("")] [InlineData("M47")] [InlineData("M47 pending")] [InlineData("M47 join extra")] [InlineData("M07 join")]
     [InlineData("zzz join")] [InlineData("M47 JOIN")] [InlineData("M47\njoin")]
     public void Anything_else_is_not_an_answer(string text) => Assert.False(RailsRules.TryParseChoice(text, out _, out _));
 
     [Fact]
     public void An_answer_round_trips() =>
-        Assert.True(RailsRules.TryParseChoice(RailsRules.ChoiceText("M48b", RailsChoice.Free), out var p, out var c) && p.Id == "M47" && c == RailsChoice.Free);
+        Assert.True(RailsRules.TryParseChoice(RailsRules.ChoiceText("M48b", RailsChoice.Free), out var p, out var c) && p.Id == "M45" && c == RailsChoice.Free);
 
     [Theory]
     [InlineData("ask", RailsPref.Ask)] [InlineData(" JOIN ", RailsPref.Join)] [InlineData("free", RailsPref.Free)]
@@ -328,7 +332,7 @@ public class Wo155Tests
         var j = new RailsJoiner();
         var s = j.OnEnter("M47", 0, RailsPref.Ask);
         Assert.Equal(RailsJoiner.Act.Ask, s.Act);
-        Assert.Equal("M47", s.Period!.Id);
+        Assert.Equal("M45", s.Period!.Id);
         Assert.True(j.Asking);
         Assert.False(j.IsFree);
     }
@@ -348,7 +352,7 @@ public class Wo155Tests
     public void A_standing_answer_asks_nothing_and_decides_at_once(RailsPref pref, RailsChoice choice)
     {
         var j = new RailsJoiner();
-        var s = j.OnEnter("M45", 0, pref);
+        var s = j.OnEnter("M42", 0, pref);
         Assert.Equal(RailsJoiner.Act.Auto, s.Act);
         Assert.Equal(choice, s.Choice);
         Assert.False(j.Asking);
@@ -367,7 +371,7 @@ public class Wo155Tests
         j.OnLeave("M51", 70_000);
         Assert.Equal(RailsJoiner.Act.Over, j.Tick(70_000 + RailsRules.PeriodEndGraceMs).Act);
         Assert.False(j.Open);
-        Assert.Equal(RailsJoiner.Act.Ask, j.OnEnter("M45", 200_000, RailsPref.Ask).Act);   // another period: asked again
+        Assert.Equal(RailsJoiner.Act.Ask, j.OnEnter("M42", 200_000, RailsPref.Ask).Act);   // another period: asked again
     }
 
     [Fact]
@@ -398,7 +402,7 @@ public class Wo155Tests
         var j = new RailsJoiner();
         j.OnEnter("M47", 0, RailsPref.Ask);
         j.Decide(RailsChoice.Free, 0);
-        j.OnLeave("M45", 1000);
+        j.OnLeave("M42", 1000);
         Assert.Equal(RailsJoiner.Act.None, j.Tick(1000 + RailsRules.PeriodEndGraceMs + 1).Act);
         Assert.True(j.IsFree);
     }
@@ -431,7 +435,7 @@ public class Wo155Tests
     public void A_standing_answer_is_also_repeated()
     {
         var j = new RailsJoiner();
-        j.OnEnter("M45", 0, RailsPref.Free);
+        j.OnEnter("M42", 0, RailsPref.Free);
         Assert.Equal(RailsJoiner.Act.Resend, j.Tick(RailsRules.ResendMs).Act);
     }
 
@@ -442,7 +446,7 @@ public class Wo155Tests
         j.OnEnter("M47", 0, RailsPref.Ask);
         j.Decide(RailsChoice.Free, 0);
         var p = j.ForceOver();
-        Assert.Equal("M47", p!.Id);
+        Assert.Equal("M45", p!.Id);
         Assert.False(j.Open);
         Assert.False(j.IsFree);
         Assert.Null(j.ForceOver());
@@ -452,7 +456,7 @@ public class Wo155Tests
     public void An_unknown_section_is_nothing()
     {
         var j = new RailsJoiner();
-        Assert.Equal(RailsJoiner.Act.None, j.OnEnter("M03", 0, RailsPref.Ask).Act);   // an open quest has no period
+        Assert.Equal(RailsJoiner.Act.None, j.OnEnter("M07", 0, RailsPref.Ask).Act);   // an open quest has no period
         Assert.Equal(RailsJoiner.Act.None, j.OnEnter("nonsense", 0, RailsPref.Ask).Act);
         Assert.False(j.Open);
     }

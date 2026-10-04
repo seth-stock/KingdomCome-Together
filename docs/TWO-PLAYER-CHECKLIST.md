@@ -672,6 +672,25 @@ The first time this meets two people (`docs/WO-155-findings.md`). Use a save of 
 124. **F12 on a host cutscene.** The friend is not brought along after it; F11 (watch) still stands them beside the host. And
      `mp_story_join join` / `free` (the standing answers) ask nothing.
 
+## WO-156 — the gating on every quest
+
+Use a save of the Modding Tools' build or older. `docs/WO-156-quest-gating-table.md` lists every quest and its tier. Logs: `MP-W153 story:` (the host's
+section, with its kind and tier), `MP-W155`.
+
+125. **A side activity.** The host enters the Kuttenberg Tournament or a fight club bout: the friend is asked (the section is named for the bout);
+     joining brings them to the arena, staying leaves them alone; when it ends the host log says the section was left (completed or idle).
+126. **A heist or a staged side quest** (Striped Tonies, Yackers 'n' Fash, Dragon's Lair, Demons of Trosky ...): asked once the quest shows a burst
+     of States, not at its first tick; no tether (mixed). Write down any quest that asks when the host is merely walking, or does not ask when the
+     host is clearly on rails: it is one line of `docs/WO-156-quest-gating-plan.csv`.
+127. **A mixed main quest** (the wedding, the Dry Devil's rescue, Via Argentum): a friend who joined is NOT held within 120 m during the free
+     stretches (the ordinary 650 m leash only); a friend who stayed is held out of the whole quest and may join any time with F11.
+128. **The open hub.** The Devil's Pack asks nothing; The Sword and the Quill and Back in the Saddle ask nothing.
+129. **The prologue and the order.** On a new game the prologue ("Last Rites", played as Godwin) asks once; moving on to Easy Riders asks once (the opening);
+     the prologue never asks again.
+130. **The final act.** Oratores asks nothing until the Ruthard Palace courtyard; there it asks once; the Italian Job through Judgement Day (nine quests)
+     never ask again; the tether holds joined friends within 120 m throughout.
+131. **A task inside a fight club's folder** ("A Moment of Fame", in Horany): the host doing it does not enter or refresh the fight club's section.
+
 ## Logs to send afterwards
 
 Both machines: Report a bug in the launcher. Since 0.42.2 it also collects the

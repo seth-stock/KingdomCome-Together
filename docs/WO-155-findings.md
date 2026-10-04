@@ -49,6 +49,10 @@ rails by the next quest step. So staying also holds the host's quest steps (§3)
 
 ## 2. The periods: what a friend chooses about
 
+> **Superseded by WO-156 (`docs/WO-156-quest-gating.md` §3):** the table below was the first reading, from the user's list and the census. WO-156 read the
+> game's own data for all 201 quests and the published guides: the periods, their names, the story's order (M30 "Last Rites" is the prologue, not the
+> move to Kuttenberg), and which quests are open (the Devil's Pack is an open hub) are corrected there, and side quests, tasks and activities are covered.
+
 A **period** is a run of consecutive locked sections that read as one stretch of story. An open quest between two locked ones ends
 a period. From `StorySections.cs` (the repo's registry, `docs/WO-94-mainquest-registry.csv`; titles are Warhorse's):
 

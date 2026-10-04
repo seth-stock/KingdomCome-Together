@@ -1,0 +1,202 @@
+code,order,tier,period,why,markers,source,note
+M30,1,rails,M30,"the prologue, played as Godwin",,online+data,"Godwin on the castle walls: crossbow, courtyard defence, ladder push, extended cutscene; ~20 min, no free roaming or fast travel (guide); census: 2 player switches, 3 videos"
+M01,2,mixed,M01,"the opening: Easy Riders, Fortuna and Laboratores",,online+data,"locked ride with Hans, free camp, locked stealth escape and bandit duel (guide); census: invisible walls module, escort/follow x3"
+M02,3,mixed,M01,"the opening: Easy Riders, Fortuna and Laboratores",,online+data,"herbwoman hut locked, meadow free, scripted alchemy, soldiers; census: 5 videos"
+M03,4,mixed,M01,"the opening: Easy Riders, Fortuna and Laboratores",,online+data,"tavern locked (module ""Henry cannot leave the pub""), sack task free, forced fight, stocks; ~20 min"
+M05,5,mixed,M05,the wedding in Semine and Trosky castle,,online+data,"free entry quests, then locked at the wedding (phases 1-3), mixed, locked brawl; hub with many side quests; module hibernovana_cast = the staged part"
+M06,6,mixed,M05,the wedding in Semine and Trosky castle,,online+data,"cell locked, hauling and crafting free, chamberlain sequences semi-locked; Trosky castle"
+M07,7,open,,,,online,"mostly free: ride to Nebakov, herbs, return; only the duel and one scene are locked (scene notice covers those)"
+M08,8,rails,M08,the raid on Semine,,online+data,"torture chamber, forced ride with soldiers, Semine estate battle, tower, return: every phase locked; ~20-25 min; the first point of no return for side content is here"
+M09,9,mixed,M09,"the Nebakov campaign: For Victory!, Divine Messenger, The Finger of God and Storm",,online+data,"free feast at the castle, then locked ride, ambush and captain duel; opens the area lock (four quests before Trosky is open again)"
+M10,10,mixed,M09,"the Nebakov campaign: For Victory!, Divine Messenger, The Finger of God and Storm",,online+data,"played as Godwin: free investigation and travel, then locked ravine battle, castle defence and flashback; 45-60 min; census: 3 player switches"
+M11,11,mixed,M09,"the Nebakov campaign: For Victory!, Divine Messenger, The Finger of God and Storm",,online+data,"locked burial/training, open camp tasks, locked siege defence; 45-60 min"
+M12,12,rails,M09,"the Nebakov campaign: For Victory!, Divine Messenger, The Finger of God and Storm",,online+data,"torture, castle escape, forest stealth, wagon escape: linear-locked; 45-60 min; ends in the move to Kuttenberg (a level change)"
+M31,13,open,,,,online,arrival at Suchdol: free exploration; only the sleep and the audience are locked (short)
+M32,14,mixed,M32,the Dry Devil's rescue: Speak of the Devil,,online+data,"one of the two Dry Devil jobs: fast travel to the Devil's Den, locked weapons search following Kubyenka, locked ambush on the soldiers carrying the Dry Devil; 20-25 min"
+M38,15,open,,,,online,The Devil's Pack is an OPEN HUB (recruit the gang in any order across the Kuttenberg region; 49 side quests branch from it); only the Adder rescue is timed
+M33,16,mixed,M33,Into the Underworld,,online+data,"open taverns, locked street ambush, open recruit, locked house infiltration timed to 5 AM; 45-60 min"
+M34,17,mixed,M34,Via Argentum,,online+data,"locked palace scene, open-hub investigation, locked Grund/stables/mint sequences; 2-3 h"
+M35,18,mixed,M35,Taking French Leave,,online+data,"locked palace, open travel and excavation, locked tunnel, stealth infiltration, locked rescue; 45-60 min"
+M37a,19,mixed,M37a,the council at Raborsch: The King's Gambit and The Feast,,online+data,"free errands, then a locked council-serving sequence (10-15 min), hub, final council; switches Henry/Godwin; census: 2 player switches"
+M37b,20,rails,M37a,the council at Raborsch: The King's Gambit and The Feast,,online+data,"locked cellar errand, locked courtyard battle as Godwin, then as Henry; cannot leave the area; 15-20 min"
+M42,21,rails,M42,the burning of the Jewish quarter,,online+data,"wagon ride free, then locked from the tunnel entrance: inn combat, escort, synagogue onslaught; no exploration; 15-20 min"
+M44a,22,mixed,M44a,Sigismund's camp: The Lion's Den,,online+data,"locked enlistment, free investigation (murder, mill, tents), locked trial and cannon battle; 2-3 h; census: barrier around the HQ, timed investigation"
+M44b,23,rails,M44b,the Dry Devil's assault on Malesov: Dancing with the Devil,,online+data,"the second Dry Devil job: mission-locked village assault and castle infiltration, with the duel against the Dry Devil as the choice; stealth and combat"
+M45,24,rails,M45,the final act: from the cardinal's ambush to the end of the game,"dobyvani_ruthardky,ruthardka_daycycle",online+data,"open until the Ruthard Palace courtyard (the second point of no return): the open world is locked from then to the ending; lock marker = the quest's own ""taking Ruthardka"" modules"
+M46,25,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,"The Italian Job: locked, Godwin in the council (census: 6 player switches), brief exploration, locked cellar and final battle; inside the final act's world lock"
+M47,26,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,"Civitas Pragensis: courtyard decision, optional duel with Erik, race back to Suchdol; inside the final act"
+M48a,27,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,"So it begins: wall defence, daytime preparation, night watch, courtyard; Suchdol"
+M48b,28,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,Besieged: raid on the battlements; Suchdol
+M48c,29,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,"Hunger and Despair: raid defence, evening; Suchdol"
+M49,30,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,"Reckoning: stealth infiltration of the enemy camp, tavern, smokehouse, stables: locked, no fast travel"
+M50,31,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,"Last Rites (the finale): castle tower, courtyard battle, ladder push; linear-locked; 8-12 min"
+M51,32,rails,M45,the final act: from the cardinal's ambush to the end of the game,,online+data,"Judgement Day: siege battle, gate, courtyard, camp, hill meeting; the ending"
+A03a,,mixed,A03a,mounted archery,,online,a contest
+A03b,,mixed,A03b,the horse races,,online,a race series
+A04,,open,,,,online,open-world activity
+A08,,rails,A08,a fight club bout (Melee at the Mill),,online+data,fight club: a ring and a series of bouts
+A09,,rails,A09,"a fight club bout (Wine, Women and Blood)",,online+data,fight club: a ring and a series of bouts
+A10,,rails,A10,a fight club bout (The Best for Last),,online+data,fight club: a ring and a series of bouts
+A30,,rails,A30,the Kuttenberg tournament,,online+data,a tournament bracket: locked in the lists for the series
+A35,,rails,A35,a fight club bout (Enough!),,online+data,fight club: a ring and a series of bouts
+A36,,rails,A36,a fight club bout (Fight Dirty),,online+data,fight club: a ring and a series of bouts
+A37,,rails,A37,a fight club bout (Teeth in the Bag),,online+data,fight club: a ring and a series of bouts
+A38,,rails,A38,a fight club bout (Nail in the Coffin),,online+data,fight club: a ring and a series of bouts
+A201,,open,,,,online,open-world activity
+A201a,,open,,,,online,open-world activity
+A201b,,open,,,,online,open-world activity
+A201c,,open,,,,online,open-world activity
+A201d,,open,,,,online,open-world activity
+A201e,,open,,,,online,open-world activity
+A201f,,open,,,,online,open-world activity
+A201g,,open,,,,online,open-world activity
+A201h,,open,,,,online,open-world activity
+A201i,,open,,,,online,open-world activity
+A202,,rails,A202,a duel or tournament at the forge guild,,online+data,DLC (Legacy of the Forge): duels and a tournament
+A202a,,rails,A202a,a duel or tournament at the forge guild,,online+data,DLC (Legacy of the Forge): duels and a tournament
+A202b,,rails,A202b,a duel or tournament at the forge guild,,online+data,DLC (Legacy of the Forge): duels and a tournament
+A202c,,rails,A202c,a duel or tournament at the forge guild,,online+data,DLC (Legacy of the Forge): duels and a tournament
+A202d,,rails,A202d,a duel or tournament at the forge guild,,online+data,DLC (Legacy of the Forge): duels and a tournament
+A203,,open,,,,online,open-world activity
+A203a,,open,,,,online,open-world activity
+A203b,,open,,,,online,open-world activity
+A203c,,open,,,,online,open-world activity
+A203d,,open,,,,online,open-world activity
+A204,,mixed,A204,an archery contest,,online,DLC: staged sequence (guide)
+A204a,,open,,,,online,open-world activity
+A204b,,mixed,A204b,an archery contest,,online,DLC: staged sequence (guide)
+A204c,,open,,,,online,open-world activity
+A204d,,open,,,,online,open-world activity
+A205,,mixed,A205,The Master's Game,,online,DLC: staged sequence (guide)
+A205a,,mixed,A205a,The Master's Game,,online,DLC: staged sequence (guide)
+A205b,,open,,,,online,open-world activity
+A205c,,open,,,,online,open-world activity
+A205d,,open,,,,online,open-world activity
+A205e,,open,,,,online,open-world activity
+A205f,,open,,,,online,open-world activity
+A205g,,open,,,,online,open-world activity
+A205h,,open,,,,online,open-world activity
+A206,,open,,,,online,open-world activity
+A206b,,open,,,,online,open-world activity
+A206c,,rails,A206c,a duel or tournament at the forge guild,,online+data,DLC (Legacy of the Forge): duels and a tournament
+A207,,open,,,,online,open-world activity
+A207a,,open,,,,online,open-world activity
+A207b,,open,,,,online,open-world activity
+A207c,,open,,,,online,open-world activity
+A207d,,open,,,,online,open-world activity
+A209,,mixed,A209,a thieving contract,,online,DLC: staged sequence (guide)
+A209a,,open,,,,online,open-world activity
+A209b,,open,,,,online,open-world activity
+A209c,,open,,,,online,open-world activity
+E31,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S00,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S01,,mixed,S01,The Jaunt,,data,"an escorted journey; census: 11 escort/follow, 20 teleports, 8 input locks"
+S02,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S09,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S10,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S11,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S14,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S15,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S16,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S19,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S21,,mixed,S21,Mice,,online,animal confrontation
+S22,,mixed,S22,Frogs,,online,animal confrontation
+S23,,mixed,S23,the Battle of the Frogs and Mice,,online,a battle event
+S25,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S26,,mixed,S26,Invaders,,online,a combat encounter
+S27,,rails,S27,combat training,,online+data,a staged training duel (arena barrier module in the data)
+S28,,rails,S28,combat training,,online+data,a staged training duel (arena barrier module in the data)
+S30,,mixed,S30,Dragon's Lair,,online,a cave expedition; census: 8 fights
+S31,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S32,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S33,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S34,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S35,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S36,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S37,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S39,,mixed,S39,Ars Dimicatoria,,online,staged training
+S40,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S41,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S42,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S43,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S48,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S49,,mixed,S49,Yackers 'n' Fash,,online,a heist
+S50,,mixed,S50,Striped Tonies,,online,a theft/infiltration; census: 18 teleports
+S51,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S54,,mixed,S54,The Spark,,online,"a staged sequence; census: 9 fights, 9 input locks"
+S55,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S56,,mixed,S56,Ransom,,data,a ransom exchange; census: 18 teleports
+S57,,mixed,S57,Lost Honour,,online,a duel
+S58,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S59,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S60,,mixed,S60,The Thieves' Code,,online,a theft/infiltration
+S61,,rails,S61,combat training,,online+data,a staged training duel (arena barrier module in the data)
+S101,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S102,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S103,,mixed,S103,Portrait in Red,,online,DLC: staged sequence (guide)
+S104,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S131,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S132,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S133,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S138,,mixed,S138,Unveiling,,online,DLC: staged sequence (guide)
+S140,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S141,,mixed,S141,God Disposes,,online,DLC: staged sequence (guide)
+S201,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S301,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S302,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S303,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S304,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+S305,,mixed,S305,Seek and you Shall Find,,online,DLC: staged sequence (guide)
+S306,,mixed,S306,The Time has Come,,online,DLC: staged sequence (guide)
+U01,,mixed,U01,Demons of Trosky,,online,a dungeon investigation in Trosky castle
+U02,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U03,,mixed,U03,Horses for Courses,,online,a race series
+U04,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U05,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U06,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U07a,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U07b,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U07c,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U07d,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U08a,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U08b,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U08c,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U08d,,mixed,U08d,Hunting the Werewolf,,online,a hunt
+U29,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U31,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U32,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U33,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U34,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U35,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U36,,mixed,U36,Skeleton in the Closet,,online,an exploration/combat sequence in the ruins
+U38,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U39,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U40,,mixed,U40,The Executioner's Pride,,online,DLC: staged sequence (guide)
+U41,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U43,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U44,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U45,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U46,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U47,,mixed,U47,the White Roebuck,,online,a hunt
+U48,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U49,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U50,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U51,,mixed,U51,Like Old Times,,online,a poaching hunt; census: 8 teleports
+U52,,mixed,U52,the Popinjay Shoot,,online,an archery contest
+U53,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U54,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U55,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U56,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U61a,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U63a,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U64,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U65,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U66,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U201,,mixed,U201,Martin's Dream,,online,DLC: staged sequence (guide)
+U202,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U203,,mixed,U203,The Last Step,,online,DLC: staged sequence (guide)
+U301,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U302,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U303,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U304,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"
+U305,,open,,,,online,"open-world quest (guide: dialogue, fetch, hunt, rescue); its scripted scenes are covered by the cutscene notice"

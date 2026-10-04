@@ -44,6 +44,9 @@ Marks: **(observed)** seen in the running game · **(unit)** / **(synthetic)** t
 
 ## 2. The sections: what is a guess
 
+> **Corrected by WO-156 (`docs/WO-156-quest-gating.md`):** the story order and several of this table's labels were wrong (M30 is the prologue; the Devil's Pack is an open hub);
+> every quest of the game is now classified. Read that document, not this table.
+>
 > **Updated by WO-155 (`docs/WO-155-findings.md` §2):** the opening (M01, M02), the battle of Nebakov (M09–M11) and the meeting at Rattay (M37a, M37b)
 > are locked too, and the locked sections are grouped into *periods* that a friend answers once (join, or stay in the open world).
 

@@ -7,7 +7,7 @@
 <strong>Not affiliated with or endorsed by Warhorse Studios or PLAION.</strong></p>
 
 <p align="center">
-  <a href="docs/releases/RELEASE-NOTES-0.44.0.md"><img alt="main" src="https://img.shields.io/badge/main-0.44.0-b8860b?style=flat-square"></a>
+  <a href="docs/releases/RELEASE-NOTES-0.45.0.md"><img alt="main" src="https://img.shields.io/badge/main-0.45.0-b8860b?style=flat-square"></a>
   <a href="https://github.com/DeepFriedDepp/KingdomCome-Together/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/DeepFriedDepp/KingdomCome-Together?label=latest%20release&color=8a3324&style=flat-square"></a>
   <a href="LICENSE"><img alt="License: GPLv3" src="https://img.shields.io/badge/license-GPLv3-2c3e50?style=flat-square"></a>
   <a href="docs/LAUNCHING.md"><img alt="Platform" src="https://img.shields.io/badge/platform-Windows-555555?style=flat-square"></a>
@@ -119,7 +119,7 @@ and weather. Each feature below says how far it is proven:
 | Dice with villagers | The dice game after a conversation starts on the partner's screen | 🧪 |
 | The host's cutscene | The partner is told, and chooses: **F11** stand beside the host to watch, **F12** keep playing | ⚠️ new in 0.44.0 (built and tested; not yet seen with two players) |
 | Keeping playing | `mp_scene_mode play`: the partner's own copy of a scene the host's quest step started is not played (a gate in the engine's one cutscene-enqueue function). Off by default | ⚠️ new in 0.44.0 (arms and answers in the real game; a refused scene not yet seen) |
-| Locked story parts | The opening, the wedding in Semine and Trosky, the battle of Nebakov, the move to Kuttenberg, the devil's job, the meeting at Rattay, the pogrom, the cardinal, the Italian Job and the final set put the host on rails. The partner is **asked: F11 join the host, F12 stay in the open world**. Joining brings them to the host and keeps them within 120 m until the part ends; staying leaves them alone (no pull, no tether, the host's story steps held) and **F11 joins at any time**. One question covers a whole stretch (`mp_story_join ask\|join\|free` makes it a standing answer) | ⚠️ the question is new (built and tested; not yet seen with two players) |
+| The host on rails | Every quest of the game is catalogued (`docs/WO-156-quest-gating.md`, 201 quests): the story's scripted stretches (the prologue, the opening, the wedding, the Nebakov campaign, the Dry Devil's two jobs, the council at Raborsch, the pogrom, Sigismund's camp, and the final act from the Ruthard courtyard to the end) and staged side quests and activities (the tournament, fight clubs, heists, hunts) put the host on rails. The partner is **asked: F11 join the host, F12 stay in the open world**. Joining brings them to the host (and in a quest staged throughout, keeps them within 120 m); staying leaves them alone (no pull, no tether, the host's story steps held) and **F11 joins at any time**. One question covers a whole stretch (`mp_story_join ask\|join\|free` makes it a standing answer) | ⚠️ new in 0.45.0 (built and tested over all 201 quests; not yet seen with two players) |
 | Brought along | A cutscene that moves the host, or a story region change, brings the partner along; nobody within 50 m is moved | ⚠️ new in 0.44.0 |
 | The story line in the launcher | "Story: IN SYNC / DRIFTING / CATCHING UP", the locked part the host is in, and a warning when the game is not build 1.5.5 | ⚠️ new in 0.44.0 |
 
