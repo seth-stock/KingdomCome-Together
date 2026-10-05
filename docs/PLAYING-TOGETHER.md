@@ -16,6 +16,7 @@ Steam items.** The mod refuses to connect two different versions.
 4. Click through to start the game **from the launcher** (never Steam's Play button), load a save made on build 1.5.5 or older, or start a
    new game (§2). When you are standing in the world, click **CONNECT** in the launcher.
 5. Tell your friends when you are in the world. They join (below). **Only you save.**
+   (You are the only one who loads a save. Friends must *not*: they wait at the main menu.)
 
 ## Send this to your friends
 
@@ -30,10 +31,14 @@ Steam items.** The mod refuses to connect two different versions.
 > 4. Open **Kingdom Come: Together** (the desktop shortcut). The host gives you an **address and port**
 >    (for example `100.64.12.3:7778`): click **ADD SERVER**, enter it, then **JOIN SERVER**.
 >    (If you are not on the host's network, you both need Tailscale first: §4.)
-> 5. When the launcher asks, load into the game, then press **CONNECT** in the launcher. The first time it asks
->    **Bring my character** or **Start fresh**. When the host's story goes "on rails" you are asked: **F11** join them,
->    **F12** stay in the open world.
-> 6. Use the launcher to start the game. **Never start it from Steam's Play button** (that runs the setup tool).
+> 5. **You need one save of your own, made on the Modding Tools build (1.5.5) or older**, on your PC before you join:
+>    either a character you already have (the game then offers **Bring my character**) or the first save of a new game, which the
+>    game writes right after the short prologue (then **Start fresh** works). If you have none, or only saves from the newer retail game,
+>    start a new game once in the Modding Tools build, play through the prologue until it saves, and quit to the main menu.
+> 6. Use the launcher to start the game (**never Steam's Play button**: that runs the setup tool). **Stay at the main menu. Do not load a
+>    save.** Click **CONNECT** in the launcher; the first time it asks **Bring my character** or **Start fresh**, and the game then loads
+>    the host's world with your Henry (a loading screen, up to a minute). If you loaded a save by mistake, quit the game and start it again.
+> 7. When the host's story goes "on rails" you are asked: **F11** join them, **F12** stay in the open world.
 
 ---
 
@@ -76,8 +81,9 @@ The mod runs on the **Modding Tools** build of the game, which on 2026-10-02 is 
   in the launcher's folder: `%USERPROFILE%\Saved Games\kingdomcome2\saves\<playline>\` and the game's `kcd.log` line
   `ver: 10505` (= 1.5.5) or `ver: 10506` (= 1.5.6).
 * The host should therefore **host from a 1.5.5-or-older save, or start a new game in the Modding Tools build**. The friends
-  do not need a save: they join the host's world with their own Henry (**Bring my character** copies their own Henry from a
-  save of the same build; **Start fresh** gives a new one).
+  do not need the host's save, but each needs **a save of their own on the Modding Tools build or older**: they join the host's world with
+  their own Henry (**Bring my character** copies their Henry from such a save; **Start fresh** uses the first save of a new game, written
+  right after the prologue). They never load it: they wait at the main menu and the world comes to them.
 
 The launcher warns when your game is not 1.5.5. When Warhorse ships a newer Modding Tools, update it in Steam on every
 machine, and the saves of that build become usable.
