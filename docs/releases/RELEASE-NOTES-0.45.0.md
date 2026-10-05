@@ -1,8 +1,15 @@
 # Kingdom Come: Together 0.45.0 — when the host is on rails, you choose
 
+> **THIS IS A COMMUNITY BUILD, NOT THE MAINTAINER'S 0.45.0 OR 0.45.1.** It is published from
+> https://github.com/seth-stock/KingdomCome-Together, a fork of the project, and is built from the project's
+> 0.43.0 plus the join-or-stay work (WO-153 to WO-156). The maintainer's own releases
+> (https://github.com/DeepFriedDepp/KingdomCome-Together) use the same numbers for DIFFERENT code. **Do not mix them:**
+> a host and a friend on two builds that share a version number are not refused by the version check, and they will
+> misbehave. Everyone you play with must install this one installer, from this page.
+
 **Official repository: https://github.com/DeepFriedDepp/KingdomCome-Together**
 — only builds made from it are this project's releases; other repositories may
-carry the same name.
+carry the same name. This build is not one of them.
 
 Unofficial and free. Not affiliated with or endorsed by Warhorse Studios or
 PLAION. Kingdom Come: Deliverance II, its assets and its content belong to
