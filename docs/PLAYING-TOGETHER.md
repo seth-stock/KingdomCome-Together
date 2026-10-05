@@ -7,15 +7,29 @@ Steam items.** The mod refuses to connect two different versions.
 
 ---
 
+## The host, in short
+
+1. Install **Kingdom Come: Deliverance II** and the free **Kingdom Come: Deliverance II Modding tools** in Steam, and do the one-time
+   data setup (§3). Run `KingdomComeTogether-Setup-0.45.0.exe` (§6 if Windows complains).
+2. Open **Kingdom Come: Together** (desktop shortcut). Click **HOST GAME**. It shows the addresses your friends can use (§4).
+3. Send each friend the **installer** and **one address with the port** (for example `100.64.12.3:7778`).
+4. Click through to start the game **from the launcher** (never Steam's Play button), load a save made on build 1.5.5 or older, or start a
+   new game (§2). When you are standing in the world, click **CONNECT** in the launcher.
+5. Tell your friends when you are in the world. They join (below). **Only you save.**
+
 ## Send this to your friends
 
 > 1. In Steam, install **Kingdom Come: Deliverance II** and the free **Kingdom Come: Deliverance II Modding tools**
 >    (a separate item in your library).
-> 2. Run the modding tools' one-time setup (§3 below). Skip it and the game crashes with "114 tables are not loaded".
+> 2. Run the modding tools' one-time data setup: in Explorer open
+>    `<your Steam library>\steamapps\common\KCD2Mod\Tools\ModdingWorkspaceSetup\`, right-click **WorkspaceSetup.exe** →
+>    **Run as administrator**, answer `S`. (More in §3; the host can also send you a script that does it without administrator rights.)
+>    Skip it and the game crashes with "114 tables are not loaded".
 > 3. Download `KingdomComeTogether-Setup-0.45.0.exe` from the host (not from anywhere else), run it. Windows will warn
 >    that it is unsigned: **More info → Run anyway**. If Defender removes a file, do §6.
 > 4. Open **Kingdom Come: Together** (the desktop shortcut). The host gives you an **address and port**
->    (for example `100.64.12.3:7778`): **ADD SERVER**, paste it, **JOIN SERVER**.
+>    (for example `100.64.12.3:7778`): click **ADD SERVER**, enter it, then **JOIN SERVER**.
+>    (If you are not on the host's network, you both need Tailscale first: §4.)
 > 5. When the launcher asks, load into the game, then press **CONNECT** in the launcher. The first time it asks
 >    **Bring my character** or **Start fresh**. When the host's story goes "on rails" you are asked: **F11** join them,
 >    **F12** stay in the open world.
@@ -77,8 +91,9 @@ and closes (it does when it cannot elevate), do either:
 * **Run it as administrator**: right-click `WorkspaceSetup.exe` in
   `<steam library>\steamapps\common\KCD2Mod\Tools\ModdingWorkspaceSetup\` → *Run as administrator* → answer `S` (symlink,
   fast, no extra disk) or `C` (copy, 89 GB).
-* **Or with no administrator rights** (both games on the same drive): from the repo, in PowerShell,
-  `powershell -ExecutionPolicy Bypass -File tools\Link-GameData.ps1` (`-WhatIf` first to see what it would do). It makes the
+* **Or with no administrator rights** (both games on the same drive): the script `tools\Link-GameData.ps1` in the repo (it is **not**
+  inside the installer: the host sends the one file). In PowerShell:
+  `powershell -ExecutionPolicy Bypass -File Link-GameData.ps1` (`-WhatIf` first to see what it would do). It makes the
   same result with NTFS hard links: nothing is copied, no extra disk is used.
 
 You have it right when `<KCD2Mod>\Data` contains `Tables.pak`, `Scripts.pak`, `Characters.pak` and the rest.
