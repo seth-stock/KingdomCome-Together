@@ -3339,6 +3339,8 @@ public partial class GameBridge(ClientConfig config)
         if (_savesRoot is not null) return _savesRoot;
         string? userFolder = null;
         if (_transport is LogTailGameTransport t) userFolder = SaveGameReader.TryReadUserFolderFromLogHead(t.LogPath);
+        // Under Proton kcd.log names a Windows path ("C:\users\steamuser\..."): map it into the prefix (a no-op on Windows).
+        if (userFolder is not null) userFolder = GameHost.MapWinePath(userFolder, GameHost.ProtonPrefixes(GameHost.LibraryRoots()));
         userFolder ??= SaveGameReader.DefaultUserFolder();
         _savesRoot = Path.Combine(userFolder, "saves");
         Console.WriteLine($"[quest] saves root: {_savesRoot}" + (Directory.Exists(_savesRoot) ? "" : " (not found -- fingerprints disabled until it appears)"));

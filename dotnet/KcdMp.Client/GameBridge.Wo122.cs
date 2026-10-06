@@ -304,6 +304,12 @@ public partial class GameBridge
     internal static string? ResolveSavesDir()
     {
         string? root = null;
+        if (!OperatingSystem.IsWindows())   // Linux: the Proton prefix's Saved Games (docs/LINUX.md)
+        {
+            string? uf = GameHost.FindUserFolder();
+            string d = uf is null ? "" : Path.Combine(uf, "saves");
+            return Directory.Exists(d) ? d : null;
+        }
         try
         {
             if (SHGetKnownFolderPath(FolderIdSavedGames, 0, IntPtr.Zero, out var p) == 0)

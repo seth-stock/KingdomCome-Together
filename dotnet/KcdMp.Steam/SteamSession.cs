@@ -94,6 +94,15 @@ public sealed class SteamSession : IDisposable
         detail = "";
         if (_current is not null) { failure = SteamStartFailure.None; return _current; }
 
+        // Steam P2P binds the game's steam_api64.dll, a Windows library: a native Linux agent cannot load it (docs/LINUX.md).
+        // A Linux player connects through a relay by address, as before; the message says so rather than failing in the loader.
+        if (!OperatingSystem.IsWindows())
+        {
+            failure = SteamStartFailure.NoSteamDll;
+            detail = "Steam P2P is not available on Linux (it needs the Windows steam_api64.dll); use a relay address";
+            return null;
+        }
+
         if (SteamLibraryLocator.Install(gameExePath) is null)
         {
             failure = SteamStartFailure.NoSteamDll;

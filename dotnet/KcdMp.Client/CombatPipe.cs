@@ -4,6 +4,8 @@
 using System.Text;
 using System.Buffers.Binary;
 using System.IO.Pipes;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading.Channels;
 using KcdMp.Wire;
 
@@ -185,7 +187,11 @@ public sealed class CombatPipe : IAsyncDisposable
     public Func<uint, string, Task>? OnNpcTraceDone { get; set; }
 
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private NamedPipeClientStream? _pipe;
+    private Stream? _pipe;         // the named pipe on Windows, the TCP stream on Linux (PluginTransport)
+    private TcpClient? _tcp;       // non-null when _pipe is the TCP stream
+
+    /// <summary>Which transport to the DLL. Decided from the OS and KCDMP_TRANSPORT / KCDMP_TCP_PORT; tests aim it at a fake server.</summary>
+    public PluginTransport Transport { get; set; } = PluginTransport.FromEnvironment();
     private bool _warnedUnavailable;
 
     // LocalHit arrives unsolicited, interleaved with command replies, so a
@@ -237,7 +243,7 @@ public sealed class CombatPipe : IAsyncDisposable
     /// the combat-hit chokepoint (byte 25; false from an older DLL).
     public Func<Guid, float, float, bool, bool, Task>? OnLocalHit { get; set; }
 
-    public bool IsConnected => _pipe?.IsConnected == true;
+    public bool IsConnected => _tcp is { } tcp ? tcp.Connected : (_pipe as NamedPipeClientStream)?.IsConnected == true;
 
     /// <summary>
     /// Connect if not already connected. Returns false when the DLL is absent,
@@ -253,25 +259,49 @@ public sealed class CombatPipe : IAsyncDisposable
             if (IsConnected) return true;
 
             _pipe?.Dispose();
-            _pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            _tcp?.Dispose();
+            _pipe = null;
+            _tcp = null;
             try
             {
-                await _pipe.ConnectAsync(500, ct);
+                if (Transport.UseTcp)
+                {
+                    var tcp = new TcpClient { NoDelay = true };
+                    try
+                    {
+                        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        cts.CancelAfter(500);
+                        await tcp.ConnectAsync(IPAddress.Loopback, Transport.Port, cts.Token);
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested) { tcp.Dispose(); throw new TimeoutException(); }
+                    catch { tcp.Dispose(); throw; }
+                    _tcp = tcp;
+                    _pipe = tcp.GetStream();
+                }
+                else
+                {
+                    var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                    try { await pipe.ConnectAsync(500, ct); }
+                    catch { pipe.Dispose(); throw; }
+                    _pipe = pipe;
+                }
             }
-            catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or SocketException)
             {
-                _pipe.Dispose();
                 _pipe = null;
+                _tcp = null;
                 if (!_warnedUnavailable)
                 {
                     _warnedUnavailable = true;
-                    Console.WriteLine("[combat] KCDMP.dll not injected — damage replication is unavailable.");
+                    Console.WriteLine(Transport.UseTcp
+                        ? $"[combat] KCDMP.dll not reachable on 127.0.0.1:{Transport.Port} — damage replication is unavailable (is the game running with the plugin injected?)."
+                        : "[combat] KCDMP.dll not injected — damage replication is unavailable.");
                 }
                 return false;
             }
 
             _warnedUnavailable = false;
-            Console.WriteLine("[combat] connected to KCDMP.dll");
+            Console.WriteLine(Transport.UseTcp ? $"[combat] connected to KCDMP.dll over tcp 127.0.0.1:{Transport.Port}" : "[combat] connected to KCDMP.dll");
             _reader = Task.Run(ReadLoopAsync);
             return true;
         }
@@ -1400,9 +1430,12 @@ public sealed class CombatPipe : IAsyncDisposable
     /// <summary>Route frames: replies to the waiting command, hits to the callback.</summary>
     private async Task ReadLoopAsync()
     {
+        // TcpClient.Connected does not notice the peer closing, so a reader that has ended must close ITS socket (not a newer
+        // connection's) or the agent would keep believing the game is there and never reconnect.
+        var mine = _tcp;
         try
         {
-            while (_pipe?.IsConnected == true)
+            while (IsConnected)
             {
                 var (type, body) = await ReadFrameAsync(CancellationToken.None);
                 // WO-118: replies are logged by their callers; 0x81/0x86/0x89
@@ -1596,6 +1629,7 @@ public sealed class CombatPipe : IAsyncDisposable
             Console.WriteLine($"[combat] reader stopped: {ex.GetType().Name}: {ex.Message}");
         }
         Console.WriteLine("[combat] pipe reader exited");
+        mine?.Dispose();
     }
 
     private async Task<bool> SendAsync(byte type, byte[] payload, CancellationToken ct)
@@ -1898,7 +1932,9 @@ public sealed class CombatPipe : IAsyncDisposable
     {
         bool had = _pipe is not null;   // WO-144 5: one line per lost connection, not one per caller
         _pipe?.Dispose();
+        _tcp?.Dispose();
         _pipe = null;
+        _tcp = null;
         // A reconnect gets a fresh channel and no sequence expectation: the
         // DLL's counter keeps running across connections, so carrying the old
         // expectation over would reject the first real reply.
@@ -1911,7 +1947,9 @@ public sealed class CombatPipe : IAsyncDisposable
     public ValueTask DisposeAsync()
     {
         _pipe?.Dispose();
+        _tcp?.Dispose();
         _pipe = null;
+        _tcp = null;
         _replies.Writer.TryComplete();
         _gate.Dispose();
         return ValueTask.CompletedTask;

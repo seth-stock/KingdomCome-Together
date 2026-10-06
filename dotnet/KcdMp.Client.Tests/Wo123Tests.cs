@@ -205,7 +205,7 @@ public class Wo123Tests : IDisposable
     public void A_whole_transfer_reassembles_the_file_exactly_and_verifies()
     {
         var save = WhsSaveTests.SyntheticSave();
-        var tx = new WorldSender(save, 0xC0FFEE, 1, 12, Md5Of(save), chunkSize: 256, windowBytes: 1024);
+        var tx = new WorldSender(save, 0xC0FFEE, 1, 12, Md5Of(save), chunkSize: 128, windowBytes: 1024);   // 128: the zlib on Linux packs the synthetic save to < 2 KB
         Assert.True(tx.ChunkCount > 8, $"the synthetic save is only {save.Length} bytes");
         var (ok, _, why, rx, acks, maxInFlight) = Transfer(tx);
         Assert.True(ok, why);

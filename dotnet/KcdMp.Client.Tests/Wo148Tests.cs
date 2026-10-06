@@ -381,8 +381,8 @@ public class Wo148Tests
     [Fact]
     public void Paks_are_searched_patch_first_then_game_data()
     {
-        var order = KeybindPak.SearchOrder(new[] { @"D\Tables.pak", @"D\IPL_GameData.pak", @"D\patch_1.pak", @"D\patch_2.pak", @"D\Scripts.pak" }).ToArray();
-        Assert.Equal(new[] { @"D\patch_2.pak", @"D\patch_1.pak", @"D\IPL_GameData.pak", @"D\Scripts.pak", @"D\Tables.pak" }, order);
+        var order = KeybindPak.SearchOrder(new[] { "Tables.pak", "IPL_GameData.pak", "patch_1.pak", "patch_2.pak", "Scripts.pak" }.Select(n => Path.Combine("D", n))).ToArray();   // Path.Combine: the separator of the OS under test
+        Assert.Equal(new[] { "patch_2.pak", "patch_1.pak", "IPL_GameData.pak", "Scripts.pak", "Tables.pak" }.Select(n => Path.Combine("D", n)), order);
     }
 
     // ---------------------------------------------------------------- the quest registry carries keys only

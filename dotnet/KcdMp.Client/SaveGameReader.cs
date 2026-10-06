@@ -231,5 +231,6 @@ public static class SaveGameReader
 
     /// <summary>The default user folder when kcd.log has not said otherwise.</summary>
     public static string DefaultUserFolder() =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games", "kingdomcome2");
+        GameHost.FindUserFolder()   // Linux: inside the Proton prefix; null on Windows
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games", "kingdomcome2");
 }

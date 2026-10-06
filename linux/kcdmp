@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 the Kingdom Come: Together contributors (AUTHORS). SPDX-License-Identifier: GPL-3.0-only
+# GPLv3 section 7 additional terms: NOTICE. This project's own code only; Kingdom Come: Deliverance II and its
+# content belong to Warhorse Studios and PLAION. Unofficial, free, not affiliated with or endorsed by them.
+#
+# kcdmp -- the Linux launcher for Kingdom Come: Together (docs/LINUX.md).
+#
+# The game (the Modding Tools build) runs under Steam's Proton. Everything the mod needs from it is reached over localhost:
+#   * the Modding Tools' REST API on 127.0.0.1:1403 (a Wine socket is a real host socket);
+#   * the injected plugin KCDMP.dll, which under Wine serves TCP 127.0.0.1:14070 (a named pipe is not reachable from Linux).
+# The agent and the relay are native Linux programs. Only the plugin injection has to run inside the game's Proton prefix.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION" 2>/dev/null || echo unknown)"
+APP_MODTOOLS=2429020      # Kingdom Come: Deliverance II Modding Tools (what the mod needs)
+APP_RETAIL=1771300        # retail Kingdom Come: Deliverance II (its Data/ feeds the Modding Tools)
+TCP_PORT="${KCDMP_TCP_PORT:-14070}"
+RELAY_PORT="${KCDMP_RELAY_PORT:-7778}"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/kcdmp"
+mkdir -p "$STATE"
+
+if [[ -t 1 ]]; then G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; N=$'\e[0m'; else G=; R=; Y=; N=; fi
+ok()   { echo "  ${G}ok${N}    $*"; }
+bad()  { echo "  ${R}MISSING${N}  $*"; FAILED=1; }
+warn() { echo "  ${Y}note${N}  $*"; }
+die()  { echo "${R}kcdmp: $*${N}" >&2; exit 1; }
+FAILED=0
+
+# ---------------------------------------------------------------- finding things
+
+steam_root() {
+  local c
+  for c in "${STEAM_ROOT:-}" "${STEAM_COMPAT_CLIENT_INSTALL_PATH:-}" "$HOME/.steam/steam" "$HOME/.local/share/Steam" \
+           "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam" "$HOME/.steam/root"; do
+    [[ -n "$c" && ( -d "$c/steamapps" || -f "$c/config/libraryfolders.vdf" ) ]] && { readlink -f "$c"; return 0; }
+  done
+  return 1
+}
+
+# every Steam library: Steam's own folder plus those named in libraryfolders.vdf
+libraries() {
+  local s v
+  s="$(steam_root)" || return 0
+  echo "$s"
+  for v in "$s/config/libraryfolders.vdf" "$s/steamapps/libraryfolders.vdf"; do
+    [[ -f "$v" ]] || continue
+    grep -o '"path"[[:space:]]*"[^"]*"' "$v" | sed 's/^"path"[[:space:]]*"//; s/"$//'
+    break
+  done | awk '!seen[$0]++'
+}
+
+find_install() {   # find_install <folder name> -> path
+  local lib
+  while IFS= read -r lib; do
+    [[ -d "$lib/steamapps/common/$1" ]] && { echo "$lib/steamapps/common/$1"; return 0; }
+  done < <(libraries)
+  return 1
+}
+
+modtools_dir() { if [[ -n "${KCD2MOD_DIR:-}" ]]; then echo "$KCD2MOD_DIR"; else find_install KCD2Mod; fi; }
+retail_dir()   { if [[ -n "${KCD2_DIR:-}" ]]; then echo "$KCD2_DIR"; else find_install KingdomComeDeliverance2; fi; }
+
+# <library>/steamapps/compatdata/<appid>, where Proton keeps the game's Windows prefix
+compat_data() {
+  if [[ -n "${STEAM_COMPAT_DATA_PATH:-}" ]]; then echo "$STEAM_COMPAT_DATA_PATH"; return 0; fi
+  local lib
+  while IFS= read -r lib; do
+    [[ -d "$lib/steamapps/compatdata/$APP_MODTOOLS" ]] && { echo "$lib/steamapps/compatdata/$APP_MODTOOLS"; return 0; }
+  done < <(libraries)
+  return 1
+}
+
+# The Proton to use: $PROTON (the 'proton' script), else the one Steam recorded for this prefix, else the newest installed.
+proton_script() {
+  if [[ -n "${PROTON:-}" ]]; then [[ -x "$PROTON" ]] && { echo "$PROTON"; return 0; }; return 1; fi
+  local cd cfg dir s lib
+  if cd="$(compat_data)" && [[ -f "$cd/config_info" ]]; then
+    # config_info lists the Proton build's own folders ("<proton>/files/share/fonts/" ...)
+    dir="$(grep -m1 '/files/' "$cd/config_info" | sed 's#/files/.*##')"
+    [[ -n "$dir" && -x "$dir/proton" ]] && { echo "$dir/proton"; return 0; }
+  fi
+  s="$(steam_root)" || return 1
+  # (an if, not "&& echo": the loop's last status would otherwise fail the whole lookup under pipefail)
+  local found
+  found="$( { for lib in "$s/steamapps/common"/Proton* "$s/compatibilitytools.d"/*; do
+                if [[ -x "$lib/proton" ]]; then echo "$lib/proton"; fi
+              done; } | sort -V | tail -n1 )"
+  [[ -n "$found" ]] && echo "$found"
+}
+
+proton_env() {   # run a command with the environment Proton expects
+  local cd s
+  cd="$(compat_data)" || die "no Proton prefix for the Modding Tools (app $APP_MODTOOLS): start the Modding Tools once from Steam, or set STEAM_COMPAT_DATA_PATH"
+  s="$(steam_root)" || die "Steam not found (set STEAM_ROOT)"
+  env STEAM_COMPAT_DATA_PATH="$cd" STEAM_COMPAT_CLIENT_INSTALL_PATH="$s" SteamAppId="$APP_MODTOOLS" SteamGameId="$APP_MODTOOLS" "$@"
+}
+
+win_path() { printf 'Z:%s' "$(readlink -f "$1" | sed 's#/#\\#g')"; }   # a host path as Wine names it
+
+game_exe_dir() { echo "$(modtools_dir)/Bin/Win64ReleaseSteamLTO_DLL"; }
+api_up() { curl -fsS -m 3 "http://127.0.0.1:1403/api/System/Console/GetCvarValue?name=sv_servername" >/dev/null 2>&1; }
+tcp_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+game_pid() { pgrep -f 'KingdomCome\.exe' | head -n1 || true; }
+
+# ---------------------------------------------------------------- commands
+
+cmd_doctor() {
+  echo "Kingdom Come: Together $VERSION (Linux) -- checking this machine"
+  local s mt rt cd pr
+  if s="$(steam_root)"; then ok "Steam: $s"; else bad "Steam not found (set STEAM_ROOT)"; fi
+  if mt="$(modtools_dir)" && [[ -d "$mt" ]]; then ok "Modding Tools: $mt"; else bad "Kingdom Come: Deliverance II Modding Tools not installed (Steam > Tools; set KCD2MOD_DIR if it is elsewhere)"; mt=; fi
+  if rt="$(retail_dir)" && [[ -d "$rt" ]]; then ok "retail game: $rt"; else bad "retail Kingdom Come: Deliverance II not installed (its Data/ feeds the Modding Tools)"; rt=; fi
+  if [[ -n "$mt" ]]; then
+    [[ -f "$mt/Bin/Win64ReleaseSteamLTO_DLL/KingdomCome.exe" ]] && ok "game exe present" || bad "Bin/Win64ReleaseSteamLTO_DLL/KingdomCome.exe missing in the Modding Tools"
+    [[ -f "$mt/Data/Tables.pak" ]] && ok "game data linked (Data/Tables.pak)" || bad "game data not linked into the Modding Tools: run  kcdmp link-data"
+    [[ -f "$mt/Mods/kdcmp/Data/kdcmp.pak" ]] && ok "mod installed" || bad "mod not installed: run  kcdmp install"
+  fi
+  if cd="$(compat_data)"; then ok "Proton prefix: $cd"; else bad "no Proton prefix for app $APP_MODTOOLS (run the Modding Tools once from Steam so Proton creates it)"; fi
+  if pr="$(proton_script)" && [[ -n "$pr" ]]; then ok "Proton: $pr"; else bad "no Proton found (set PROTON=/path/to/proton)"; fi
+  [[ -f "$ROOT/plugin/KCDMP.dll" && -f "$ROOT/plugin/KCDMP_LauncherInjector.exe" ]] && ok "plugin files" || bad "plugin/KCDMP.dll or the injector is missing from this package"
+  [[ -x "$ROOT/agent/KcdMpClient" ]] && ok "agent" || bad "agent/KcdMpClient missing or not executable"
+  [[ -x "$ROOT/relay/KcdMpServer" ]] && ok "relay" || bad "relay/KcdMpServer missing or not executable"
+  command -v curl >/dev/null && ok "curl" || bad "curl not installed"
+  if [[ -n "$(game_pid)" ]]; then
+    ok "game running (pid $(game_pid))"
+    api_up && ok "game API answers on 127.0.0.1:1403" || warn "game API not answering yet on 1403 (still loading, or this is not the Modding Tools build)"
+    tcp_open "$TCP_PORT" && ok "plugin is listening on 127.0.0.1:$TCP_PORT" || warn "plugin not listening on $TCP_PORT: not injected yet (kcdmp inject)"
+  else
+    warn "game not running"
+  fi
+  [[ $FAILED == 0 ]] && echo "everything needed is in place" || { echo "${R}something is missing (above)${N}"; return 1; }
+}
+
+# Mirror the retail game's Data/ and Localization/ into the Modding Tools (what Valve's WorkspaceSetup does, without Windows).
+cmd_link_data() {
+  local mt rt mode="${1:-auto}" n=0 skipped=0 f rel dst
+  mt="$(modtools_dir)" || die "Modding Tools not found"
+  rt="$(retail_dir)" || die "retail game not found"
+  echo "linking $rt/{Data,Localization} -> $mt  (mode: $mode)"
+  local same_fs=0
+  [[ "$(stat -c %d "$rt")" == "$(stat -c %d "$mt")" ]] && same_fs=1
+  for d in Data Localization; do
+    [[ -d "$rt/$d" ]] || { warn "no $d/ in the retail game"; continue; }
+    while IFS= read -r -d '' f; do
+      rel="${f#"$rt/"}"; dst="$mt/$rel"
+      if [[ -e "$dst" && "$(stat -c %s "$dst")" == "$(stat -c %s "$f")" ]]; then skipped=$((skipped+1)); continue; fi
+      mkdir -p "$(dirname "$dst")"; rm -f "$dst"
+      if   [[ $mode == copy ]]; then cp -- "$f" "$dst"
+      elif [[ $same_fs == 1 && $mode != symlink ]] && ln -- "$f" "$dst" 2>/dev/null; then :
+      else ln -s -- "$f" "$dst"; fi
+      n=$((n+1))
+    done < <(find "$rt/$d" -type f -print0)
+  done
+  echo "linked $n files, $skipped already in place. Run this again after the retail game updates."
+}
+
+cmd_install() {
+  local mt; mt="$(modtools_dir)" || die "Modding Tools not found (set KCD2MOD_DIR)"
+  [[ -d "$mt" ]] || die "Modding Tools not found at $mt"
+  [[ -n "$(game_pid)" ]] && die "close the game first: it holds the mod's files open"
+  mkdir -p "$mt/Mods"
+  rm -rf "$mt/Mods/kdcmp"
+  cp -r "$ROOT/mod/kdcmp" "$mt/Mods/kdcmp"
+  ok "mod installed to $mt/Mods/kdcmp"
+  # the keybinding pak (F-keys for the mod's prompts): built from the game's own Libs/Config, so it needs the linked data
+  if [[ -f "$mt/Data/Tables.pak" ]]; then
+    "$ROOT/agent/KcdMpClient" --keys-pak --game-root "$mt" --mod-dir "$mt/Mods/kdcmp" || warn "the keybinding pak could not be built (the mod still works; keys are the defaults)"
+  else
+    warn "game data is not linked yet: run  kcdmp link-data  and then  kcdmp install  again to add the keybindings"
+  fi
+}
+
+cmd_play() {   # start the Modding Tools game under Proton, wait for the API
+  local mt exe pr; mt="$(modtools_dir)" || die "Modding Tools not found"
+  [[ -n "$(game_pid)" ]] && { echo "the game is already running"; return 0; }
+  pgrep -x steam >/dev/null || pgrep -f 'steam.sh|ubuntu12_32/steam' >/dev/null || die "start Steam first (the game refuses to run without it)"
+  pr="$(proton_script)" || true; [[ -n "$pr" ]] || die "no Proton found (set PROTON=/path/to/proton)"
+  exe="$(game_exe_dir)/KingdomCome.exe"; [[ -f "$exe" ]] || die "missing $exe"
+  echo "starting the game with $pr"
+  ( cd "$mt" && proton_env "$pr" run "$exe" >"$STATE/game.log" 2>&1 & echo $! >"$STATE/game.pid" )
+  local t=0; until api_up; do sleep 3; t=$((t+3)); [[ $t -ge 180 ]] && die "the game API did not come up in 3 minutes (see $STATE/game.log)"; done
+  echo "game API is up (${t}s). Load a save, then:  kcdmp inject"
+}
+
+cmd_inject() {   # run the injector INSIDE the game's prefix, by process name
+  local pr wait="${1:-300}"; pr="$(proton_script)" || true; [[ -n "$pr" ]] || die "no Proton found (set PROTON=)"
+  [[ -f "$ROOT/plugin/KCDMP.dll" ]] || die "plugin/KCDMP.dll missing"
+  api_up || die "the game is not up (kcdmp play, or start it from Steam)"
+  echo "injecting the plugin (waits for the engine to be loaded, up to ${wait}s)"
+  proton_env "$pr" run "$ROOT/plugin/KCDMP_LauncherInjector.exe" --process KingdomCome.exe --module WHGame.dll --wait "$wait" \
+      --dll "$(win_path "$ROOT/plugin/KCDMP.dll")"
+  local t=0; until tcp_open "$TCP_PORT"; do sleep 1; t=$((t+1)); [[ $t -ge 20 ]] && die "injected, but the plugin is not listening on 127.0.0.1:$TCP_PORT (see the plugin's kcdmp-native.log beside KCDMP.dll)"; done
+  echo "plugin is up on 127.0.0.1:$TCP_PORT"
+}
+
+run_agent() {   # run_agent <host> <port> <name>
+  local name="${3:-${USER:-Player}}"
+  local cd; cd="$(compat_data 2>/dev/null || true)"
+  [[ -n "$cd" ]] && export STEAM_COMPAT_DATA_PATH="$cd"
+  export KCDMP_TCP_PORT="$TCP_PORT"
+  echo "agent: $name -> $1:$2  (plugin on 127.0.0.1:$TCP_PORT, game API 127.0.0.1:1403)"
+  exec "$ROOT/agent/KcdMpClient" --host "$1" --port "$2" --name "$name" --no-voice --no-discord
+}
+
+cmd_relay() {
+  if [[ -f "$STATE/relay.pid" ]] && kill -0 "$(cat "$STATE/relay.pid")" 2>/dev/null; then echo "relay already running (pid $(cat "$STATE/relay.pid"))"; return 0; fi
+  ( cd "$ROOT/relay" && nohup ./KcdMpServer --port "$RELAY_PORT" >"$STATE/relay.log" 2>&1 & echo $! >"$STATE/relay.pid" )
+  sleep 2
+  kill -0 "$(cat "$STATE/relay.pid")" 2>/dev/null || die "the relay did not start (see $STATE/relay.log)"
+  echo "relay running on port $RELAY_PORT (pid $(cat "$STATE/relay.pid"), log $STATE/relay.log)"
+}
+
+cmd_host() {
+  cmd_relay
+  local ip; ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  echo "friends join with:  kcdmp join ${ip:-<your address>}:$RELAY_PORT   (open TCP $RELAY_PORT on your firewall/router if they are not on your network)"
+  run_agent 127.0.0.1 "$RELAY_PORT" "${1:-}"
+}
+
+cmd_join() {
+  local target="${1:-}"; [[ -n "$target" ]] || die "usage: kcdmp join HOST[:PORT] [NAME]"
+  local host="${target%%:*}" port="$RELAY_PORT"
+  [[ "$target" == *:* ]] && port="${target##*:}"
+  run_agent "$host" "$port" "${2:-}"
+}
+
+cmd_stop() {
+  if [[ -f "$STATE/relay.pid" ]] && kill "$(cat "$STATE/relay.pid")" 2>/dev/null; then echo "relay stopped"; else echo "relay was not running"; fi
+  rm -f "$STATE/relay.pid"
+}
+
+usage() {
+  cat <<EOF
+kcdmp $VERSION -- Kingdom Come: Together on Linux (Steam + Proton)
+
+  kcdmp doctor              check Steam, Proton, the Modding Tools, the mod and this package
+  kcdmp link-data [copy|symlink]   mirror the retail game's Data/ into the Modding Tools (once, and after game updates)
+  kcdmp install             put the mod into the Modding Tools (game closed)
+  kcdmp play                start the Modding Tools game under Proton and wait for its API
+  kcdmp inject              inject the plugin into the running game (load a save first)
+  kcdmp host [NAME]         run the relay here and connect your agent to it
+  kcdmp join HOST[:PORT] [NAME]   connect your agent to someone's relay
+  kcdmp relay | stop        start / stop only the relay
+
+Overrides: STEAM_ROOT KCD2MOD_DIR KCD2_DIR PROTON STEAM_COMPAT_DATA_PATH KCDMP_TCP_PORT KCDMP_RELAY_PORT
+Unofficial: not affiliated with or endorsed by Warhorse Studios or PLAION. See docs/LINUX.md.
+EOF
+}
+
+case "${1:-help}" in
+  doctor)    cmd_doctor ;;
+  link-data) shift; cmd_link_data "$@" ;;
+  install)   cmd_install ;;
+  play)      cmd_play ;;
+  inject)    shift; cmd_inject "$@" ;;
+  host)      shift; cmd_host "$@" ;;
+  join)      shift; cmd_join "$@" ;;
+  relay)     cmd_relay ;;
+  stop)      cmd_stop ;;
+  version|--version) echo "$VERSION" ;;
+  *)         usage ;;
+esac

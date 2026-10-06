@@ -31,6 +31,7 @@ int wo143_rules_tests(int* passed);        // wo143_rules_tests.cpp
 int wo148_x64_tests(int* passed);          // wo148_x64_tests.cpp
 int wo151_tests(int* passed);              // wo151_tests.cpp
 int wo153_rules_tests(int* passed);        // wo153_rules_tests.cpp
+int transport_rules_tests(int* passed);    // transport_rules_tests.cpp (Linux support)
 
 static int g_fail = 0, g_pass = 0;
 #define CHECK(cond, ...) do { if (cond) ++g_pass; else { ++g_fail; std::printf("FAIL  %s:%d  ", __FILE__, __LINE__); std::printf(__VA_ARGS__); std::printf("\n"); } } while (0)
@@ -199,6 +200,14 @@ int main() {
     {
         int cp = 0;
         const int cf = wo153_rules_tests(&cp);
+        g_pass += cp;
+        g_fail += cf;
+    }
+
+    // Linux support: which transport the plugin serves
+    {
+        int cp = 0;
+        const int cf = transport_rules_tests(&cp);
         g_pass += cp;
         g_fail += cf;
     }

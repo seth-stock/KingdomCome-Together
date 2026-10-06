@@ -25,6 +25,14 @@ if (args.Contains("--keys-pak"))
 var config = ClientConfig.Load();
 config.ApplyCommandLine(args);
 
+// Linux (docs/LINUX.md): voice chat uses NAudio's WinMM capture, which exists only on Windows. Say so once and keep it off,
+// rather than opening a microphone path that cannot work.
+if (!OperatingSystem.IsWindows() && config.VoiceChatEnabled)
+{
+    Console.WriteLine("[config] voice chat is Windows-only: it stays off on this platform");
+    config.VoiceChatEnabled = false;
+}
+
 // WO-127: the launcher's helpers. Run before the agent.log tee (a helper run
 // never rotates the agent's log) and print exactly one machine-read line.
 // --test-connection: reach the host (direct or --steam CODE), report
@@ -208,12 +216,10 @@ static string? GetSteamPersonaName()
 {
     try
     {
-        string? steamPath =
-            Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath", null) as string
-            ?? Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Valve\Steam",           "InstallPath", null) as string;
+        string? steamPath = GameHost.SteamInstallDir();
 
-        string? autoLogin =
-            Registry.GetValue(@"HKEY_CURRENT_USER\SOFTWARE\Valve\Steam", "AutoLoginUser", null) as string;
+        // Windows only: Linux has no registry, so the most recent login in loginusers.vdf is used.
+        string? autoLogin = GameHost.RegistryString(@"HKEY_CURRENT_USER\SOFTWARE\Valve\Steam", "AutoLoginUser");
 
         Console.WriteLine($"[Steam] VDF InstallPath={steamPath ?? "(not found)"}  AutoLoginUser={autoLogin ?? "(not found)"}");
         if (steamPath is null) return null;

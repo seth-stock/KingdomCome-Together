@@ -1,6 +1,10 @@
 ﻿// Copyright (C) 2026 the Kingdom Come: Together contributors (AUTHORS). SPDX-License-Identifier: GPL-3.0-only
 // GPLv3 section 7 additional terms: NOTICE. This project's own code only; Kingdom Come: Deliverance II and its
 // content belong to Warhorse Studios and PLAION. Unofficial, free, not affiliated with or endorsed by them.
+// Linux support: Winsock for the TCP transport. WIN32_LEAN_AND_MEAN keeps windows.h from pulling in the old winsock.h.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include "pipe_server.h"
 #include "mannequin_read.h"
 #include "local_state.h"
@@ -34,8 +38,11 @@
 #include "wo153.h"
 #include "buffs.h"
 #include "log.h"
+#include "transport.h"
 
 #include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <array>
 #include <atomic>
 #include <condition_variable>
@@ -58,6 +65,39 @@ std::atomic<bool>   g_connected{false};
 HANDLE              g_pipe = INVALID_HANDLE_VALUE;
 uint8_t             g_seq = 0;
 
+// Linux support (docs/LINUX.md): under Wine/Proton the agent is a native Linux program, which cannot open a named pipe that lives inside
+// wineserver, so the same frames are served over a TCP socket bound to 127.0.0.1. The serve loop and every sender take a HANDLE; a
+// connected socket is passed as one (its value), and read_all / write_all below recognise it.
+std::atomic<bool>   g_tcp{false};
+std::atomic<SOCKET> g_listen{INVALID_SOCKET};
+std::atomic<SOCKET> g_client{INVALID_SOCKET};
+
+inline bool is_sock(HANDLE h) {
+    return g_tcp.load() && h != INVALID_HANDLE_VALUE && reinterpret_cast<SOCKET>(h) == g_client.load();
+}
+
+bool sock_write_all(SOCKET s, const void* data, DWORD len) {
+    const char* p = static_cast<const char*>(data);
+    DWORD done = 0;
+    while (done < len) {
+        const int n = ::send(s, p + done, static_cast<int>(len - done), 0);
+        if (n <= 0) return false;
+        done += static_cast<DWORD>(n);
+    }
+    return true;
+}
+
+bool sock_read_all(SOCKET s, void* data, DWORD len) {
+    char* p = static_cast<char*>(data);
+    DWORD done = 0;
+    while (done < len) {
+        const int n = ::recv(s, p + done, static_cast<int>(len - done), 0);
+        if (n <= 0) return false;
+        done += static_cast<DWORD>(n);
+    }
+    return true;
+}
+
 // The pipe is duplex and both directions are in use at once: the serve loop
 // parks in a read while the game thread pushes hits out. On a *synchronous*
 // handle the I/O manager serialises every request against the file object, so
@@ -75,6 +115,7 @@ struct Op {
 };
 
 bool write_all(HANDLE h, const void* data, DWORD len) {
+    if (is_sock(h)) return sock_write_all(g_client.load(), data, len);
     const auto* p = static_cast<const BYTE*>(data);
     Op op;
     if (!op.ov.hEvent) return false;
@@ -93,6 +134,7 @@ bool write_all(HANDLE h, const void* data, DWORD len) {
 }
 
 bool read_all(HANDLE h, void* data, DWORD len) {
+    if (is_sock(h)) return sock_read_all(g_client.load(), data, len);
     auto* p = static_cast<BYTE*>(data);
     Op op;
     if (!op.ov.hEvent) return false;
@@ -1442,6 +1484,56 @@ void listen_loop() {
     logf("PIPE: listener stopped");
 }
 
+// Linux support: the same serve loop over a TCP connection from 127.0.0.1 (one agent per game, like the pipe). Bound to loopback only: nothing
+// off this machine can reach it. Under Wine a socket is a real host socket, so a native Linux agent connects to it.
+void listen_tcp_loop(uint16_t port) {
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        logf("PIPE: WSAStartup failed: %d", WSAGetLastError());
+        return;
+    }
+    while (g_running) {
+        SOCKET ls = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (ls == INVALID_SOCKET) {
+            logf("PIPE: socket() failed: %d", WSAGetLastError());
+            Sleep(1000);
+            continue;
+        }
+        BOOL excl = TRUE;
+        ::setsockopt(ls, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&excl), sizeof(excl));
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (::bind(ls, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || ::listen(ls, 1) != 0) {
+            logf("PIPE: cannot listen on 127.0.0.1:%u (%d) -- is another game running with the plugin?", port, WSAGetLastError());
+            ::closesocket(ls);
+            Sleep(2000);
+            continue;
+        }
+        g_listen = ls;
+        logf("PIPE: tcp listening on 127.0.0.1:%u", port);
+        while (g_running) {
+            SOCKET c = ::accept(ls, nullptr, nullptr);
+            if (c == INVALID_SOCKET) break;                       // stop() closed the listener, or it failed: rebuild it
+            BOOL nodelay = TRUE;
+            ::setsockopt(c, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay), sizeof(nodelay));
+            g_client = c;
+            g_pipe = reinterpret_cast<HANDLE>(c);
+            logf("PIPE: tcp agent connected");
+            serve(reinterpret_cast<HANDLE>(c));
+            g_pipe = INVALID_HANDLE_VALUE;
+            g_client = INVALID_SOCKET;
+            ::shutdown(c, SD_BOTH);
+            ::closesocket(c);
+        }
+        g_listen = INVALID_SOCKET;
+        ::closesocket(ls);
+        if (g_running) Sleep(500);
+    }
+    logf("PIPE: tcp listener stopped");
+}
+
 } // namespace
 
 bool start() {
@@ -1484,13 +1576,33 @@ bool start() {
 
     // The injected plugin has process lifetime. Detaching keeps DLL teardown
     // free of a blocking join under the Windows loader lock.
-    std::thread(listen_loop).detach();
-    logf("PIPE: listening on %s", kPipeName);
+    // Linux support: the pipe on Windows, TCP loopback under Wine/Proton (transport.h has the rules and the environment overrides).
+    const bool wine = GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != nullptr;
+    char envTransport[32] = {0}, envPort[16] = {0};
+    GetEnvironmentVariableA("KCDMP_TRANSPORT", envTransport, sizeof(envTransport));
+    GetEnvironmentVariableA("KCDMP_TCP_PORT", envPort, sizeof(envPort));
+    const auto choice = transport::choose(envTransport[0] ? envTransport : nullptr, envPort[0] ? envPort : nullptr, wine);
+    g_tcp = (choice.kind == transport::Kind::Tcp);
+    if (g_tcp) {
+        const uint16_t port = choice.port;
+        std::thread([port] { listen_tcp_loop(port); }).detach();
+        logf("PIPE: transport tcp 127.0.0.1:%u (%s)", port, choice.why);
+    } else {
+        std::thread(listen_loop).detach();
+        logf("PIPE: listening on %s (%s)", kPipeName, choice.why);
+    }
     return true;
 }
 
 void stop() {
     if (!g_running.exchange(false)) return;
+    if (g_tcp) {   // Linux support: closing the listener unblocks accept(); shutting the client unblocks the serve loop's recv()
+        const SOCKET c = g_client.load();
+        if (c != INVALID_SOCKET) ::shutdown(c, SD_BOTH);
+        const SOCKET l = g_listen.exchange(INVALID_SOCKET);
+        if (l != INVALID_SOCKET) ::closesocket(l);
+        return;
+    }
     // Unblock ConnectNamedPipe by connecting to it once.
     HANDLE poke = CreateFileA(kPipeName, GENERIC_READ | GENERIC_WRITE, 0, nullptr,
                               OPEN_EXISTING, 0, nullptr);

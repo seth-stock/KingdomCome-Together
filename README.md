@@ -11,6 +11,7 @@
   <a href="https://github.com/DeepFriedDepp/KingdomCome-Together/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/DeepFriedDepp/KingdomCome-Together?label=latest%20release&color=8a3324&style=flat-square"></a>
   <a href="LICENSE"><img alt="License: GPLv3" src="https://img.shields.io/badge/license-GPLv3-2c3e50?style=flat-square"></a>
   <a href="docs/LAUNCHING.md"><img alt="Platform" src="https://img.shields.io/badge/platform-Windows-555555?style=flat-square"></a>
+  <a href="docs/LINUX.md"><img alt="Linux" src="https://img.shields.io/badge/Linux-experimental-a0a0a0?style=flat-square"></a>
   <a href="https://dsc.gg/kcd2-together"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white&style=flat-square"></a>
 </p>
 
@@ -40,6 +41,7 @@ against each other from inside the game itself.
 - [Features](#features)
 - [How to play with a friend](#how-to-play-with-a-friend)
 - [Install](#install)
+- [Linux (experimental)](docs/LINUX.md)
 - [How to play dice](#how-to-play-dice)
 - [Architecture](#architecture)
 - [Repository layout](#repository-layout)
@@ -405,6 +407,7 @@ cross-machine game-API traffic, only the relay TCP connection.
 | `native/KCDMP/` | The injected plugin (C++) |
 | `native/KCDMP_LauncherInjector/` | The injector executable |
 | `KCDMP_launcher/` | The desktop launcher (Photino/Blazor) |
+| `linux/` | The Linux launcher (`kcdmp`) and the package builder — experimental, see [docs/LINUX.md](docs/LINUX.md) |
 | `dotnet/KcdMp.MasterServer/` | `KcdMpMasterServer.exe`, the server-discovery backend — see `docs/MASTER-SERVER.md` |
 | `docs/` | Design notes and session handoffs — start with `docs/PROJECT-STATE.md` |
 

@@ -1,7 +1,6 @@
 // Copyright (C) 2026 the Kingdom Come: Together contributors (AUTHORS). SPDX-License-Identifier: GPL-3.0-only
 // GPLv3 section 7 additional terms: NOTICE. This project's own code only; Kingdom Come: Deliverance II and its
 // content belong to Warhorse Studios and PLAION. Unofficial, free, not affiliated with or endorsed by them.
-using Microsoft.Win32;
 using System.Text.RegularExpressions;
 
 namespace KcdMp.Client;
@@ -81,15 +80,14 @@ public static partial class KcdLogLocator
     /// <summary>Steam install dir plus every library root in libraryfolders.vdf.</summary>
     public static IEnumerable<string> SteamLibraryRoots()
     {
-        string? steam =
-            Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath", null) as string
-            ?? Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Valve\Steam", "InstallPath", null) as string
-            ?? Registry.GetValue(@"HKEY_CURRENT_USER\SOFTWARE\Valve\Steam", "SteamPath", null) as string;
+        // The registry on Windows; ~/.local/share/Steam and friends on Linux (GameHost).
+        string? steam = GameHost.SteamInstallDir();
 
         if (steam is null) yield break;
         yield return steam;
 
         string vdf = Path.Combine(steam, "config", "libraryfolders.vdf");
+        if (!File.Exists(vdf)) vdf = Path.Combine(steam, "steamapps", "libraryfolders.vdf");
         if (!File.Exists(vdf)) yield break;
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { steam };

@@ -1,0 +1,3 @@
+# Linux launcher scripts must keep LF line endings (a CRLF checkout breaks the shebang)
+linux/kcdmp text eol=lf
+linux/*.sh text eol=lf

@@ -51,4 +51,6 @@ add_library(KCDMP SHARED
 )
 
 target_include_directories(KCDMP PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+# Linux support: the TCP transport (pipe_server.cpp) uses Winsock
+target_link_libraries(KCDMP PRIVATE ws2_32)
 set_target_properties(KCDMP PROPERTIES OUTPUT_NAME "KCDMP")
