@@ -4,8 +4,8 @@ Kingdom Come: Together. Unofficial; not affiliated with or endorsed by Warhorse 
 Written 2026-10-06 on `feature/linux-support`. Version string unchanged (the user picks versions).
 
 Marks: **(unit)** tests without the game · **(real saves)** run offline on the real saves on this machine, in memory, nothing written ·
-**(wiring)** built and called, not seen · **(not run)** not run at all. **Nothing here has been seen with two players, and nothing in this WO has been run in the
-real engine yet** (the maintainer's machine was in use for another game when this was written): the first live pass is §6.
+**(wiring)** built and called, not seen · **(live)** seen in the real Modding Tools game on this machine · **(not run)** not run at all.
+**Nothing here has been seen with two players.** A live pass on 2026-10-06 (§6) ran the real game, the real agent and plugin and a real relay against a *synthetic* host (a copy of a real world, served by `tools/wo118/synthpeer`); what it proved and what it did not is in §6.
 
 ## 0. The ask, and the answer
 
@@ -39,7 +39,7 @@ What the result is (`HenryHome.cs`; the splice is the WO-124 one, run the other 
 **(unit)** 17 tests: the builder, quest items both ways, "every other block is the home world's", the header rewrite, the id counter (one counter for autosave/quicksave/permanent/manual,
 exit.whs carries one in its header), refusals, "the home file is never modified". **(real saves)** the two real playthroughs on this machine, both directions, newest save of each:
 **4 of 4 built, every one passed the full check and the footer verify** (250–630 ms; e.g. 1,174,015 B home + a 246-item Henry -> 969,033 B with his 98 items). **(wiring)** the command, the
-snapshot, placement, rescan, the leave route. **(not run)** the engine loading the result as an ordinary manual save, the menu showing it, Continue ordering.
+snapshot, placement, rescan, the leave route. **(live)** the engine lists it as a manual save, loads it, and the live Henry matches the file exactly; the whole flow worked in a real session (§6). **(not run)** Continue ordering with several playlines.
 
 ## 2. Godwin: the prologue and the other stretches (item 2)
 
@@ -56,7 +56,7 @@ inventory, 1303), so the whole machinery generalises by making "whose record" a 
 
 **(unit)** 8 tests on a synthetic Godwin world (recognition, the splice and its check, Henry's record untouched, the stored block's soul, both guards, the flag bits).
 **(real saves)** the one real Godwin save on this machine (a 1.4.2 prologue save): verifies; recognised as Godwin; parts soul = Godwin; **self-splice passes the full check in both quest-item modes**; the stored block round-trips.
-**(not run)** a Godwin join in the engine; whether the engine accepts a spliced Godwin world; the post-load character check against a Godwin's live money/items (it compares what the file says with what the live player says; Godwin's
+**(live)** the engine loads a Godwin world made through the generalised splice (the real prologue save, identity splice): "Gameplay started", the live player is Godwin (`char_BOHUTA_uiName`) with his own money and items, the mod boots, 0 mod errors. **(not run)** a Godwin JOIN (a Godwin host, a second player); the post-load character check against a Godwin's live money/items (it compares what the file says with what the live player says; Godwin's
 inventory is small, so the "file lists only money / no list" warnings may apply); two players in the prologue; the switch mid-session. **Honest limit:** this machine has one Godwin save and it is from an older build, so the
 Godwin splice has never met a same-build pair of real saves.
 
@@ -75,7 +75,7 @@ Godwin splice has never met a same-build pair of real saves.
 * `mp_henry_home` (§1) is a **separate save of the joiner's progress** into his own world, at any moment and place of the joiner's choosing, without leaving and without touching the host.
 * `mp_world_copy [N]` — **a copy of the shared world, with the joiner's character in it, as the joiner's OWN save** (playline N, default the first playline with no saves), to carry on from alone later,
   whatever the host does next. A new file; the host and the others are not told. It is the engine's own QuickSave of the joiner's copy with the header turned into a manual save's: the world is byte for byte (**unit**).
-  **(not run)** that the engine loads a manual save placed in a fresh playline; and note that while joined to that same host the copy has the host's playthrough seed, so the mod's own rule ("a save with the host's seed is
+  **(live)** the file loads in the engine (the host's world at the host's spot, with the joiner's Henry and his gain);  and note that while joined to that same host the copy has the host's playthrough seed, so the mod's own rule ("a save with the host's seed is
   never the joiner's own") skips it as a Bring source until the player leaves that host.
 * Everyone playing in their own world with the others as presence (the mod's original mode, `mp_shared_world off`) already saves separately: each has their own saves and time.
 
@@ -90,14 +90,37 @@ Godwin splice has never met a same-build pair of real saves.
 
 Static Lua checks pass with them; `kdcmp.pak` rebuilt from the source.
 
-## 6. What the first live pass must show (not done)
+## 6. The live pass (2026-10-06): what was proven, and what was not
 
-1. The four commands exist in the console and log their `WO157-CMD` lines; the mod boots with 0 Lua errors.
-2. `mp_henry_home` after a join: `MP-HOME DONE ...`; the file is listed by the engine's rescan; it **loads from the menu**; Henry has what he gained; the home world is as it was; the original save is untouched.
-3. `mp_world_copy`: the file loads, as its own playline.
-4. A Godwin world (a prologue save as the host, a synthetic or real second player): the join is offered, the splice passes, the world loads, the character check does not abort; then the mid-session switch.
-5. A DLC quest change on the host reaches the joiner, and `mp_quest_dlc off` stops it.
-6. The real saves are byte-identical afterwards (hash the saves folder before and after, as in WO-124/125).
+Setup: the Modding Tools game 1.5.5 at the main menu, the plugin injected by process name (`--process/--module/--wait`), a local relay, the **real agent as the joiner**, and
+`synthpeer --join-host125` as the host serving a **copy** of one real playthrough ("world B"); the joiner's own world is a copy of another real playthrough ("world A") with a fresh time,
+placed in a throwaway `playline4` so every file the agent writes lands there. Your real saves were hashed before and after: **138 files, 0 differences**; the throwaway playlines are deleted.
+
+| # | Check | Result (live) |
+|---|---|---|
+| 1 | The four console commands exist, log `WO157-CMD`, reject bad arguments | yes (10 commands tried, 7 events emitted); the mod boots, 0 errors from the mod |
+| 2 | A Henry sent home **loads in the engine** | the engine lists it as `ManualSave` (`2|1|@qname...`), loads it ("LoadGame ... done"); the live Henry matches the file exactly: money 1964 = 1964, **78 item classes (161) with 0 differing**, the join's own `JudgeHenry` says MATCH. The 19 "Soul ... created during load" warnings are the same 19 as a load of the unmodified home world |
+| 3 | A Godwin world through the generalised splice **loads** | yes: "Gameplay started" after 115 s, the live player is `char_BOHUTA_uiName`, money 48.70, 28 items, 0 mod errors |
+| 4 | The whole joiner flow, **after all the Godwin/soul changes** (a regression check of the join) | first join (*Bring*), splice (check PASS), place, load, Ready after ~74 s, in the shared world |
+| 5 | `mp_henry_home` **in a live session** | `MP-HOME DONE`: the live snapshot (a QuickSave, moved out as designed), built into the home world, written as `saveNNN`, read back, listed by the engine, **not** treated as a leak, 2.4 s |
+| 6 | The Henry **comes home with what he gained** | I gave him 7 bandages in the shared world. After the host left, the leave route loaded the new save: compared with the Henry before the trip, **exactly one class total differs: bandages 153 -> 160**; money, stats and every other class are identical; the home world's seed is unchanged; the in-game count (160) matches the file |
+| 7 | `mp_henry_home_on_leave on` | `MP-HOME DONE (leave: host-left)` built the save, the leave route **loaded it**, bandages 160 -> 165 (+5 given in the session) |
+| 8 | `mp_world_copy 3` | `playline3/save001` written (verify ok, listed); the engine **loads it**: the host's world at the host's spot with the joiner's Henry and his gain; its temporary QuickSaves moved out |
+| 9 | The real saves | byte-identical (138 files); no `mpworld*`/`mpexit*`/`.part` left anywhere |
+
+**Not proven:** two real players; a Godwin **join** (a Godwin host with a second player) and the mid-session Henry/Godwin switch; DLC quest sharing in a session (`mp_quest_dlc`; no DLC questline was played); the Sedlec level
+switches; Continue ordering across several playlines; Linux/Proton (separate WO).
+
+### What the live pass found
+
+* **A home save must carry the same build string as the snapshot.** The engine's own QuickSave stamps `1.5.5-release_1_5`; saves written by another executable of the same version can carry a build number
+  (`1.5.5-15315-release_1_5`). The existing WO-135 rule is strict equality, so such a home save is refused ("No save of the world this character came from (of the same game version) was found"). Nothing was written.
+  In normal use the player's own saves are written by the same Modding Tools build, so they match; this showed up only because my test copies were not. (Header text only was changed in the test copies.)
+* **The join's character check warns on big inventories** (`WARNING ... item classes file=170 live=65`): the live inventory travels in one log line that the engine cuts at about 3.9 KB, so a Henry with ~230 items is compared
+  from a truncated read. Money matches, the item **count** matches the file exactly (231 = 231), and the check only warns by design (WO-144 1.4). Existing behaviour, not caused by WO-157; the home save is built from the
+  engine's own save, not from this read.
+* The "Lua error" lines in `kcd.log` during the pass were the engine's own door script (`animdoor.lua:579`) and my own one-liners run while the player did not exist; none came from the mod.
+* An interrupted run (the machine was switched off mid-test) left two game-written autosaves in my throwaway playline only; nothing outside it was touched.
 
 ## 7. Files
 

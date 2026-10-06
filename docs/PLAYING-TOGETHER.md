@@ -144,8 +144,9 @@ You normally type nothing. Everything below is optional.
 | `mp_world_copy` / `mp_world_copy N` | friend | save a **copy of the shared world, with your character in it, as your own save** (playline N, default the first empty one), to carry on from alone, later, whatever the host does |
 | `mp_quest_dlc on` / `off` | anyone | share DLC quests like every other quest (default on); `off` keeps DLC out of the session |
 
-These four are new in WO-157 and **not yet seen in the real game**: `docs/WO-157-findings.md` says what was tested and what was not. The prologue and the other
-scenes played as **Godwin** can now be joined too (your own Godwin save is the character you bring); that is untested in the game as well.
+These four are new in WO-157. The first three were seen working in the real game on one machine against a scripted host (not with two people); DLC sharing and the
+Godwin scenes were not played with a partner: `docs/WO-157-findings.md` says exactly what was and was not proven. The prologue and the other scenes played as **Godwin** can
+now be joined too (your own Godwin save is the character you bring).
 
 `mp_scene_mode play` needs the native plugin (the launcher injects it) and is **off by default** because it is the least
 tested part: a skipped cutscene means that scene's own steps never run on your game, and you rely on the host's steps
