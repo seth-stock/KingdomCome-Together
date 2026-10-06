@@ -23034,5 +23034,8 @@ if not ok2 then
     System.LogAlways("[KCD2-MP] Hook error: " .. tostring(err2))
 end
 
-
-
+-- The in-game Multiplayer tab (docs/MENU.md) lives in its own file; a failure there never stops the mod.
+do
+    local ok, err = pcall(Script.ReloadScript, "Scripts/Startup/kdcmp_menu.lua")
+    if not ok then System.LogAlways("[KCD2-MP] menu tab did not load: " .. tostring(err)) end
+end

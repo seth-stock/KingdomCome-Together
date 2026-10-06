@@ -66,6 +66,7 @@ and weather. Each feature below says how far it is proven:
 
 | Feature | What you get | Evidence |
 |---|---|---|
+| A "Multiplayer" tab in the game's menu | The main menu has a **Multiplayer** entry with the world options, Henry choices, saving, story answers, session rules and keys, in the game's own menu style ([docs/MENU.md](docs/MENU.md)) | 🧪 seen working in the real game's main menu; not yet in the pause menu |
 | Joining | The partner waits at the main menu, clicks CONNECT and lands beside the host, with their own character, money and gear | ✅ |
 | Seeing each other | Position, walking, running, riding, nameplates; each player has their own face | ✅ |
 | Clothes and weapons | The other player's figure wears what they wear and holds what they hold | ✅ |

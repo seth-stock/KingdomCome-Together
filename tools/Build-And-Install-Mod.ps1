@@ -46,6 +46,7 @@ $Manifest = Join-Path $RepoRoot 'kdcmp\mod.manifest'
 # Paths inside the pak, relative to kdcmp\Data.
 $Files = @(
     'Scripts\Startup\kdcmp.lua',
+    'Scripts\Startup\kdcmp_menu.lua',    # the in-game Multiplayer tab (docs/MENU.md)
     'Libs\Tables\item\clothing_preset__kdcmp.xml',
     'Libs\Tables\rpg\buff__kcdmp.xml'    # WO-113: the death-guard buff row
 )

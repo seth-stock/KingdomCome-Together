@@ -375,6 +375,7 @@ public partial class GameBridge
                     if (b != _w153GameBuild)   // first read, or a new game process on another build
                     {
                         _w153GameBuild = b;
+                        _ = StartMenuTabAsync(apiBase);   // a new game process: its Multiplayer tab (kdcmp_menu.lua) is started once the menu is up
                         string? warn = CoopStatus.BuildWarning(b);
                         Console.WriteLine($"MP-W153 game build {b} ({CoopStatus.Pretty(b)}){(warn is null ? " -- a build the mod was verified on" : " -- WARNING: " + warn)}");
                     }
@@ -387,6 +388,23 @@ public partial class GameBridge
         }
         }
         finally { Volatile.Write(ref _w153BuildReader, 0); }
+    }
+
+    /// <summary>
+    /// The in-game Multiplayer tab (docs/MENU.md) must not register on the game's Menu element while the game is still starting up (that ends the game), and the engine runs no
+    /// Lua timers in the main menu, so the agent starts it: a few seconds after the game's API first answers, straight over the API (the mod's menu gate for pushes does not apply).
+    /// </summary>
+    private static async Task StartMenuTabAsync(string apiBase)
+    {
+        try
+        {
+            await Task.Delay(20000);
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            string cmd = Uri.EscapeDataString("#if KCD2MP_MenuStart then KCD2MP_MenuStart() end");
+            await http.GetStringAsync($"{apiBase}/api/System/Console/ExecuteString?command={cmd}");
+            Console.WriteLine("MP-MENU the Multiplayer tab was started");
+        }
+        catch (Exception e) { Console.WriteLine("MP-MENU the Multiplayer tab could not be started: " + e.Message); }
     }
 
     private string Wo153CoopStatusJson()
