@@ -239,6 +239,10 @@ public class Wo125Tests : IDisposable
         var n = st.PickFor(tag, [M(42)])!;
         Assert.Equal(M(3), n.Snapshot.Md5);
         Assert.StartsWith("newest", n.How);
+        Assert.Null(st.PickFor(tag, [M(42)], allowUnpaired: false));
+        Assert.Null(st.PickExact(tag, M(42)));
+        Assert.Equal(M(1), st.PickExact(tag, M(1))!.Snapshot.Md5);
+        Assert.Equal(M(1), st.PickFor(tag, [M(9), M(1)], allowUnpaired: false)!.Snapshot.Md5);
     }
 
     [Fact]

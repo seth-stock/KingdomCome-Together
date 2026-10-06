@@ -330,11 +330,11 @@ KCD2MP_W134HostOpen(1, 55, "bandit_7")
 local st = events("w134_bstate")
 check("B11 the host answers with its body's 13 items in 2 parts", #st == 2 and string.find(st[1], "^1 55 bandit_7 open 1 1 2 ") ~= nil and string.find(st[2], "^1 55 bandit_7 open 1 2 2 ") ~= nil, st[1])
 LOG = {}
-KCD2MP_W134HostTake(1, 56, "bandit_7", MONEY, 201, 1)
-check("B12 a joiner's take comes out of the host's body: ok", events("w134_tres")[1] == "1 56 ok bandit_7 " .. MONEY .. " 201" and hb.inventory:GetCountOfClass(MONEY) == 0, events("w134_tres")[1])
+KCD2MP_W134HostTake(1, 56, "bandit_7", MONEY, 201, 1, '0123456789abcdef0123456789abcdef')
+check("B12 a joiner's take comes out of the host's body: ok", events("w134_tres")[1] == "1 56 ok bandit_7 " .. MONEY .. " 201 0123456789abcdef0123456789abcdef" and hb.inventory:GetCountOfClass(MONEY) == 0, events("w134_tres")[1])
 LOG = {}
-KCD2MP_W134HostTake(2, 57, "bandit_7", MONEY, 201, 1)
-check("B13 the same take again (the other player, a moment later): gone", events("w134_tres")[1] == "2 57 gone bandit_7 " .. MONEY .. " 201", events("w134_tres")[1])
+KCD2MP_W134HostTake(2, 57, "bandit_7", MONEY, 201, 1, '0123456789abcdef0123456789abcdef')
+check("B13 the same take again (the other player, a moment later): gone", events("w134_tres")[1] == "2 57 gone bandit_7 " .. MONEY .. " 201 0123456789abcdef0123456789abcdef", events("w134_tres")[1])
 check("B13 every item exists once: no money left in the body, none created", hb.inventory:GetCountOfClass(MONEY) == 0)
 LOG = {}; for i = 1, 5 do loop() end
 check("B14 the changed body goes to every joiner (update, peer 0)", events("w134_bstate")[1] ~= nil and string.find(events("w134_bstate")[1], "^0 0 bandit_7 update ") ~= nil, events("w134_bstate")[1])
@@ -343,8 +343,22 @@ check("B14 ... once (no change, no resend)", #events("w134_bstate") == 0)
 local aw = hb.inventory.list[1]; hb.inventory:RemoveItem(aw); player.inventory:AddItem(aw)
 LOG = {}; for i = 1, 5 do loop() end
 check("B15 the host's own loot reaches the joiners", #events("w134_bstate") >= 1)
-KCD2MP_W134HostPut(1, 58, "bandit_7", COAT, 1, 0.5)
+KCD2MP_W134HostPut(1, 58, "bandit_7", COAT, 1, 0.5, '0123456789abcdef0123456789abcdef')
 check("B16 a joiner's put lands in the host's body", hb.inventory:GetCountOfClass(COAT) == 1)
+KCD2MP_W134HostPut(1, 58, "bandit_7", COAT, 1, 0.5, '0123456789abcdef0123456789abcdef')
+check('B17 retrying the same put does not create another coat', hb.inventory:GetCountOfClass(COAT) == 1)
+LOG = {}
+KCD2MP_W134HostTake(1, 56, 'bandit_7', MONEY, 201, 1, '0123456789abcdef0123456789abcdef')
+check('B18 retrying the same take replays ok without a second mutation', events('w134_tres')[1] == '1 56 ok bandit_7 ' .. MONEY .. ' 201 0123456789abcdef0123456789abcdef' and hb.inventory:GetCountOfClass(MONEY) == 0)
+hb.inventory:CreateItem(MONEY, 1, 2)
+local realDelete = hb.inventory.DeleteItem
+hb.inventory.DeleteItem = function() end
+LOG = {}
+KCD2MP_W134HostTake(1, 60, 'bandit_7', MONEY, 1, 1, '0123456789abcdef0123456789abcdef')
+check('B19 inert engine deletion is not acknowledged as a successful take', #events('w134_tres') == 0 and hb.inventory:GetCountOfClass(MONEY) == 2)
+hb.inventory.DeleteItem = realDelete
+KCD2MP_W134HostTake(1, 60, 'bandit_7', MONEY, 1, 1, '0123456789abcdef0123456789abcdef')
+check('B20 uncertain operation is not reapplied after the engine recovers', #events('w134_tres') == 0 and hb.inventory:GetCountOfClass(MONEY) == 2)
 
 -- ================= I: loose world items =================
 world(); asJoiner()

@@ -1871,6 +1871,7 @@ public partial class GameBridge(ClientConfig config)
             tailForPause.QuestLine += Wo137OnQuestLine;              // WO-137: dialogue lines (talking), player switches
             tailForPause.Wo144Line += Wo144OnEngineLine;             // WO-144: the engine's own reasons (refusals, dropped talks, scenes)
             tailForPause.LoadStarted += Wo124OnLoadStarted;          // WO-124
+            tailForPause.LoadStarted += Wo134OnLoadStarted;
             tailForPause.GameQuit += Wo124OnGameQuit;                // WO-124: quitting from the host's world
             tailForPause.SaveLoadAccepted += Wo124OnSaveLoadAccepted;   // WO-124
             tailForPause.LoadFailedToMenu += Wo124OnLoadFailedToMenu;   // WO-124
@@ -2272,6 +2273,7 @@ public partial class GameBridge(ClientConfig config)
                 tailForPause2.QuestLine -= Wo137OnQuestLine;              // WO-137
                 tailForPause2.Wo144Line -= Wo144OnEngineLine;             // WO-144
                 tailForPause2.LoadStarted -= Wo124OnLoadStarted;         // WO-124
+                tailForPause2.LoadStarted -= Wo134OnLoadStarted;
                 tailForPause2.GameQuit -= Wo124OnGameQuit;               // WO-124
                 tailForPause2.SaveLoadAccepted -= Wo124OnSaveLoadAccepted;  // WO-124
                 tailForPause2.LoadFailedToMenu -= Wo124OnLoadFailedToMenu;  // WO-124

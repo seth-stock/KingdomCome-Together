@@ -795,7 +795,7 @@ public static partial class Protocol
     /// rows. A v9 relay would drop both as unknown types; v9 and v10 refuse
     /// each other at Handshake.
     /// </summary>
-    public const byte Version = 10;
+    public const byte Version = 11; // scoped loot operations; legacy peers cannot safely retry mutations
 
     // C→S
     public const byte Handshake      = 0x00;

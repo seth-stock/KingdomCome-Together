@@ -666,8 +666,13 @@ public partial class GameBridge
         {
             List<string> branch;
             lock (_hostBranch) branch = [.. _hostBranch];
-            var pick = _henry.PickFor(tag, branch);
-            if (pick is null) { why = $"world {tag}: no snapshot could be read (all broken)"; abortReason = Protocol.JoinAbortNoHenrySource; return null; }
+            var exact = _henry.PickExact(tag, WhsSave.VerifyFooter(hostBytes).Stored);
+            var pick = exact ?? _henry.PickFor(tag, branch, allowUnpaired: false);
+            if (pick is null)
+            {
+                why = $"world {tag}: no valid character snapshot pairs with this save or its announced branch. Your other snapshots are preserved; load a checkpoint with a matching character before rejoining";
+                abortReason = Protocol.JoinAbortNoHenrySource; return null;
+            }
             Console.WriteLine($"MP-HENRY joiner: join 0x{joinId:x8}: world {tag} -- RESTORE snapshot {pick.Snapshot.Short} ({pick.Snapshot.Source}): {pick.How}");
             Wo134OnRestorePick(pick.Snapshot);   // WO-134: its chest ledger comes back with it
             return new HenryChoice("restore", pick.Parts, null, $"snapshot {pick.Snapshot.Short}");

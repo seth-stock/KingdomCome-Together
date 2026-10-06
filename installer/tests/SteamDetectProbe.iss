@@ -69,6 +69,11 @@ begin
     layout, so the Mods target derivation is covered too. }
   DetectModdingToolsIn(Fixtures + '\multi\Steam', Exe);
   Log('RESULT gameroot | value=' + GameRootOf(Exe));
+  Log('RESULT data-complete | missing=' + MissingGameData(Exe));
+  Exe := Fixtures + '\incomplete\Steam\steamapps\common\KCD2Mod\Bin\Win64ReleaseSteamLTO_DLL\KingdomCome.exe';
+  Log('RESULT data-incomplete | missing=' + MissingGameData(Exe));
+  Exe := Fixtures + '\emptydata\Steam\steamapps\common\KCD2Mod\Bin\Win64ReleaseSteamLTO_DLL\KingdomCome.exe';
+  Log('RESULT data-empty | missing=' + MissingGameData(Exe));
 
   Log('RESULT quotedtoken | a=' + QuotedToken('	"path"		"D:\\SteamLibrary"', 1) +
       ' | b=' + UnescapeVdf(QuotedToken('	"path"		"D:\\SteamLibrary"', 2)) +

@@ -47,6 +47,7 @@ $Manifest = Join-Path $RepoRoot 'kdcmp\mod.manifest'
 $Files = @(
     'Scripts\Startup\kdcmp.lua',
     'Scripts\Startup\kdcmp_menu.lua',    # the in-game Multiplayer tab (docs/MENU.md)
+    'Scripts\Startup\kdcmp_loot_operations.lua', # scoped inventory retry results
     'Libs\Tables\item\clothing_preset__kdcmp.xml',
     'Libs\Tables\rpg\buff__kcdmp.xml'    # WO-113: the death-guard buff row
 )
@@ -130,6 +131,7 @@ $zip = [System.IO.Compression.ZipFile]::Open($PakPath, [System.IO.Compression.Zi
 try {
     foreach ($rel in $Files) {
         $entry  = $zip.CreateEntry($rel.Replace('\', '/'), [System.IO.Compression.CompressionLevel]::NoCompression)
+        $entry.LastWriteTime = [DateTimeOffset]::new(2026, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
         $stream = $entry.Open()
         $bytes  = [System.IO.File]::ReadAllBytes((Join-Path $SrcRoot $rel))
         $stream.Write($bytes, 0, $bytes.Length)

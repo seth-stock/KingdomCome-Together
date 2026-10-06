@@ -3,6 +3,7 @@ memory.md
 .claude
 
 # Build output
+_work/
 bin/
 obj/
 out/

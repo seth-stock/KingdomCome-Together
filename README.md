@@ -1,8 +1,11 @@
 <p align="center">
+  <!-- Modified community reliability development branch; see docs/IMPLEMENTATION-STATUS.md. -->
   <img src="docs/branding/KCT_txt-900.png" alt="Kingdom Come: Together" width="600">
 </p>
 
 <h1 align="center">Kingdom Come: Together</h1>
+
+> Modified community reliability development branch. Implementation is incomplete; see [implementation status](docs/IMPLEMENTATION-STATUS.md). Protocol 11 requires matching agent/relay sources. No release or installation has been completed from this branch.
 <p align="center"><em>An <strong>unofficial</strong>, free co-op mod for Kingdom Come: Deliverance II.</em><br>
 <strong>Not affiliated with or endorsed by Warhorse Studios or PLAION.</strong></p>
 

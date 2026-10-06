@@ -131,12 +131,22 @@ public sealed class HenryStore
 
     public sealed record Pick(Snapshot Snapshot, WhsSave.HenryParts Parts, string How);
 
+    /// <summary>Restore only a snapshot paired with this exact world file. Never
+    /// substitute a newer character or another branch's inventory.</summary>
+    public Pick? PickExact(string tag, string worldMd5)
+    {
+        if (!Regex.IsMatch(worldMd5, "^[0-9a-f]{32}$")) throw new ArgumentException("Invalid world MD5.");
+        foreach (var s in Snapshots(tag).Where(s => s.Md5 == worldMd5))
+            if (Load(s) is { } parts) return new(s, parts, "paired with the exact received world");
+        return null;
+    }
+
     /// <summary>
     /// WO-125 Phase 5: the snapshot paired with the newest save of the host's
     /// current branch that has one (<paramref name="branchNewestFirst"/>: md5s),
     /// else the newest snapshot of the world. A broken snapshot is skipped.
     /// </summary>
-    public Pick? PickFor(string tag, IReadOnlyList<string> branchNewestFirst)
+    public Pick? PickFor(string tag, IReadOnlyList<string> branchNewestFirst, bool allowUnpaired = true)
     {
         var all = Snapshots(tag);
         int pos = 0;
@@ -146,6 +156,7 @@ public sealed class HenryStore
                 if (Load(s) is { } p) return new Pick(s, p, pos == 0 ? "paired with the host's newest save" : $"paired with the host's branch save #{pos} (newest = 0)");
             pos++;
         }
+        if (!allowUnpaired) return null;
         foreach (var s in all)
             if (Load(s) is { } p) return new Pick(s, p, branchNewestFirst.Count == 0 ? "newest (the host sent no branch)" : "newest (no snapshot pairs with any save of the host's branch)");
         return null;

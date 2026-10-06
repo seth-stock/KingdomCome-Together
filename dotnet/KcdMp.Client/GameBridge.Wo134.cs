@@ -27,6 +27,8 @@ namespace KcdMp.Client;
 public partial class GameBridge
 {
     private volatile bool _w134Connected;
+    private string _w134RequestScope = Guid.NewGuid().ToString("N");
+    private void Wo134OnLoadStarted() => _w134RequestScope = Guid.NewGuid().ToString("N");
     private readonly ChestLedgerStore _chestStore = new(ChestLedgerStore.DefaultRoot());
     private readonly object _w134Gate = new();
     private Wo134Rules.Ledger? _w134HostLedger;       // the host's running ledger for _w134HostTag
@@ -49,6 +51,7 @@ public partial class GameBridge
     private void Wo134OnConnect(CancellationToken ct)
     {
         _w134Connected = true;
+        _w134RequestScope = Guid.NewGuid().ToString("N");
         _w134Worn.Clear();
         _ = Wo134LoopAsync(ct);
     }
@@ -90,8 +93,10 @@ public partial class GameBridge
 
     private static string B(bool v) => v ? "true" : "false";
 
-    private async Task Wo134SendAsync(byte type, byte target, byte kind, uint tok, string text)
+    private async Task Wo134SendAsync(byte type, byte target, byte kind, uint tok, string text, string? responseScope = null)
     {
+        if (type == Protocol.LootAskUp) text = LootMsg.ScopedText(_w134RequestScope, text);
+        if (responseScope is not null) text = LootMsg.ScopedText(responseScope, text);
         if (type == Protocol.LootAskUp && Wo140HoldOutbound($"a loot ask ({Protocol.LootAskName(kind)})")) return;   // WO-140: its own world
         try
         {
@@ -133,8 +138,9 @@ public partial class GameBridge
                 if (f.Length == 8 && Wo134HostRole) _ = Wo134HostBodyStateAsync(f);
                 return;
             case "w134_tres":      // <peer> <tok> <ok|gone|mine|none> <body> <cls> <amt> (WO-136: mine/none = no notice)
-                if (f.Length == 6 && Wo134HostRole && byte.TryParse(f[0], out byte tp) && Wo136Rules.IsTakeVerdict(f[2]))
-                    _ = Wo134SendAsync(Protocol.LootHostUp, tp, Protocol.LootHostTakeResult, U(f[1]), $"{f[2]} {f[3]} {f[4]} {f[5]}");
+                if (f.Length == 7 && Wo134HostRole && byte.TryParse(f[0], out byte tp) && Wo136Rules.IsTakeVerdict(f[2])
+                    && Guid.TryParseExact(f[6], "N", out _))
+                    _ = Wo134SendAsync(Protocol.LootHostUp, tp, Protocol.LootHostTakeResult, U(f[1]), $"{f[2]} {f[3]} {f[4]} {f[5]}", f[6]);
                 return;
             case "w134_ires":      // <peer> <tok> <ok|gone|unknown|mine> <cls> <x> <y> <z>
                 if (f.Length == 7 && Wo134HostRole && byte.TryParse(f[0], out byte ip) && Wo136Rules.IsItemVerdict(f[2]))
@@ -200,14 +206,26 @@ public partial class GameBridge
     private async Task Wo134OnFrameAsync(int type, byte src, byte[] body)
     {
         if (!LootMsg.TryDecode(body, out var m)) { Interlocked.Increment(ref _w134Dropped); return; }
+        string scope = "";
+        if (type == Protocol.LootAskDown)
+        {
+            if (!LootMsg.TryUnscope(m.Text, out scope, out string payload)) { Interlocked.Increment(ref _w134Dropped); return; }
+            m = m with { Text = payload };
+        }
         if (await Wo135OnLootFrameAsync(type, src, m)) return;   // WO-135: takedowns, the host's build
+        if (type == Protocol.LootHostDown && m.Kind == Protocol.LootHostTakeResult)
+        {
+            if (!LootMsg.TryUnscope(m.Text, out string responseScope, out string payload) || responseScope != _w134RequestScope)
+            { Interlocked.Increment(ref _w134Dropped); return; }
+            m = m with { Text = payload };
+        }
         var f = m.Text.Split(' ');
         string Q(string s) => EscapeLua(s);
         if (type == Protocol.LootAskDown)
         {
             // The host: a joiner's request. Checked field by field, then to the mod.
             Interlocked.Increment(ref _w134AsksIn);
-            if (!Wo134HostRole) { Interlocked.Increment(ref _w134Dropped); return; }
+            if (!Wo134HostRole || _where == GameWhere.Menu || Wo136Holding) { Interlocked.Increment(ref _w134Dropped); return; }
             switch (m.Kind)
             {
                 case Protocol.LootAskBodyOpen when f.Length == 1 && Wo134Rules.BodyName.IsMatch(f[0]):
@@ -216,7 +234,7 @@ public partial class GameBridge
                 case Protocol.LootAskBodyTake or Protocol.LootAskBodyPut when f.Length == 4 && Wo134Rules.BodyName.IsMatch(f[0])
                         && Wo134Rules.TryClass(f[1], out var cls) && Wo134Rules.TryAmount(f[2], out int amt) && Wo134Rules.TryHealth(f[3], out float hp):
                     string fn = m.Kind == Protocol.LootAskBodyTake ? "KCD2MP_W134HostTake" : "KCD2MP_W134HostPut";
-                    await ExecLuaAsync($"if {fn} then {fn}({src}, {m.Tok}, \"{f[0]}\", \"{cls:D}\", {amt}, {Wo134Rules.F(hp)}) end");
+                    await ExecLuaAsync($"if {fn} then {fn}({src}, {m.Tok}, \"{f[0]}\", \"{cls:D}\", {amt}, {Wo134Rules.F(hp)}, \"{scope}\") end");
                     return;
                 case Protocol.LootAskItemTake when f.Length == 5 && Wo134Rules.TryClass(f[0], out var icls) && Wo134Rules.TryCoord(f[1], out float x)
                         && Wo134Rules.TryCoord(f[2], out float y) && Wo134Rules.TryCoord(f[3], out float z) && f[4] is "0" or "1":

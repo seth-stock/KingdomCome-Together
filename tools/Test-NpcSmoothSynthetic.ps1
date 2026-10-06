@@ -99,7 +99,9 @@ $marker = '-- @@KDCMP@@'
 if ($scenarioText.IndexOf($marker) -lt 0) { throw "scenario file lacks the $marker splice marker" }
 $parts = $scenarioText -split [regex]::Escape($marker), 2
 $mod = Get-Content $KdcmpLua -Raw
-$code = $parts[0] + "`n" + $mod + "`n" + $parts[1]
+$operationsPath = Join-Path (Split-Path $KdcmpLua -Parent) 'kdcmp_loot_operations.lua'
+$operations = if (Test-Path -LiteralPath $operationsPath) { Get-Content -LiteralPath $operationsPath -Raw } else { '' }
+$code = $parts[0] + "`n" + $operations + "`n" + $mod + "`n" + $parts[1]
 
 Write-Host $Title
 Write-Host "  scenario  : $((Resolve-Path $Scenario).Path)"

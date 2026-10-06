@@ -121,6 +121,45 @@ begin
   end;
 end;
 
+{ Engine DLLs alone are not a usable workspace. Check the data copied/linked
+  by WorkspaceSetup before any installer mutation, including silent installs. }
+function MissingGameData(const ExePath: String): String;
+var
+  Root, Name: String;
+  Names: TArrayOfString;
+  I: Integer;
+  Bytes: Int64;
+begin
+  Result := '';
+  Root := GameRootOf(ExePath);
+  if Root = '' then begin Result := 'Data/Engine workspace root'; Exit; end;
+  SetArrayLength(Names, 4);
+  Names[0] := 'Tables.pak'; Names[1] := 'Scripts.pak';
+  Names[2] := 'GameData.pak'; Names[3] := 'Characters.pak';
+  for I := 0 to GetArrayLength(Names) - 1 do
+  begin
+    Name := Root + '\Data\' + Names[I];
+    Bytes := 0;
+    if (not FileSize64(Name, Bytes)) or (Bytes <= 0) then
+    begin
+      if Result <> '' then Result := Result + ', ';
+      Result := Result + Names[I];
+    end;
+  end;
+end;
+
+function GameDataSetupError(const ExePath: String): String;
+var
+  Missing: String;
+begin
+  Result := '';
+  Missing := MissingGameData(ExePath);
+  if Missing <> '' then
+    Result := 'The Modding Tools game data is incomplete or unreadable: ' + Missing + '.' + #13#10 +
+      'Run Tools\ModdingWorkspaceSetup\WorkspaceSetup.exe in your KCD2Mod folder, ' +
+      'complete the copy/link setup, then re-check. No mod files have been changed.';
+end;
+
 function FindGameExeUnder(const InstallDir: String): String;
 var
   FindRec: TFindRec;

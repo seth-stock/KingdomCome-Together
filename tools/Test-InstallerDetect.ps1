@@ -42,6 +42,7 @@ function Get-Iscc {
     $onPath = Get-Command ISCC.exe -ErrorAction SilentlyContinue
     if ($onPath) { return $onPath.Source }
     foreach ($candidate in @(
+        "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
         "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
     )) {
@@ -98,6 +99,9 @@ function New-ModdingToolsLayout($library, $installDir) {
     $base = "$library\steamapps\common\$installDir"
     New-Dir "$base\Data"
     New-Dir "$base\Engine"
+    foreach ($pak in @('Tables.pak', 'Scripts.pak', 'GameData.pak', 'Characters.pak')) {
+        New-EmptyFile "$base\Data\$pak"
+    }
     New-EmptyFile "$base\Bin\Win64ReleaseSteamLTO_DLL\KingdomCome.exe"
     New-EmptyFile "$base\Bin\Win64ReleaseSteamLTO_DLL\Framework.dll"
     New-EmptyFile "$base\Bin\Win64ReleaseSteamLTO_DLL\CrySystem.dll"
@@ -115,7 +119,7 @@ function New-RetailLayout($library, $installDir) {
 }
 
 Write-Host "Building fixtures in $WorkDir ..."
-if (Test-Path $WorkDir) { Remove-Item $WorkDir -Recurse -Force }
+if (Test-Path $WorkDir) { throw 'Fixture directory already exists; choose a new -WorkDir so existing files are preserved.' }
 New-Dir $WorkDir
 
 # multi-library: app lives in the second library, not the Steam root.
@@ -164,6 +168,10 @@ New-Dir "$WorkDir\offline\Steam\steamapps"
 New-LibraryFoldersVdf "$WorkDir\offline\Steam" @("$WorkDir\offline\Steam", "Z:\NoSuchSteamLibrary")
 
 # --- probe ---------------------------------------------------------------
+New-ModdingToolsLayout "$WorkDir\incomplete\Steam" 'KCD2Mod' | Out-Null
+Remove-Item -LiteralPath "$WorkDir\incomplete\Steam\steamapps\common\KCD2Mod\Data\Tables.pak"
+New-ModdingToolsLayout "$WorkDir\emptydata\Steam" 'KCD2Mod' | Out-Null
+[System.IO.File]::WriteAllBytes("$WorkDir\emptydata\Steam\steamapps\common\KCD2Mod\Data\Scripts.pak", [byte[]]@())
 
 $iscc = Get-Iscc
 $probeIss = Join-Path $root "installer\tests\SteamDetectProbe.iss"
@@ -175,7 +183,7 @@ Write-Host "Compiling $probeIss ..."
 if ($LASTEXITCODE -ne 0) { throw "probe compile failed" }
 
 Write-Host "Running probe ..."
-Start-Process $probeExe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/LOG=$probeLog", "/FIXTURES=$WorkDir" -Wait
+Start-Process $probeExe -WindowStyle Hidden -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/LOG=$probeLog", "/FIXTURES=$WorkDir" -Wait
 if (-not (Test-Path $probeLog)) { throw "probe produced no log at $probeLog" }
 
 $results = @{}
@@ -217,6 +225,9 @@ Assert-That "empty Steam path finds nothing" ((Get-Field empty-steam-path found)
 
 Write-Host ""
 Write-Host "Parsing"
+Assert-That 'complete workspace data passes' ((Get-Field data-complete missing) -eq '') $results['data-complete']
+Assert-That 'missing Tables.pak is detected' ((Get-Field data-incomplete missing) -eq 'Tables.pak') $results['data-incomplete']
+Assert-That 'empty Scripts.pak is detected' ((Get-Field data-empty missing) -eq 'Scripts.pak') $results['data-empty']
 Assert-That "quoted key token" ((Get-Field quotedtoken a) -eq "path") (Get-Field quotedtoken a)
 Assert-That "quoted value token, unescaped" ((Get-Field quotedtoken b) -eq "D:\SteamLibrary") (Get-Field quotedtoken b)
 Assert-That "line without quotes yields empty" ((Get-Field quotedtoken missing) -eq "[]") (Get-Field quotedtoken missing)

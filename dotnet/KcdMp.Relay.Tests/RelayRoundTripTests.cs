@@ -879,7 +879,7 @@ public class RelayRoundTripTests : IClassFixture<RelayFixture>
         await using var _p = p;
         Assert.Equal(Protocol.VersionMismatch, type);
         Assert.Equal(Protocol.Version, payload[0]);
-        Assert.Equal(10, Protocol.Version);   // WO-114 bumped 9 -> 10
+        Assert.Equal(11, Protocol.Version);   // scoped loot operations
     }
 
     // ---- WO-114: the leash 0x58..0x5B, protocol v10 -------------------------
@@ -890,7 +890,7 @@ public class RelayRoundTripTests : IClassFixture<RelayFixture>
         var (p, type, payload) = await Peer.ConnectRawAsync(_relay.TcpPort, "v9build", ReleaseVersionInfo.Current, 9);
         await using var _p = p;
         Assert.Equal(Protocol.VersionMismatch, type);
-        Assert.Equal(10, payload[0]);
+        Assert.Equal(11, payload[0]);
     }
 
     [Fact]

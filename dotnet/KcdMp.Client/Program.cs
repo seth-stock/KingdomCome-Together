@@ -11,6 +11,8 @@ using System.Text.RegularExpressions;
 // rotates or overwrites the agent's own log.
 if (args.Contains("--save-tool"))
     return WhsSave.RunCli(args, Console.Out);
+if (args.Contains("--checkpoint-tool"))
+    return CheckpointCommands.Run(args, Console.Out);
 
 // --keys-pak (WO-148): builds Mods\kdcmp\Data\kdcmp_keys.pak from the player's own game files plus
 // our dice-key lines (KeybindPak.cs). Run by Setup and by the launcher before a game start; like

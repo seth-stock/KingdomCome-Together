@@ -75,6 +75,17 @@ public static partial class Protocol
 /// <summary>WO-134: one LootAsk or LootHost message (the body after the join header).</summary>
 public readonly record struct LootMsg(byte Kind, uint Tok, string Text)
 {
+    public static string ScopedText(string scope, string text)
+    {
+        if (!Guid.TryParseExact(scope, "N", out _)) throw new ArgumentException("Invalid operation scope.");
+        return "@" + scope.ToLowerInvariant() + " " + text;
+    }
+    public static bool TryUnscope(string text, out string scope, out string payload)
+    {
+        scope = ""; payload = "";
+        if (text.Length < 35 || text[0] != '@' || text[33] != ' ' || !Guid.TryParseExact(text.Substring(1, 32), "N", out _)) return false;
+        scope = text.Substring(1, 32).ToLowerInvariant(); payload = text[34..]; return payload.Length > 0;
+    }
     public byte[] BuildUp(byte type, byte target)
     {
         var tb = Encoding.ASCII.GetBytes(Text ?? "");

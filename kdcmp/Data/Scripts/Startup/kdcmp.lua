@@ -15782,6 +15782,10 @@ KCD2MP.w134 = {
               chestTakes = 0, chestPuts = 0, applied = 0, expired = 0, skipped = 0, bcasts = 0 },
 }
 local W134 = {}
+do
+    local ok, err = pcall(Script.ReloadScript, 'Scripts/Startup/kdcmp_loot_operations.lua')
+    if not ok then mp_log('WO134-OP module unavailable: ' .. tostring(err)) end
+end
 
 function W134.log(line)
     local w = KCD2MP.w134
@@ -15915,14 +15919,14 @@ end
 -- { { w = wuid, cls, amt, hp } ... } of an entity's inventory.
 function W134.items(e)
     local o = {}
-    pcall(function()
+    local ok = pcall(function()
         local t = e.inventory:GetInventoryTable()
         for i = 1, #t do
             local it = ItemManager.GetItem(t[i])
             if it and it.class then o[#o + 1] = { w = t[i], cls = it.class, amt = it.amount or 1, hp = it.health or 1 } end
         end
     end)
-    return o
+    return o, ok
 end
 
 function W134.encode(list)
@@ -15941,7 +15945,15 @@ function W134.sig(list) return table.concat(W134.encode(list), ",") end
 function W134.deleteClass(e, cls, n, hp, keep)
     local left = n
     local cands = {}
-    for _, it in ipairs(W134.items(e)) do
+    local initial, reliable = W134.items(e)
+    if not reliable then error('Inventory cannot be read before deletion') end
+    local function count(list)
+        local total = 0
+        for _, it in ipairs(list) do if it.cls == cls then total = total + it.amt end end
+        return total
+    end
+    local previous = count(initial)
+    for _, it in ipairs(initial) do
         if it.cls == cls then cands[#cands + 1] = it end
     end
     table.sort(cands, function(a, b)
@@ -15953,8 +15965,13 @@ function W134.deleteClass(e, cls, n, hp, keep)
     for _, it in ipairs(cands) do
         if left <= 0 then break end
         local k = math.min(left, it.amt)
-        local ok = pcall(function() e.inventory:DeleteItem(it.w, k) end)
-        if ok then left = left - k end
+        pcall(function() e.inventory:DeleteItem(it.w, k) end)
+        local after, readOk = W134.items(e)
+        if not readOk then error('Inventory cannot be read after deletion; recovery required') end
+        local current = count(after)
+        local removed = previous - current
+        if removed < 0 or removed > left then error('Unexpected inventory delta; recovery required') end
+        left = left - removed; previous = current
     end
     return n - left
 end
@@ -16292,19 +16309,22 @@ end
 
 -- Agent -> host: a joiner took an item out of its copy of this body. The host's
 -- body is the one inventory: the item comes out here, or it was already gone.
-function KCD2MP_W134HostTake(peer, tok, name, cls, amt, hp)
+function W134.hostTakeOnce(peer, tok, name, cls, amt, hp)
     local w = KCD2MP.w134
     amt = tonumber(amt) or 1
     local e = nil
     pcall(function() e = System.GetEntityByName(tostring(name)) end)
     local have = 0
     if e then
-        for _, it in ipairs(W134.items(e)) do if it.cls == cls then have = have + it.amt end end
+        local items, readable = W134.items(e)
+        if not readable then return nil end
+        for _, it in ipairs(items) do if it.cls == cls then have = have + it.amt end end
     end
     local verdict = "gone"
     if e and have >= amt then
         local n = W134.deleteClass(e, cls, amt, tonumber(hp) or 1, nil)
-        if n >= amt then verdict = "ok" end
+        if n >= amt then verdict = "ok"
+        else return nil end -- quarantined by the operation cache; never acknowledge an unverified transfer
     end
     -- WO-136 Phase 7: a refused take names who got it -- mine (this joiner's own
     -- earlier take), none (this body never held it), else gone (someone else: the
@@ -16313,19 +16333,45 @@ function KCD2MP_W134HostTake(peer, tok, name, cls, amt, hp)
     else verdict = W134.goneWhy(tostring(name), tostring(cls), tostring(peer), have) end
     if e then W134.noteCounts(tostring(name), e) end
     w.stats.hostTakes = w.stats.hostTakes + 1
-    KCD2MP_EmitEvent("w134_tres", string.format("%s %s %s %s %s %d", tostring(peer), tostring(tok), verdict, tostring(name), tostring(cls), amt))
     W134.log(string.format("WO134-BODY host-take npc=%s cls=%s amt=%d from=%s -> %s (had %d)", tostring(name), tostring(cls), amt, tostring(peer), verdict, have))
     if e then w.bodySig[tostring(name)] = nil end   -- the next watch pass sends the new state to every joiner
+    return verdict
+end
+
+function KCD2MP_W134HostTake(peer, tok, name, cls, amt, hp, scope)
+    local ops = KCD2MP_LootOperations
+    if not ops then return end
+    local fp = table.concat({ 'take', tostring(name), tostring(cls), tostring(amt), tostring(hp) }, '|')
+    local verdict, status = ops.execute(scope, peer, tok, fp, function() return W134.hostTakeOnce(peer, tok, name, cls, amt, hp) end)
+    if verdict then
+        KCD2MP_EmitEvent('w134_tres', string.format('%s %s %s %s %s %d %s', tostring(peer), tostring(tok), verdict, tostring(name), tostring(cls), tonumber(amt), scope))
+    elseif not verdict then W134.log('WO134-OP unresolved=' .. tostring(status) .. ' -- checkpoint recovery required') end
 end
 
 -- Agent -> host: a joiner put an item into its copy of this body: it goes into the host's too.
-function KCD2MP_W134HostPut(peer, tok, name, cls, amt, hp)
+function KCD2MP_W134HostPut(peer, tok, name, cls, amt, hp, scope)
+    local ops = KCD2MP_LootOperations
+    if not ops then return end
+    local fp = table.concat({ 'put', tostring(name), tostring(cls), tostring(amt), tostring(hp) }, '|')
+    local result, status = ops.execute(scope, peer, tok, fp, function()
     local e = nil
     pcall(function() e = System.GetEntityByName(tostring(name)) end)
-    if not e then return end
-    pcall(function() e.inventory:CreateItem(tostring(cls), tonumber(hp) or 1, tonumber(amt) or 1) end)
+    if not e then return 'gone' end
+    local before, readOk = W134.items(e)
+    if not readOk then return nil end
+    local function count(list)
+        local n = 0; for _, item in ipairs(list) do if item.cls == cls then n = n + item.amt end end; return n
+    end
+    e.inventory:CreateItem(tostring(cls), tonumber(hp) or 1, tonumber(amt) or 1)
+    local after, afterOk = W134.items(e)
+    if not afterOk or count(after) - count(before) ~= tonumber(amt) then return nil end
     KCD2MP.w134.bodySig[tostring(name)] = nil
     W134.log(string.format("WO134-BODY host-put npc=%s cls=%s amt=%s from=%s", tostring(name), tostring(cls), tostring(amt), tostring(peer)))
+    return 'ok'
+    end)
+    if result then
+        KCD2MP_EmitEvent('w134_tres', string.format('%s %s %s %s %s %d %s', tostring(peer), tostring(tok), result, tostring(name), tostring(cls), tonumber(amt), scope))
+    else W134.log('WO134-OP unresolved=' .. tostring(status) .. ' -- put not retried automatically') end
 end
 
 -- Host, every loop pass: dead bodies around the host and every avatar; a body

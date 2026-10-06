@@ -444,6 +444,11 @@ begin
       'If this is not the copy you want to use, click Browse and pick the' + #13#10 +
       'KingdomCome.exe of your Modding Tools install.';
     SteamButton.Visible := False;
+    if MissingGameData(DetectedGameExe) <> '' then
+    begin
+      GameStatusLabel.Caption := 'Modding Tools found; game data setup is incomplete.';
+      GameHelpLabel.Caption := GameDataSetupError(DetectedGameExe);
+    end;
   end
   else
   begin
@@ -652,6 +657,8 @@ end;
   verified -- an installer cannot make Steam download anything, so detect,
   deep-link and refuse to advance is as strong as this gets. }
 function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  DataError: String;
 begin
   Result := True;
   if CurPageID = GamePage.ID then
@@ -663,6 +670,12 @@ begin
              'If you already have them somewhere unusual, use "Browse..." to point at the' + #13#10 +
              'KingdomCome.exe inside that install.',
              mbError, MB_OK);
+    if Result then
+    begin
+      DataError := GameDataSetupError(DetectedGameExe);
+      Result := DataError = '';
+      if not Result then MsgBox(DataError, mbError, MB_OK);
+    end;
   end;
 end;
 
@@ -782,6 +795,9 @@ begin
   end;
 
   { The process gate, before anything is written -- see its comment above. }
+  Result := GameDataSetupError(DetectedGameExe);
+  if Result <> '' then Exit;
+
   Result := EnsureNothingRunning();
   if Result <> '' then Exit;
 

@@ -74,6 +74,8 @@ public static partial class WhsSave
         return PartsFromStream(c.Raw, DescriptionSummary(c.Desc).GetValueOrDefault("BuildInfo") ?? "", origin);
     }
 
+    public static IReadOnlySet<string> InventoryInstanceIds(HenryParts parts) => RecordItemSet(parts.Record);
+
     // ------------------------------------------------------------------ the stored block
 
     private static readonly byte[] BlockMagic = "KCDMPHB1"u8.ToArray();
