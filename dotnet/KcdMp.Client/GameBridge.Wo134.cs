@@ -137,7 +137,7 @@ public partial class GameBridge
             case "w134_bstate":    // <peer> <tok> <body> <reason> <flags> <part> <nparts> <items>
                 if (f.Length == 8 && Wo134HostRole) _ = Wo134HostBodyStateAsync(f);
                 return;
-            case "w134_tres":      // <peer> <tok> <ok|gone|mine|none> <body> <cls> <amt> (WO-136: mine/none = no notice)
+            case "w134_tres":      // <peer> <tok> <ok|gone|mine|none> <body> <cls> <amt> <request scope>
                 if (f.Length == 7 && Wo134HostRole && byte.TryParse(f[0], out byte tp) && Wo136Rules.IsTakeVerdict(f[2])
                     && Guid.TryParseExact(f[6], "N", out _))
                     _ = Wo134SendAsync(Protocol.LootHostUp, tp, Protocol.LootHostTakeResult, U(f[1]), $"{f[2]} {f[3]} {f[4]} {f[5]}", f[6]);

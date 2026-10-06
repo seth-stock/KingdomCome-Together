@@ -39,9 +39,10 @@ namespace KcdMp.Wire;
 //   6 TakedownResult "<ok|refused> <body> <kind>"   WO-135
 //   7 Build      "<BuildInfo>"                     WO-135: the host world's game build (on change, every 30 s)
 //
-// No protocol bump: two new types on the join channel. A mixed release is
-// refused at the relay (WO-110 R9), so a peer that does not know them never
-// shares a session with one that sends them.
+// Protocol 11: all LootAsk text and body TakeResult text carry an
+// @<32-hex connection/load scope> prefix before the fields listed above.
+// Results echo the request scope; a stale response cannot resolve a new
+// incarnation's reused numeric token. Legacy protocol peers are refused.
 // ---------------------------------------------------------------------------
 
 public static partial class Protocol

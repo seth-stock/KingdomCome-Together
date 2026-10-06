@@ -929,14 +929,17 @@ public class RelayRoundTripTests : IClassFixture<RelayFixture>
         var (a, b) = await TwoPeersAsync();   // a = the host (damage authority), b = the joiner
         await using var _a = a; await using var _b = b;
 
-        var ask = new LootMsg(Protocol.LootAskItemTake, 42, "4a6fa310-067a-404d-9813-bd1761d1c70d 2448.9 2080.9 117.6 0");
+        const string scope = "0123456789abcdef0123456789abcdef";
+        var ask = new LootMsg(Protocol.LootAskBodyTake, 42, LootMsg.ScopedText(scope, "bandit_1 4a6fa310-067a-404d-9813-bd1761d1c70d 1 0.5"));
         await b.SendRawAsync(ask.BuildUp(Protocol.LootAskUp, Protocol.JoinTargetHost));
         var down = await a.ReadUntilAsync(Protocol.LootAskDown, Wait);
         Assert.Equal(b.Id, down[0]);
         Assert.True(LootMsg.TryDecode(down.AsSpan(1 + Protocol.JoinHeaderLen), out var got));
         Assert.Equal(ask, got);
+        Assert.True(LootMsg.TryUnscope(got.Text, out string receivedScope, out _));
+        Assert.Equal(scope, receivedScope);
 
-        var res = new LootMsg(Protocol.LootHostItemResult, 42, "ok 4a6fa310-067a-404d-9813-bd1761d1c70d 2448.9 2080.9 117.6");
+        var res = new LootMsg(Protocol.LootHostTakeResult, 42, LootMsg.ScopedText(scope, "ok bandit_1 4a6fa310-067a-404d-9813-bd1761d1c70d 1"));
         await a.SendRawAsync(res.BuildUp(Protocol.LootHostUp, b.Id));
         var rd = await b.ReadUntilAsync(Protocol.LootHostDown, Wait);
         Assert.Equal(a.Id, rd[0]);
