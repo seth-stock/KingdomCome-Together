@@ -5356,6 +5356,61 @@ function KCD2MP_Wo125Files(arg)
     return true
 end
 
+-- WO-157: mp_henry_home [playlineN/file]: send the character of the shared world back to this player's own world, as a NEW manual
+-- save (the agent does all of it; this only carries the command). mp_henry_home_on_leave on|off: do it whenever this game leaves a
+-- host's world.
+function KCD2MP_Wo157Home(arg)
+    local v = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if v == "%line" or v == "nil" then v = "" end
+    if v ~= "" and not v:match("^playline[0-4]/[%w_]+$") and not v:match("^playline[0-4]/[%w_]+%.whs$") then
+        mp_log("mp_henry_home: expected nothing or playlineN/file (e.g. playline1/save021), got '" .. v .. "'")
+        return false
+    end
+    mp_log("WO157-CMD mp_henry_home " .. (v == "" and "(your character's own world)" or v))
+    KCD2MP_EmitEvent("wo157_home", v)
+    return true
+end
+
+-- WO-157: mp_world_copy [N]: save a copy of the shared world, with this player's character, as this player's OWN save (playline N, default
+-- the first playline with no saves). The agent does the work; the host and the other players are not told.
+function KCD2MP_Wo157Copy(arg)
+    local v = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if v == "%line" or v == "nil" then v = "" end
+    if v ~= "" and not v:match("^[0-4]$") then
+        mp_log("mp_world_copy: expected nothing or a playline number 0 to 4, got '" .. v .. "'")
+        return false
+    end
+    mp_log("WO157-CMD mp_world_copy " .. (v == "" and "(the first empty playline)" or v))
+    KCD2MP_EmitEvent("wo157_copy", v)
+    return true
+end
+
+-- WO-157: mp_quest_dlc on|off: whether DLC quest changes are shared like every other quest's (default on: a joiner runs the host's world,
+-- which already needs the DLCs it names). Off = the older rule, DLC stays out of the session.
+function KCD2MP_Wo157Dlc(arg)
+    local v = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    if v == "%line" or v == "nil" then v = "" end
+    if v ~= "" and v ~= "on" and v ~= "off" then
+        mp_log("mp_quest_dlc: expected on or off, got '" .. v .. "'")
+        return false
+    end
+    mp_log("WO157-CMD mp_quest_dlc " .. (v == "" and "(report)" or v))
+    KCD2MP_EmitEvent("wo157_dlc", v)
+    return true
+end
+
+function KCD2MP_Wo157Cfg(arg)
+    local v = tostring(arg or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    if v == "%line" or v == "nil" then v = "" end
+    if v ~= "" and v ~= "on" and v ~= "off" then
+        mp_log("mp_henry_home_on_leave: expected on or off, got '" .. v .. "'")
+        return false
+    end
+    mp_log("WO157-CMD mp_henry_home_on_leave " .. (v == "" and "(report)" or v))
+    KCD2MP_EmitEvent("wo157_cfg", v)
+    return true
+end
+
 -- WO-127: the leash recorder (for WO-128). The agent does the work (a native
 -- sample a second, CSV beside agent.log); this only flips it and answers the
 -- agent's once-a-second question about the host's own context.
@@ -21173,6 +21228,10 @@ local ok, err = pcall(function()
     -- WO-125: continuity (per-world Henry files; the agent keeps them).
     System.AddCCommand("mp_henry_reset",         "KCD2MP_Wo125Reset()",                   "WO-125: start over in your current host's world: its stored character is deleted and the next join asks Bring / Start fresh again")
     System.AddCCommand("mp_henry_files",         'KCD2MP_Wo125Files(%line)',              "WO-125: list the host worlds your character is stored for (world, last joined, snapshots, size): mp_henry_files; delete one: mp_henry_files delete <world>")
+    System.AddCCommand("mp_henry_home",          'KCD2MP_Wo157Home(%line)',               "WO-157: send your character back to your own world as a new manual save: mp_henry_home (his own world) or mp_henry_home playlineN/file")
+    System.AddCCommand("mp_world_copy",          'KCD2MP_Wo157Copy(%line)',               "WO-157: save a copy of this shared world, with your character, as your own save to carry on from separately: mp_world_copy (first empty playline) or mp_world_copy N")
+    System.AddCCommand("mp_quest_dlc",           'KCD2MP_Wo157Dlc(%line)',                "WO-157: share DLC quests with your partner like every other quest: mp_quest_dlc on|off (default on; off = DLC stays out of the session)")
+    System.AddCCommand("mp_henry_home_on_leave", 'KCD2MP_Wo157Cfg(%line)',                "WO-157: when you leave your host's world, send your character home first: mp_henry_home_on_leave on|off (default off)")
     mp_log("WO125-BUILD snapshot=QuickSave keep=100 stale_days=90 -- dormant unless the host runs a shared world")
     -- WO-127: the leash recorder (off unless turned on; the tester page says: host, for the session).
     System.AddCCommand("mp_leash_trace",         'KCD2MP_SetLeashTrace(%line)',           "WO-127: record, once a second, every NPC within 200 m of either player and every simulation signal the game exposes cheaply, to a CSV beside agent.log (for WO-128): mp_leash_trace on|off; bare = report")

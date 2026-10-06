@@ -69,6 +69,16 @@ public static class Wo137Rules
         "Barbora.trosecko.zavodniPodkovy",
     };
 
+    /// <summary>
+    /// WO-157: DLC quests are mirrored too (default on). A joiner runs the host's own world save, which already names the DLCs it needs
+    /// (the engine will not load a save whose DLC is not active), so both games have the DLC's quest graphs. <c>mp_quest_dlc off</c> brings
+    /// back the older rule: DLC stays out (the way to switch it off if a DLC questline misbehaves).
+    /// </summary>
+    public static volatile bool DlcShared = true;
+
+    /// <summary>The veto's own question: is this a DLC path that must stay out (given whether DLC is shared)?</summary>
+    public static bool DlcBlocked(string path, bool? dlcShared = null) => !(dlcShared ?? DlcShared) && IsDlc(path);
+
     public static bool IsDlc(string path)
     {
         foreach (var q in DlcQuests)
@@ -103,11 +113,11 @@ public static class Wo137Rules
     }
 
     /// <summary>Host: why this change does NOT go to the joiners (null = it goes).</summary>
-    public static string? HostSendVeto(QuestChange c)
+    public static string? HostSendVeto(QuestChange c, bool? dlcShared = null)
     {
         if (!Wo137Text.IsPath(c.Path)) return "bad-path";
         if (c.QuestLen <= 0) return "not-a-quest";
-        if (IsDlc(c.Path)) return "dlc";
+        if (DlcBlocked(c.Path, dlcShared)) return "dlc";
         if (PerMachine(c)) return "per-machine";
         if (!c.Notify) return "silent";
         return null;
@@ -118,13 +128,13 @@ public static class Wo137Rules
     /// Only ROOT transitions the world made here (examine, pickup, area, a conversation's
     /// outcome) are asked for; a mirrored change and a cascade are the host's graph's own.
     /// </summary>
-    public static string? JoinerAskVeto(QuestChange c)
+    public static string? JoinerAskVeto(QuestChange c, bool? dlcShared = null)
     {
         if (c.Mirror) return "mirror";
         if (c.Cascade) return "cascade";
         if (!Wo137Text.IsPath(c.Path)) return "bad-path";
         if (c.QuestLen <= 0) return "not-a-quest";
-        if (IsDlc(c.Path)) return "dlc";
+        if (DlcBlocked(c.Path, dlcShared)) return "dlc";
         if (PerMachine(c)) return "per-machine";
         if (!c.Notify) return "silent";
         if (!Wo137Text.IsPort(c.Port)) return "no-port";

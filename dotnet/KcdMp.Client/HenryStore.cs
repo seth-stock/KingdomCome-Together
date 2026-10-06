@@ -241,12 +241,30 @@ public sealed class HenryStore
 
     public void MarkJoined(string tag) => UpdateWorld(tag, w => w.LastJoinedUtc = _now());
 
+    /// <summary>
+    /// WO-157: which of the player's own worlds this Henry came from (the seed TAG of the save he was brought from, never the seed)
+    /// and a display name for the log. Set at a first join that brought a character; read when sending him home.
+    /// </summary>
+    public void SetHome(string tag, string homeTag, string note) => UpdateWorld(tag, w => { w.HomeTag = homeTag; w.HomeNote = note; });
+
+    public (string? HomeTag, string? Note) HomeOf(string tag)
+    {
+        CheckTag(tag);
+        var w = ReadWorld(tag);
+        return (w.HomeTag, w.HomeNote);
+    }
+
+    /// <summary>The world most recently joined (the one to send home after the player has already left it), or null.</summary>
+    public string? MostRecentWorld() => Worlds().FirstOrDefault()?.Tag;
+
     // ------------------------------------------------------------------ world.json
 
     private sealed class WorldFile
     {
         public DateTime LastJoinedUtc { get; set; }
         public string? FirstSource { get; set; }
+        public string? HomeTag { get; set; }     // WO-157
+        public string? HomeNote { get; set; }
         public Dictionary<string, string> Pairs { get; set; } = new(StringComparer.Ordinal);
     }
 

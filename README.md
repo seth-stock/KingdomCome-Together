@@ -76,6 +76,10 @@ and weather. Each feature below says how far it is proven:
 | Whistling | Your whistle (call your horse) is heard at your figure on the other screen | 🧪 new in 0.43.0 |
 | Riding the host's horses | The rider's horse is the rider's: nothing of the mod moves, pauses or animates it while it is ridden | 🧪 new in 0.43.0 |
 | Voice chat | Speech by distance | ⚠️ starts every session; nobody has confirmed hearing the other yet |
+| Send your character home | `mp_henry_home`: the Henry you played with goes back into his own world as a new manual save, with what he gained ([WO-157](docs/WO-157-findings.md)) | ⚠️ built; tested on real saves offline, not in the game |
+| A save of your own | `mp_world_copy`: a copy of the shared world with your character, to carry on from alone | ⚠️ built; not in the game |
+| The prologue and Godwin's scenes | A host who is Godwin can be joined; you bring your own Godwin | ⚠️ built; tested on synthetic and one real save, not in the game |
+| DLC quests | DLC questlines are shared like any other (`mp_quest_dlc off` to keep them out) | ⚠️ built; not in the game |
 
 ### Fighting
 

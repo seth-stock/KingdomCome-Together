@@ -43,6 +43,9 @@ public static partial class WhsSave
         public string Build = "";
         public uint? Seed;
         public string Origin = OriginSave;
+
+        /// <summary>WO-157: whose record this is: player_henry, or player_bohuta (Godwin). It is the record's own soul GUID.</summary>
+        public string Soul => Record.Length >= 22 ? GuidStr(Record.AsSpan(6)) : HenrySoul;
     }
 
     internal static Node RecordNode(byte[] rec) =>
@@ -53,7 +56,8 @@ public static partial class WhsSave
     /// <summary>Lift the joiner side out of a save's stream.</summary>
     public static HenryParts PartsFromStream(byte[] raw, string build, string origin)
     {
-        var rec = NodeBytes(raw, HenryChain(raw)[^1]);
+        // WO-157: the soul the player entity is bound to (Henry unless this is a Godwin stretch of the story)
+        var rec = NodeBytes(raw, PlayerChain(raw, PlayerOf(raw).Soul)[^1]);
         var items = RecordItemSet(rec);
         var p = new HenryParts { Record = rec, Build = build, Seed = ReadSeed(raw), Origin = origin };
         for (int i = 0; i < SideBlocks.Length; i++) p.Side[i] = Payload(raw, PathNodes(raw, SideBlocks[i])[^1]);
@@ -154,8 +158,8 @@ public static partial class WhsSave
             if (r.BaseStream.Position != r.BaseStream.Length) throw new InvalidDataException("Henry block has trailing bytes");
         }
         catch (EndOfStreamException) { throw new InvalidDataException("Henry block truncated"); }
-        if (p.Record.Length != 6 + RecordNode(p.Record).Len || RecordNode(p.Record).Tag != 0x115E || GuidStr(p.Record.AsSpan(6)) != HenrySoul)
-            throw new InvalidDataException("Henry block record is not a full player_henry record");
+        if (p.Record.Length != 6 + RecordNode(p.Record).Len || RecordNode(p.Record).Tag != 0x115E || GuidStr(p.Record.AsSpan(6)) is not (HenrySoul or BohutaSoul))
+            throw new InvalidDataException("Henry block record is not a full player_henry (or player_bohuta) record");
         if (Children(p.Record, 6 + 32, p.Record.Length) is null) throw new InvalidDataException("Henry block record does not parse");
         foreach (var e in p.KeyEntries)
             if (e.Length != 47 || BinaryPrimitives.ReadUInt16LittleEndian(e) != 0x05AD) throw new InvalidDataException("Henry block key entry malformed");
@@ -334,7 +338,14 @@ public static partial class WhsSave
         return Convert.ToHexString(SHA256.HashData(b[..15]))[..10].ToLowerInvariant();
     }
 
-    public readonly record struct PlayerInfo(bool IsHenry, string Player, bool Pristine);
+    /// <param name="Soul">The soul GUID bound to the player entity (Henry's when none or several are: the old default).</param>
+    public readonly record struct PlayerInfo(bool IsHenry, string Player, bool Pristine, string Soul = HenrySoul)
+    {
+        /// <summary>WO-157: the player is Godwin (player_bohuta): the prologue and the stretches where the story switches characters.</summary>
+        public bool IsGodwin => Soul == BohutaSoul && Player == "player_bohuta";
+        /// <summary>A player this mod can bring: Henry or Godwin.</summary>
+        public bool IsKnown => IsHenry || IsGodwin;
+    }
 
     /// <summary>
     /// Who the player is in this save: the soul whose 0x12F9 names the player
@@ -355,7 +366,7 @@ public static partial class WhsSave
             if (nul < 0 || nul + 9 > b.Length || BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(nul + 1)) != PlayerEntityGuid) continue;
             string g = GuidStr(raw.AsSpan(rec.Off + 6, 16));
             bound.Add(g);
-            if (g == HenrySoul)
+            if (g == HenrySoul || g == BohutaSoul)
             {
                 var rb = NodeBytes(raw, rec);
                 bool xp = false;
@@ -365,7 +376,8 @@ public static partial class WhsSave
             }
         }
         string who = bound.Count == 0 ? "none" : bound.Count > 1 ? "several" : bound[0] == HenrySoul ? "player_henry" : bound[0] == BohutaSoul ? "player_bohuta" : bound[0][..8];
-        return new PlayerInfo(bound.Count == 1 && bound[0] == HenrySoul, who, bound.Count == 1 && bound[0] == HenrySoul && pristine);
+        bool one = bound.Count == 1 && (bound[0] == HenrySoul || bound[0] == BohutaSoul);
+        return new PlayerInfo(bound.Count == 1 && bound[0] == HenrySoul, who, one && pristine, one ? bound[0] : HenrySoul);
     }
 
     // ------------------------------------------------------------------ a fresh Henry

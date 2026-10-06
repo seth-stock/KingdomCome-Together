@@ -62,6 +62,33 @@ public class Wo137Tests
 
     // ---------------------------------------------------------------- what goes, what does not
 
+    [Theory]
+    [InlineData("Barbora.trosecko.zavodniPodkovy.a.b", 29)]                 // a RequiredDLC root
+    [InlineData("Barbora.kutnohorsko.navstevaLekare.h.x", 35)]
+    [InlineData("Barbora.klaster.dlc_pack.quest.a", 28)]                   // a dlc* segment
+    public void WO157_dlc_quests_are_shared_by_default_and_stay_out_when_switched_off(string path, int questLen)
+    {
+        var c = Change(path: path) with { QuestLen = questLen };
+        Assert.True(Wo137Rules.IsDlc(path));
+        Assert.True(Wo137Rules.DlcShared);                                       // the shipped default
+        Assert.Null(Wo137Rules.HostSendVeto(c));                                 // the host sends it
+        Assert.Null(Wo137Rules.JoinerAskVeto(c with { Flags = QuestChange.FNotify }));   // the joiner may ask for it
+        Assert.Equal("dlc", Wo137Rules.HostSendVeto(c, dlcShared: false));      // mp_quest_dlc off: the older rule, both ways
+        Assert.Equal("dlc", Wo137Rules.JoinerAskVeto(c with { Flags = QuestChange.FNotify }, dlcShared: false));
+        Assert.False(Wo137Rules.DlcBlocked(path));
+        Assert.True(Wo137Rules.DlcBlocked(path, false));
+    }
+
+    [Fact]
+    public void WO157_the_dlc_switch_never_lets_a_non_quest_or_per_machine_change_through()
+    {
+        // sharing DLC is about the DLC rule only: every other veto still holds
+        var c = Change(path: "Barbora.trosecko.zavodniPodkovy.a.b", type: "Streaming") with { QuestLen = 29 };
+        Assert.Equal("per-machine", Wo137Rules.HostSendVeto(c, dlcShared: true));
+        Assert.Equal("not-a-quest", Wo137Rules.HostSendVeto(c with { QuestLen = 0, Type = "State" }, dlcShared: true));
+        Assert.Equal("bad-path", Wo137Rules.HostSendVeto(Change(path: "Foreign.module.x"), dlcShared: true));
+    }
+
     [Fact]
     public void The_host_sends_quest_changes_but_not_streaming_dlc_silent_or_foreign_ones()
     {
@@ -72,7 +99,7 @@ public class Wo137Tests
         Assert.Equal("per-machine", Wo137Rules.HostSendVeto(Change(type: "OnOffFocusCamControlEffect")));
         Assert.Equal("per-machine", Wo137Rules.HostSendVeto(Change(type: "OnOffFocusCamControl")));   // observed j1: the joiner's own camera focus
         Assert.Equal("per-machine", Wo137Rules.HostSendVeto(Change(path: Quest + ".h.streamprofileshandling.x.y")));
-        Assert.Equal("dlc", Wo137Rules.HostSendVeto(Change(path: "Barbora.trosecko.zavodniPodkovy.a.b") with { QuestLen = 29 }));
+        Assert.Equal("dlc", Wo137Rules.HostSendVeto(Change(path: "Barbora.trosecko.zavodniPodkovy.a.b") with { QuestLen = 29 }, dlcShared: false));   // WO-157: the older rule, mp_quest_dlc off
         Assert.Equal("silent", Wo137Rules.HostSendVeto(Change(flags: 0)));
         Assert.Equal("not-a-quest", Wo137Rules.HostSendVeto(Change() with { QuestLen = 0 }));
         Assert.Equal("bad-path", Wo137Rules.HostSendVeto(Change(path: "Foreign.module.x")));

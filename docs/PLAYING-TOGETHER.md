@@ -139,6 +139,13 @@ You normally type nothing. Everything below is optional.
 | `mp_leash on` / `off` | host | the ordinary leash that keeps friends within 650 m |
 | `mp_scene_status`, `mp_story_lock` (bare) | anyone | report the current settings |
 | `mp_unstuck` | anyone | if you are stuck in a bed, a minigame or anything else |
+| `mp_henry_home` / `mp_henry_home playlineN/file` | friend | **send your character home**: your Henry, as he is now, goes back into the world he came from as a **new manual save** (your old save is never touched). He comes back with what he gained; his quest items from the host's world stay behind |
+| `mp_henry_home_on_leave on` / `off` | friend | do that automatically whenever you leave your host's world (default off) |
+| `mp_world_copy` / `mp_world_copy N` | friend | save a **copy of the shared world, with your character in it, as your own save** (playline N, default the first empty one), to carry on from alone, later, whatever the host does |
+| `mp_quest_dlc on` / `off` | anyone | share DLC quests like every other quest (default on); `off` keeps DLC out of the session |
+
+These four are new in WO-157 and **not yet seen in the real game**: `docs/WO-157-findings.md` says what was tested and what was not. The prologue and the other
+scenes played as **Godwin** can now be joined too (your own Godwin save is the character you bring); that is untested in the game as well.
 
 `mp_scene_mode play` needs the native plugin (the launcher injects it) and is **off by default** because it is the least
 tested part: a skipped cutscene means that scene's own steps never run on your game, and you rely on the host's steps

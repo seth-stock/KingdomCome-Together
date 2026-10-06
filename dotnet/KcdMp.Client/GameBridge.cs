@@ -5816,6 +5816,12 @@ public partial class GameBridge(ClientConfig config)
             case "wo125_files":
                 Wo125OnEvent(name, arg);
                 return;
+            case "wo157_home":       // WO-157: mp_henry_home, mp_world_copy, mp_henry_home_on_leave
+            case "wo157_copy":
+            case "wo157_dlc":
+            case "wo157_cfg":
+                Wo157OnEvent(name, arg);
+                return;
             case "leash_trace":      // WO-127: mp_leash_trace on|off
             case "leash_ctx":
                 Wo127LeashOnEvent(name, arg);

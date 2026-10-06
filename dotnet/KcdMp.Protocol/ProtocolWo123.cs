@@ -152,6 +152,9 @@ public static partial class Protocol
     // slot (unused for state 8 since WO-124, which always sent 0): the playthrough seed (save
     // body 0x01FB), and in arg these flags. A WO-124 joiner ignores both.
     public const ushort SessionSeedKnown = 1, SessionHenryWorld = 2;
+    /// <summary>WO-157: the host's player is Godwin (player_bohuta): the prologue and the stretches of the story played as him. A host sends
+    /// this INSTEAD of SessionHenryWorld; a peer that does not know the bit reads "not Henry" and refuses, as before.</summary>
+    public const ushort SessionGodwinWorld = 4;
 
     public static string JoinStateName(byte s) => s switch
     {

@@ -42,6 +42,7 @@ public class WhsSaveTests
         // WO-125: the playthrough seed (body 0x01FB, synthetic values only), who the player is, a new game's first Henry save
         public uint Seed = 0xB0D1;
         public bool Bohuta;       // the player entity is bound to player_bohuta (the prologue / Godwin), not Henry
+        public bool GodwinRich;   // WO-157: the player is Godwin AND his record is a full one (stats, items, perks): a mid-story Godwin save; Henry's is unbound
         public bool Pristine;     // Henry holds no stat and no skill XP (a new game's first Henry save)
         public bool NoStory;      // Henry's stat list holds no storyProgress
         public long SaveTime;
@@ -67,7 +68,7 @@ public class WhsSaveTests
         return Tlv(0x0001, p);
     }
 
-    private static byte[] HenryRecord(Spec s)
+    private static byte[] HenryRecord(Spec s, string soul = Henry, string who = "player_henry", bool? bound = null)
     {
         var stats = s.NoStory ? Cat(U32(0), U32(s.Strength), U32(0xFFFFFFFF)) : Cat(U32(0), U32(s.Strength), U32(8), U32(s.Story), U32(0xFFFFFFFF), U32(0));
         var skills = Cat(U32(2), U32(77), U32(0xFFFFFFFF), U32(0));
@@ -82,10 +83,10 @@ public class WhsSaveTests
         var list = Cat(new[] { Tlv(0x0000, G("dddddddd-0000-0000-0000-00000000d004")) }.Concat(s.Items.Select(ItemRec)).ToArray());
         var eq = Tlv(0x0001, Tlv(0x0000, Cat(s.Equipped.Select(G).ToArray()).Length > 0 ? Cat(s.Equipped.Select(G).ToArray()) : new byte[16]));
         var inv = s.NoItemList ? Tlv(0x0006, eq) : Cat(Tlv(0x0007, list), Tlv(0x0006, eq));
-        var name = Cat(Encoding.Latin1.GetBytes("player_henry\0"), BitConverter.GetBytes(s.Bohuta ? 0UL : 0x7777UL));
+        var name = Cat(Encoding.Latin1.GetBytes(who + "\0"), BitConverter.GetBytes((bound ?? !s.Bohuta) ? 0x7777UL : 0UL));
         var fields = Cat(Tlv(0x12F9, name), Tlv(0x12FB, main), Tlv(0x12FF, s.Renown), Tlv(0x1301, inv));
         if (s.Field1300) fields = Cat(fields, Tlv(0x1300, G("eeeeeeee-0000-0000-0000-00000000e005")));
-        return Tlv(0x115E, Cat(G(Henry), G(Shared), fields));
+        return Tlv(0x115E, Cat(G(soul), G(Shared), fields));
     }
 
     private static byte[] NpcRecord(Spec s) =>
@@ -96,7 +97,9 @@ public class WhsSaveTests
         var keys = Cat(new[] { new byte[8] { 1, 0, 0, 0, s.Side, 0, 0, 0 } }
             .Concat(s.Keys.Select(k => Tlv(0x05AD, Cat(G(k.Owner), new byte[9], G(k.Key))))).ToArray());
         var bohuta = Tlv(0x115E, Cat(G(WhsSave.BohutaSoul), G(Shared), Tlv(0x12F9, Cat(Encoding.Latin1.GetBytes("Dude\0"), BitConverter.GetBytes(s.Bohuta ? 0x7777UL : 0UL)))));
-        var souls = Tlv(0x1161, Cat(NpcRecord(s), HenryRecord(s), bohuta));
+        var souls = s.GodwinRich
+            ? Tlv(0x1161, Cat(NpcRecord(s), HenryRecord(s, Henry, "player_henry", false), HenryRecord(s, WhsSave.BohutaSoul, "Dude", true)))
+            : Tlv(0x1161, Cat(NpcRecord(s), HenryRecord(s), bohuta));
         var rpg = Tlv(0x7308, Cat(Tlv(0x3529, Cat(Tlv(0x1160, new byte[4]), souls)), Tlv(0x352C, Encoding.ASCII.GetBytes(s.World)),
                                   Tlv(0x352D, [0x2D, s.Side, 1, 1, 1, 1, 1]), Tlv(0x352E, [0x2E, s.Side, 2, 2, 2, 2, 2])));
         var ent = Tlv(0x7302, Cat(Tlv(0x000A, Encoding.ASCII.GetBytes(s.World + "-qim")), Tlv(0x000B, keys)));

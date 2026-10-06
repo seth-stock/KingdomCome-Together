@@ -371,6 +371,7 @@ public partial class GameBridge
     private void OnSaveFileEvent(string path)
     {
         if (WorldSaved.ParsePath(path) is null) return;   // not an engine-named save (e.g. a transient mpworld file)
+        if (_w157Placed.ContainsKey(path)) return;        // WO-157: a character sent home: the player's own new save, not a leak
         _saveEventAt[path] = DateTime.UtcNow;
         if (_saveSettling.TryAdd(path, 0)) _ = SettleSaveAsync(path);
     }

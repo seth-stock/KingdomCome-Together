@@ -308,7 +308,7 @@ public partial class GameBridge
             switch (m.Kind)
             {
                 case Protocol.QuestHostChange when Wo137Rules.TryParseChangeText(m.Text, out var c):
-                    if (Wo137Rules.IsDlc(c.Path) || c.QuestLen <= 0) { Wo137Veto("host-change-refused"); return; }
+                    if (Wo137Rules.DlcBlocked(c.Path) || c.QuestLen <= 0) { Wo137Veto("host-change-refused"); return; }
                     if (!Wo137Rules.KeepHostChange(_joinedWorld, _jj?.Phase)) { Wo137Veto("host-change-not-in-host-world"); return; }
                     if (_w137HostModeKnown && !_w137HostModeOn) { Wo137Veto("host-change-while-host-off"); return; }
                     if (c.Port.Length > 0) _w137HostPort[c.Path] = c.Port;
@@ -545,7 +545,7 @@ public partial class GameBridge
             Console.WriteLine($"{head}: waits (the host's world is loading)");
             return;
         }
-        if (Wo137Rules.IsDlc(req.Path) || Wo137Rules.PerMachine(req)) { await Wo137ReplyAsync(src, tok, "notquest", 0, "", req.Path); Console.WriteLine($"{head}: refused (not a shared quest State)"); return; }
+        if (Wo137Rules.DlcBlocked(req.Path) || Wo137Rules.PerMachine(req)) { await Wo137ReplyAsync(src, tok, "notquest", 0, "", req.Path); Console.WriteLine($"{head}: refused (not a shared quest State)"); return; }
         var reads = await _combat.Wo137ReadStatesAsync([req.Path]);
         if (reads is not { Count: 1 } || !reads[0].Found)
         {

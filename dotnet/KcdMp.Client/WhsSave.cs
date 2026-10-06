@@ -572,11 +572,18 @@ public static partial class WhsSave
 
     public enum QuestItemMode { Strip, Host }
 
-    private static List<Node> HenryChain(byte[] raw)
+    private static List<Node> HenryChain(byte[] raw) => PlayerChain(raw, HenrySoul);
+
+    /// <summary>
+    /// WO-157: the chain to a player soul's record. Henry's, or Godwin's (player_bohuta) in the prologue and the stretches of the story
+    /// where the player is Godwin: the two records have the same fields (12F9 name, 12FB main block, 12FF renown, 1301 inventory, 1303).
+    /// </summary>
+    private static List<Node> PlayerChain(byte[] raw, string soul)
     {
+        string who = soul == BohutaSoul ? "player_bohuta" : "player_henry";
         var chain = PathNodes(raw, 0x01F4, 0x01F8, 0x7308, 0x3529, 0x1161);
-        var rec = FindSoul(raw, HenrySoul) ?? throw new InvalidDataException("player_henry soul record not found");
-        if (rec.Tag != 0x115E) throw new InvalidDataException("player_henry record is not a full 0x115E record");
+        var rec = FindSoul(raw, soul) ?? throw new InvalidDataException(who + " soul record not found");
+        if (rec.Tag != 0x115E) throw new InvalidDataException(who + " record is not a full 0x115E record");
         chain.Add(rec);
         return chain;
     }
@@ -647,10 +654,10 @@ public static partial class WhsSave
 
     private static byte[] BuildHenry(byte[] hostRaw, HenryParts parts, Dictionary<string, string> qclasses, QuestItemMode mode, SpliceReport rep)
     {
-        var hRec = HenryChain(hostRaw)[^1];
+        var hRec = PlayerChain(hostRaw, parts.Soul)[^1];
         var rec = parts.Record;
         var hrec = NodeBytes(hostRaw, hRec);
-        if (!rec.AsSpan(6, 32).SequenceEqual(hrec.AsSpan(6, 32))) throw new InvalidDataException("player_henry GUID prefix differs between the saves");
+        if (!rec.AsSpan(6, 32).SequenceEqual(hrec.AsSpan(6, 32))) throw new InvalidDataException("the player soul's GUID prefix differs between the saves");
 
         // stat id 8 (storyProgress) from the host. WO-125: an early save may hold
         // no story stat (host or joiner), and a new game's first Henry save holds
@@ -735,7 +742,7 @@ public static partial class WhsSave
     ];
     private static readonly ushort[] KeyBlock = [0x01F4, 0x01F8, 0x7302, 0x000B];
 
-    private static HashSet<string> HenryItemSet(byte[] raw) => RecordItemSet(NodeBytes(raw, HenryChain(raw)[^1]));
+    private static HashSet<string> HenryItemSet(byte[] raw, string soul = HenrySoul) => RecordItemSet(NodeBytes(raw, PlayerChain(raw, soul)[^1]));
 
     private static HashSet<string> RecordItemSet(byte[] rec) =>
         HasItemList(rec) ? InventoryItems(rec).Items.Select(i => i.Inst).ToHashSet() : [];
@@ -751,11 +758,11 @@ public static partial class WhsSave
         var jobs = new List<(ushort[]? Tags, byte[] Payload)>();
         for (int i = 0; i < SideBlocks.Length; i++)
             if (parts.Side[i] is byte[] sp) jobs.Add((SideBlocks[i], sp));
-        jobs.Add((KeyBlock, MergeKeys(hostRaw, HenryItemSet(hostRaw), parts.KeyEntries, rep)));
+        jobs.Add((KeyBlock, MergeKeys(hostRaw, HenryItemSet(hostRaw, parts.Soul), parts.KeyEntries, rep)));
         var henry = BuildHenry(hostRaw, parts, qclasses, mode, rep);
         jobs.Add((null, henry.AsSpan(6).ToArray()));
 
-        List<Node> Where(byte[] r, ushort[]? tags) => tags is null ? HenryChain(r) : PathNodes(r, tags);
+        List<Node> Where(byte[] r, ushort[]? tags) => tags is null ? PlayerChain(r, parts.Soul) : PathNodes(r, tags);
         var raw = hostRaw;
         // highest offset first so the chains still to come stay valid
         foreach (var (tags, payload) in jobs.OrderByDescending(j => Where(hostRaw, j.Tags)[^1].Off).ToList())
@@ -789,6 +796,10 @@ public static partial class WhsSave
         hs.TryGetValue("BuildInfo", out var hb);
         if ((hb ?? "") != parts.Build && !(parts.Build == "" && parts.Origin == HenryParts.OriginFreshDefault))
             throw new InvalidDataException($"builds differ: {hb} vs {parts.Build}");
+        // WO-157: the world's player and the character being put in must be the same soul (a Henry never goes into a Godwin world)
+        var hostPlayer = PlayerOf(h.Raw);
+        if (hostPlayer.IsKnown && hostPlayer.Soul != parts.Soul)
+            throw new InvalidDataException($"the world's player is {hostPlayer.Player}, the character being put in is {(parts.Soul == BohutaSoul ? "player_bohuta" : "player_henry")}");
         var rep = new SpliceReport();
         var raw = SpliceStream(h.Raw, parts, qclasses, mode, rep);
         var js = joinerSummary ?? new SortedDictionary<string, string>(StringComparer.Ordinal) { ["BuildInfo"] = parts.Build, ["Origin"] = parts.Origin };
@@ -834,7 +845,7 @@ public static partial class WhsSave
         }
 
         var k0 = PathNodes(o, KeyBlock)[^1];
-        if (!Payload(o, k0).AsSpan().SequenceEqual(MergeKeys(h, HenryItemSet(h), parts.KeyEntries, null)))
+        if (!Payload(o, k0).AsSpan().SequenceEqual(MergeKeys(h, HenryItemSet(h, parts.Soul), parts.KeyEntries, null)))
             fails.Add("EntityModule 000B key bindings are not the expected merge");
 
         var sh = SoulList(h); var so = SoulList(o);
@@ -844,12 +855,12 @@ public static partial class WhsSave
         var byO = new Dictionary<string, Node>();
         for (int i = 0; i < so.Count; i++) byO[go[i]] = so[i];
         for (int i = 0; i < sh.Count; i++)
-            if (gh[i] != HenrySoul && (!byO.TryGetValue(gh[i], out var r) || !NodeBytes(h, sh[i]).AsSpan().SequenceEqual(NodeBytes(o, r))))
+            if (gh[i] != parts.Soul && (!byO.TryGetValue(gh[i], out var r) || !NodeBytes(h, sh[i]).AsSpan().SequenceEqual(NodeBytes(o, r))))
                 fails.Add("soul changed: " + gh[i]);
 
-        var dh = DecodePlayerSoul(h, FindSoul(h, HenrySoul)!.Value);
+        var dh = DecodePlayerSoul(h, FindSoul(h, parts.Soul)!.Value);
         var dj = DecodePlayerSoul(parts.Record, RecordNode(parts.Record));
-        var dout = DecodePlayerSoul(o, FindSoul(o, HenrySoul)!.Value);
+        var dout = DecodePlayerSoul(o, FindSoul(o, parts.Soul)!.Value);
         foreach (var (key, val) in dj.Scalars)
             if (!dout.Scalars.TryGetValue(key, out var ov) || ov != val) fails.Add($"Henry {key} is not the joiner's");
         foreach (var key in dout.Scalars.Keys)
@@ -861,8 +872,8 @@ public static partial class WhsSave
         var expInv = dj.Inventory.Where(i => !qclasses.ContainsKey(i.Class)).ToList();
         if (mode == QuestItemMode.Host) expInv.AddRange(dh.Inventory.Where(i => qclasses.ContainsKey(i.Class)));
         if (!expInv.SequenceEqual(dout.Inventory)) fails.Add($"Henry inventory is not the expected list ({dout.Inventory.Count} vs {expInv.Count} items)");
-        var fo = SoulFields(o, FindSoul(o, HenrySoul)!.Value);
-        var fh = SoulFields(h, FindSoul(h, HenrySoul)!.Value);
+        var fo = SoulFields(o, FindSoul(o, parts.Soul)!.Value);
+        var fh = SoulFields(h, FindSoul(h, parts.Soul)!.Value);
         if (!fo.ContainsKey(0x12FF) || !fh.ContainsKey(0x12FF) || !Payload(o, fo[0x12FF][0]).AsSpan().SequenceEqual(Payload(h, fh[0x12FF][0])))
             fails.Add("Henry 0x12FF renown is not the host's");
         return fails;

@@ -51,6 +51,7 @@ public partial class GameBridge
 
     private uint? _hostWorldSeed;
     private bool? _hostWorldHenry;
+    private bool _hostWorldGodwin;                       // WO-157: the host's player is Godwin (player_bohuta)
     private string _hostWorldPlayer = "?";
     private DateTime _identifyAskedUtc = DateTime.MinValue;
     private volatile bool _hostLoadAnnounced;
@@ -130,9 +131,10 @@ public partial class GameBridge
             if (build != _hostWorldBuild) { _hostWorldBuild = build; _w135BuildTold.Clear(); }
             var who = WhsSave.PlayerOf(raw);
             string md5 = v.Md5.ToLowerInvariant();
-            bool changed = seed != _hostWorldSeed || who.IsHenry != _hostWorldHenry;
+            bool changed = seed != _hostWorldSeed || who.IsHenry != _hostWorldHenry || who.IsGodwin != _hostWorldGodwin;
             _hostWorldSeed = seed;
             _hostWorldHenry = who.IsHenry;
+            _hostWorldGodwin = who.IsGodwin;   // WO-157
             _hostWorldPlayer = who.Player;
             string tag = seed is uint s ? WhsSave.SeedTag(s) : "-";
             lock (_branchGate)
@@ -148,14 +150,14 @@ public partial class GameBridge
                 SaveBranchMap();
             }
             if (seed is uint) Wo134OnHostWorld(tag, md5, loaded);   // WO-134: the host's chest ledger pairs with this save
-            Console.WriteLine($"MP-HENRY host: world {tag} ({why}: {SaveDisplay(path)}, md5 {md5[..8]} = the save's footer MD5) player={who.Player} henry={On(who.IsHenry)} branch_depth={BranchNewestFirst().Count}");
+            Console.WriteLine($"MP-HENRY host: world {tag} ({why}: {SaveDisplay(path)}, md5 {md5[..8]} = the save's footer MD5) player={who.Player} henry={On(who.IsHenry)} godwin={On(who.IsGodwin)} branch_depth={BranchNewestFirst().Count}");
             if (changed)
             {
                 _modeTold.Clear();   // the session status carries the identity: resend at the next tick
-                if (_hostWorldHenry == false && _sharedWorld)
+                if (_hostWorldHenry == false && !_hostWorldGodwin && _sharedWorld)
                 {
                     const string msg = "Co-op: you are in a part of the story your partner can't join yet.";
-                    Console.WriteLine($"MP-HENRY host: this world's player is not Henry ({who.Player}) -- no join now; joiners are told");
+                    Console.WriteLine($"MP-HENRY host: this world's player is neither Henry nor Godwin ({who.Player}) -- no join now; joiners are told");
                     _ = ExecLuaAsync($"if KCD2MP_Wo124Msg then KCD2MP_Wo124Msg(\"{EscapeLua(msg)}\") end");
                 }
             }
@@ -170,7 +172,7 @@ public partial class GameBridge
     private (uint Seed, ushort Flags) Wo125SessionIdentity()
     {
         if (_hostWorldSeed is not uint s) return (0, 0);
-        return (s, (ushort)(Protocol.SessionSeedKnown | (_hostWorldHenry == true ? Protocol.SessionHenryWorld : 0)));
+        return (s, (ushort)(Protocol.SessionSeedKnown | (_hostWorldHenry == true ? Protocol.SessionHenryWorld : 0) | (_hostWorldGodwin ? Protocol.SessionGodwinWorld : 0)));
     }
 
     /// <summary>Host tick: an unknown world (agent started mid-world) is identified by one world save, once a minute at most, only with a peer present.</summary>
@@ -235,6 +237,8 @@ public partial class GameBridge
     private volatile bool _peerSeedKnown;
     private uint _peerSeed;
     private volatile bool _peerHenryWorld;
+    private string _peerSoul = WhsSave.HenrySoul;       // WO-157: whose character the host's world has (Henry's, or Godwin's)
+    private string? _joinedSoul;                        // WO-157: the character this game joined as (what a snapshot must still be)
     private string? _peerTag;
     private readonly List<string> _hostBranch = [];            // newest first, from the last complete replay
     private string?[] _branchRx = [];
@@ -258,18 +262,20 @@ public partial class GameBridge
     private void Wo125OnSessionIdentity(uint seed, ushort flags)
     {
         bool known = (flags & Protocol.SessionSeedKnown) != 0;
-        bool henry = (flags & Protocol.SessionHenryWorld) != 0;
+        bool godwin = (flags & Protocol.SessionGodwinWorld) != 0;
+        bool henry = (flags & Protocol.SessionHenryWorld) != 0 || godwin;   // WO-157: "a player this game can bring": Henry or Godwin
         string? tag = known ? WhsSave.SeedTag(seed) : null;
-        bool changed = known != _peerSeedKnown || (known && seed != _peerSeed) || henry != _peerHenryWorld;
+        bool changed = known != _peerSeedKnown || (known && seed != _peerSeed) || henry != _peerHenryWorld || (godwin ? WhsSave.BohutaSoul : WhsSave.HenrySoul) != _peerSoul;
         if (known && (!_peerSeedKnown || seed != _peerSeed)) _peerSeedKnownSinceUtc = DateTime.UtcNow;   // WO-135: the build wait starts here
         _peerSeedKnown = known;
         _peerSeed = seed;
         _peerHenryWorld = henry;
+        _peerSoul = godwin ? WhsSave.BohutaSoul : WhsSave.HenrySoul;
         _peerTag = tag;
         if (changed)
         {
             Console.WriteLine(known
-                ? $"MP-HENRY joiner: the host's world is {tag} (player {(henry ? "Henry" : "NOT Henry")}); Henry files for it here: {(_henry.HasWorld(tag!) ? _henry.Snapshots(tag!).Count + " snapshot(s)" : "none (a first join)")}"
+                ? $"MP-HENRY joiner: the host's world is {tag} (player {(godwin ? "Godwin" : henry ? "Henry" : "NOT Henry")}); Henry files for it here: {(_henry.HasWorld(tag!) ? _henry.Snapshots(tag!).Count + " snapshot(s)" : "none (a first join)")}"
                 : "MP-HENRY joiner: the host has not identified its world yet");
             _chooseAsked = _notHenryTold = false;
             if (_joinedWorld && known && !henry)
@@ -618,6 +624,7 @@ public partial class GameBridge
     private HenryChoice? TryHenrySave(HenrySource s, string origin, string mode, out string why, bool requirePristine, bool quiet = false)
     {
         why = "";
+        string soul = _peerSoul;   // WO-157: the character the host's world has (Godwin's in the prologue)
         byte[] bytes;
         try { bytes = WhsSave.ReadShared(s.FullPath); }
         catch (IOException ex) { why = "unreadable: " + ex.Message; return null; }
@@ -625,8 +632,8 @@ public partial class GameBridge
         if (!v.Ok) { why = v.Reason; return null; }
         var c = WhsSave.Inflate(bytes);
         var who = WhsSave.PlayerOf(c.Raw);
-        if (!who.IsHenry) { why = $"its player is not Henry ({who.Player})"; if (!quiet) Console.WriteLine($"MP-HENRY joiner: {s.Display}: {why}"); return null; }
-        if (requirePristine && !who.Pristine) { why = "not a new game's first Henry save"; return null; }
+        if (!who.IsKnown || who.Soul != soul) { why = $"its player is not {(soul == WhsSave.BohutaSoul ? "Godwin" : "Henry")} ({who.Player})"; if (!quiet) Console.WriteLine($"MP-HENRY joiner: {s.Display}: {why}"); return null; }
+        if (requirePristine && soul == WhsSave.HenrySoul && !who.Pristine) { why = "not a new game's first Henry save"; return null; }
         var parts = WhsSave.PartsFromStream(c.Raw, WhsSave.DescriptionSummary(c.Desc).GetValueOrDefault("BuildInfo") ?? "", origin);
         return new HenryChoice(mode, parts, s, s.Display);
     }
@@ -653,7 +660,8 @@ public partial class GameBridge
             abortReason = Protocol.JoinAbortWorldChanged;
             return null;
         }
-        if (!who.IsHenry) { why = $"the host's player in this world is not Henry ({who.Player})"; abortReason = Protocol.JoinAbortNotHenry; return null; }
+        if (!who.IsKnown) { why = $"the host's player in this world is neither Henry nor Godwin ({who.Player})"; abortReason = Protocol.JoinAbortNotHenry; return null; }
+        _peerSoul = who.Soul;   // the world as received is the authority on whose character it needs
         if (_henry.HasWorld(tag))
         {
             List<string> branch;
@@ -719,7 +727,7 @@ public partial class GameBridge
         string md5 = Convert.ToHexString(w.Md5).ToLowerInvariant();
         string skip = !_joinedWorld ? "" : _jj is not null ? "a join is running" : _rewinding ? "the host is reloading (nothing is kept until the rejoin)"
                     : _joinedTag is null ? "the world is not known" : _resetTag == _joinedTag ? "mp_henry_reset this session (a new choice next join)"
-                    : !_peerHenryWorld ? "the host's player is not Henry" : _where != GameWhere.World ? "not in the world" : "";
+                    : !_peerHenryWorld ? "the host's player is not Henry or Godwin" : (_joinedSoul is not null && _peerSoul != _joinedSoul) ? "the host's story switched characters (Henry and Godwin): your snapshots pause until yours does too" : _where != GameWhere.World ? "not in the world" : "";
         if (!_joinedWorld) return;   // not in the host's world: nothing to pair
         if (skip != "") { Console.WriteLine($"MP-HENRY joiner: host save seq={w.Seq} md5={md5[..8]}: no snapshot -- {skip}"); return; }
         if (Interlocked.CompareExchange(ref _snapBusy, 1, 0) != 0) { Console.WriteLine($"MP-HENRY joiner: host save seq={w.Seq}: no snapshot -- the previous one is still running"); return; }
@@ -766,7 +774,7 @@ public partial class GameBridge
                 var c = WhsSave.Inflate(bytes);
                 uint? seed = WhsSave.ReadSeed(c.Raw);
                 if (seed is not uint s || WhsSave.SeedTag(s) != _joinedTag) storeWhy = "the snapshot is not of the host's world (seed)";
-                else if (!WhsSave.PlayerOf(c.Raw).IsHenry) storeWhy = "the snapshot's player is not Henry";
+                else if (WhsSave.PlayerOf(c.Raw) is var snapWho && (!snapWho.IsKnown || snapWho.Soul != (_joinedSoul ?? WhsSave.HenrySoul))) storeWhy = "the snapshot's player is not the character this world was joined as";
                 else parts = WhsSave.PartsFromStream(c.Raw, WhsSave.DescriptionSummary(c.Desc).GetValueOrDefault("BuildInfo") ?? "", WhsSave.HenryParts.OriginSnapshot);
             }
             double lagS = (tReq - tIn).TotalSeconds;

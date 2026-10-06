@@ -471,6 +471,7 @@ public partial class GameBridge
             j.Source = choice.Save;
             j.Mode = choice.Mode;
             j.WorldTag = worldTag;
+            Wo157NoteHome(worldTag, choice);   // WO-157: where this character can be sent home to
 
             // ---- Phase 2: splice + check + verify, in memory
             _questClasses ??= WhsSave.QuestClasses(tables);
@@ -499,7 +500,7 @@ public partial class GameBridge
             }
             var rp = res.Report;
             var splicedRaw = WhsSave.Inflate(res.File).Raw;
-            j.Henry = WhsSave.DecodePlayerSoul(splicedRaw, WhsSave.FindSoul(splicedRaw, WhsSave.HenrySoul)!.Value);
+            j.Henry = WhsSave.DecodePlayerSoul(splicedRaw, WhsSave.FindSoul(splicedRaw, choice.Parts.Soul)!.Value);   // WO-157: Henry's record, or Godwin's in his stretches
             // WO-125: the Henry exactly as loaded -- the join save pairs with it after Ready.
             j.SplicedParts = WhsSave.PartsFromStream(splicedRaw, choice.Parts.Build, WhsSave.HenryParts.OriginSnapshot);
             Console.WriteLine(FormattableString.Invariant(
@@ -567,6 +568,7 @@ public partial class GameBridge
                 $"MP-JOIN joiner: join 0x{j.JoinId:x8} loaded: command -> accepted {(j.LoadStartUtc - j.LoadCmdUtc).TotalSeconds:F1} s, -> file read (LoadGame) {(j.LoadGameUtc == default ? double.NaN : (j.LoadGameUtc - j.LoadCmdUtc).TotalSeconds):F1} s, -> Gameplay started {(j.GameplayUtc - j.LoadCmdUtc).TotalSeconds:F1} s (received -> in world {(j.GameplayUtc - t0).TotalSeconds:F1} s)"));
             j.Phase = "post-load";
             _joinedSource = choice.Save;
+            _joinedSoul = choice.Parts.Soul;   // WO-157
             SetJoinedWorld(true);   // the saves watch runs: a save that still lands here is a leak (QuickSave passes the lock)
 
             // ---- right after Gameplay started: the file goes, Continue must not find it
@@ -852,16 +854,25 @@ public partial class GameBridge
         _leaveInProgress = true;           // WO-125: no join is asked until this leave's own load is in
         _newWorldLeavePending = false;
         _leaveSinceUtc = DateTime.UtcNow;
+        // WO-157: when asked (mp_henry_home_on_leave on), the character goes home first, and that new save is what loads.
+        _w157LastTag = _joinedTag ?? _w157LastTag;
+        HenrySource? homeSave = null;
+        if (_w157OnLeave && _joinedWorld)
+        {
+            var hr = await Wo157SendHomeAsync(null, "leave: " + why);
+            if (hr.Ok) homeSave = hr.Save;
+            else message += " Your character was not sent home (" + hr.Message + ")";
+        }
         // WO-125 Phase 2: the target is recomputed now -- the newest own save whose playthrough is not the
         // host's (a hand-placed copy of the host's world is never "own"). None: the way back to the menu.
-        var (src, ownWhy) = await Wo125NewestOwnLoadableAsync();
+        var (src, ownWhy) = homeSave is not null ? (homeSave, "") : await Wo125NewestOwnLoadableAsync();
         SetJoinedWorld(false);
         _jj = null;
         _rewinding = false;
         _rejoinPending = false;
         await Wo122SetLockAsync(false, "left-shared-world");
         Wo144ReleaseClock("left-shared-world");   // WO-144 3.3: a clock standing with the host's never stays standing
-        string full = src is null ? message : $"{message} Going back to your own game.";
+        string full = src is null ? message : homeSave is not null ? $"{message} Going back to your own game, with your character as he is now." : $"{message} Going back to your own game.";
         SetJoinUi("left", full);
         Console.WriteLine($"MP-JOIN joiner: leaving the host's world ({why}) -> {(src is null ? "no own save (" + ownWhy + "): back to the main menu" : "loading " + src.Display)}");
         await ExecLuaAsync($"if KCD2MP_Wo124Msg then KCD2MP_Wo124Msg(\"{EscapeLua(full)}\") end");
