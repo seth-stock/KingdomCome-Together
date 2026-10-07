@@ -5,7 +5,7 @@ This is an **incomplete development branch**, not a multiplayer release. Origina
 
 ## Implemented
 
-- Installer wizard and silent-install preparation check for readable, non-empty Tables.pak, Scripts.pak, GameData.pak, and Characters.pak before changing mod files. An incomplete workspace receives the WorkspaceSetup explanation. Detection fixtures exercise the actual Inno code.
+- Installer wizard and silent-install preparation check for readable, non-empty Tables.pak, Scripts.pak, IPL_GameData.pak, and Characters.pak before changing mod files. An incomplete workspace receives the WorkspaceSetup explanation. Detection fixtures exercise the actual Inno code.
 - Immutable content-addressed checkpoint manifests and verified world/character/ledger artifacts. Every referenced artifact must exist and hash correctly before publication. Ancestry comparison rejects incompatible or ambiguous automatic selection. Artifacts are not automatically pruned.
 - `ReconcileService`: verified checkpoint capture, playthrough-seed matching, ancestor/descendant selection, explicit divergent-branch selection, refusal when the selected checkpoint lacks a participant or two participants own the same item instance, and verified preparation of each paired character as a personalized save using the existing splice/check/quest-item filtering. Both branches remain archived. Preparation never writes a game playline or declares a live session ready.
 - Normal rejoin prefers an exact world/character pair and otherwise a pair on the host's announced branch. It no longer silently uses the newest unrelated snapshot. This existing branch list is not yet the new manifest ancestry protocol.

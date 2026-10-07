@@ -135,7 +135,7 @@ begin
   if Root = '' then begin Result := 'Data/Engine workspace root'; Exit; end;
   SetArrayLength(Names, 4);
   Names[0] := 'Tables.pak'; Names[1] := 'Scripts.pak';
-  Names[2] := 'GameData.pak'; Names[3] := 'Characters.pak';
+  Names[2] := 'IPL_GameData.pak'; Names[3] := 'Characters.pak';
   for I := 0 to GetArrayLength(Names) - 1 do
   begin
     Name := Root + '\Data\' + Names[I];

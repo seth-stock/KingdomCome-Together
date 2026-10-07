@@ -99,7 +99,7 @@ function New-ModdingToolsLayout($library, $installDir) {
     $base = "$library\steamapps\common\$installDir"
     New-Dir "$base\Data"
     New-Dir "$base\Engine"
-    foreach ($pak in @('Tables.pak', 'Scripts.pak', 'GameData.pak', 'Characters.pak')) {
+    foreach ($pak in @('Tables.pak', 'Scripts.pak', 'IPL_GameData.pak', 'Characters.pak')) {
         New-EmptyFile "$base\Data\$pak"
     }
     New-EmptyFile "$base\Bin\Win64ReleaseSteamLTO_DLL\KingdomCome.exe"
