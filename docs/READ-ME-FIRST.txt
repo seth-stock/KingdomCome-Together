@@ -1,0 +1,36 @@
+KINGDOM COME: TOGETHER 0.45.0 (playtest build 2026-10-07) -- co-op for Kingdom Come: Deliverance II
+==================================================================================================
+
+An unofficial, free community mod. Not affiliated with or endorsed by Warhorse Studios or PLAION. GPL-3.0.
+Everyone in the room -- the host and every friend -- needs THIS installer (the same mod build). A different mod build is refused, with a sentence saying why.
+
+PLAYTEST BUILD. This is a development build for testing, not a finished release. Nobody has played it with two people yet.
+The room tells you what it is: normally "partly shared" -- you see each other and fight and talk together, but loot is not yet duplication-proof and there is no
+consistent world checkpoint, so do not use your only save. A friend with other DLC or mods than the host is let in as presence only, and no world is moved to them.
+If the launcher says "shared simulation", that is a bug: report it. Tests to try, step by step: HUMAN-ACCEPTANCE-TESTS.md (next to this file);
+what is proved and what is not: CAPABILITIES.md.
+
+WHAT YOU NEED (in Steam, each of you)
+  1. Kingdom Come: Deliverance II and the free "Kingdom Come: Deliverance II Modding tools" (a separate item in your library).
+  2. The Modding tools' one-time data setup: in Explorer open <your Steam library>\steamapps\common\KCD2Mod\Tools\ModdingWorkspaceSetup\, right-click WorkspaceSetup.exe,
+     "Run as administrator", answer S. Skip it and the game crashes ("114 tables are not loaded") and Setup refuses to install.
+  3. One save of your own made on the Modding tools build (1.5.5) or older, if you are a friend (or a new game's first save, after the short prologue).
+
+STEP 1 -- install (everyone)
+  * Optional: check the file. In PowerShell:  Get-FileHash .\KingdomComeTogether-Setup-0.45.0.exe -Algorithm SHA256   must equal the number in SHA256.txt.
+  * Run KingdomComeTogether-Setup-0.45.0.exe. Windows warns it is unsigned: "More info", then "Run anyway". If Defender removes a file, see docs\PLAYING-TOGETHER.md section 6.
+
+STEP 2 -- connect
+  * Open "Kingdom Come: Together" (desktop shortcut).
+  * HOST: click HOST GAME. Send each friend one address with the port, e.g. 100.64.12.3:7778 (use Tailscale, free, if you are not on one network). Start the game FROM THE LAUNCHER
+    (never Steam's Play button), load your save, and when you can move click CONNECT. Only you save.
+  * FRIEND: ADD SERVER, enter the address, JOIN SERVER. Start the game from the launcher and STAY AT THE MAIN MENU: do not load a save. Click CONNECT. The first time it asks
+    "Bring my character" or "Start fresh"; the game then loads the host's world (a loading screen, up to a minute).
+  * When the host's story goes on rails you are asked: F11 join them, F12 stay in the open world.
+
+IF SOMETHING GOES WRONG
+  * "the host's room refused this install: different mod payloads": you and the host have different builds. Install the same download.
+  * Logs: in the launcher click "Report a bug" (it collects the logs of your last launches). Remove your public IP before posting.
+  * Full guide: docs\PLAYING-TOGETHER.md (installed next to the launcher). Known limits: docs\IMPLEMENTATION-STATUS.md.
+
+UNINSTALL: Windows Settings > Apps > Kingdom Come: Together. Your saves are never touched.
