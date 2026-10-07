@@ -2,6 +2,7 @@
 // GPLv3 section 7 additional terms: NOTICE. This project's own code only; Kingdom Come: Deliverance II and its
 // content belong to Warhorse Studios and PLAION. Unofficial, free, not affiliated with or endorsed by them.
 // Portions from the original project, marczukmichal/kcd2-multiplayer; its author keeps their copyright (AUTHORS).
+using Coop.Contract;
 using ILogger = Serilog.ILogger;
 
 namespace KcdMp.Server.Features.ClientHandling;
@@ -70,9 +71,72 @@ public class ClientHandler
 	private readonly bool _claimLifecycleLoggingEnabled;
 	private readonly double _contestedGapSeconds;
 
+	// ---- v12: the room contract (Coop.Contract) ----
+	/// <summary>Contract:Required (default true): a client that sends no room handshake is refused. False only for synthetic test peers and old tooling.</summary>
+	public bool ContractRequired { get; }
+	public RoomPolicy ContractPolicy { get; }
+	public ParticipantBindings Bindings { get; } = new();
+	private readonly string? _bindingsFile;
+
+	/// <summary>Asks whether <paramref name="client"/> may join the room as it is now. Null when it may; otherwise the plain reason. Sets the client's handshake and mode.</summary>
+	public string? AdmitContract(ClientSession client, RoomHandshake hs)
+	{
+		lock (_lock)
+		{
+			NegotiationResult room;
+			if (client.IsLoopback || client.ClaimsHost)
+			{
+				room = Negotiation.Negotiate(hs, hs, ContractPolicy);
+				foreach (var other in _readyClients.Where(c => c.Handshake is not null))
+				{
+					var r = Negotiation.Negotiate(hs, other.Handshake!, ContractPolicy);
+					if (!r.Admitted) { room = r; break; }
+				}
+			}
+			else
+			{
+				var host = _readyClients.FirstOrDefault(c => c.Handshake is not null && (c.IsLoopback || c.ClaimsHost));
+				room = host?.Handshake is null ? Negotiation.Negotiate(hs, hs, ContractPolicy) : Negotiation.Negotiate(host.Handshake, hs, ContractPolicy);
+			}
+			if (!room.Admitted) return room.Describe();
+			client.Handshake = hs; client.RoomMode = room.Mode; client.RoomMissing = string.Join(',', room.Missing);
+			return null;
+		}
+	}
+
+	/// <summary>The room's honest mode: the weakest negotiated mode among the ready clients, with what is missing.</summary>
+	public (byte Mode, string Missing) RoomSummary()
+	{
+		lock (_lock)
+		{
+			var ready = _readyClients.Where(c => c.Handshake is not null).ToList();
+			if (ready.Count == 0) return (0, "");
+			RoomMode weakest = ready.Min(c => c.RoomMode);
+			string missing = string.Join(',', ready.Where(c => c.RoomMode == weakest).SelectMany(c => c.RoomMissing.Split(',', StringSplitOptions.RemoveEmptyEntries)).Distinct());
+			return (weakest switch { RoomMode.SharedSimulation => (byte)2, RoomMode.Partial => (byte)1, _ => (byte)0 }, missing);
+		}
+	}
+
+	public void SaveBindings()
+	{
+		if (_bindingsFile is null) return;
+		try
+		{
+			Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_bindingsFile))!);
+			File.WriteAllLines(_bindingsFile + ".part", Bindings.Snapshot().Select(kv => kv.Key + " " + kv.Value));
+			File.Move(_bindingsFile + ".part", _bindingsFile, overwrite: true);
+		}
+		catch (Exception e) when (e is IOException or UnauthorizedAccessException) { _logger.Warning("[!] The participant bindings could not be saved: {Message}", e.Message); }
+	}
+
 	public ClientHandler(ILogger logger, IConfiguration configuration)
 	{
 		_logger = logger;
+		ContractRequired = configuration.GetValue("Contract:Required", true);
+		ContractPolicy = new RoomPolicy(configuration.GetValue("Contract:AllowUnverifiedPayload", false));
+		_bindingsFile = configuration.GetValue<string?>("Contract:BindingsFile", null);
+		if (_bindingsFile is not null && File.Exists(_bindingsFile))
+			Bindings.Restore(File.ReadAllLines(_bindingsFile).Select(l => l.Split(' ', 2)).Where(p => p.Length == 2).Select(p => new KeyValuePair<string, string>(p[0], p[1])));
 
 		// WO-76 (docs/WO-75-audit-findings.md s1): 0 was accepted at face
 		// value and refused every handshake (TryMarkReady's count-vs-limit

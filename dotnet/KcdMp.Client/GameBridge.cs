@@ -988,6 +988,8 @@ public partial class GameBridge(ClientConfig config)
     // receive loop needs it to tell the mod whether an ItemClaimDown echo
     // means "you won" (claimer == us) or "you lost, roll back".
     private byte _myGhostId;
+    private byte _roomMode;                // v12: 0 presence, 1 partial, 2 shared (the relay's answer; never assumed)
+    private string _roomMissing = "";
 
     // ---- Shared player combat (WO-28) ----
 
@@ -1259,6 +1261,12 @@ public partial class GameBridge(ClientConfig config)
                 Console.WriteLine($"[!] {ex.Message}");
                 break;
             }
+            catch (RoomRefusedException ex)
+            {
+                // v12: fatal, the relay will refuse this payload every time. The plain reason is already published.
+                Console.WriteLine($"[!] {ex.Message}");
+                break;
+            }
             catch (ServerFullException ex)
             {
                 // Fatal for this attempt (WO-76): looping every 3 s against a
@@ -1397,14 +1405,16 @@ public partial class GameBridge(ClientConfig config)
         // WO-19: the trailing release-version field is optional and unlengthed
         // on purpose -- see Protocol.cs's release version layer doc -- so an old
         // relay that only reads [version][nameLen][name] is unaffected.
-        await stream.WriteAsync(RelayConnector.BuildHandshake(config.PlayerName ?? Environment.MachineName, ReleaseVersionInfo.Current), appCt);
+        // v12: the release field also carries the room handshake (game, contract, mod payload hashes, honest capabilities) and this player's participant identity.
+        var roomIdentity = RoomContract.Identity();
+        await stream.WriteAsync(RoomContract.BuildHandshake(config.PlayerName ?? Environment.MachineName, ReleaseVersionInfo.Current, RoomContract.Current(), roomIdentity), appCt);
 
         // --- Ack (S→C 0xFF [id:1]) or a rejection: 0x09 [serverVersion:1],
         // 0x36 [maxPlayers:1], or 0x3D [relayRelease:UTF-8] (WO-110 R9). The
         // first three are 4 bytes; 0x3D is variable, so the header is read
         // first and the payload sized from it.
         byte replyType; byte[] replyBody;
-        try { (replyType, replyBody) = await RelayConnector.ReadFrameAsync(stream, appCt); }
+        try { (replyType, replyBody) = await RoomContract.ReadAdmissionAsync(stream, roomIdentity, appCt); }   // answers the relay's identity challenge on the way
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AgentConnectionStatus.Fail(via, ConnectionTrouble.Lost, $"handshake read failed: {ex.GetType().Name}: {ex.Message}", fatal: false);
@@ -1423,6 +1433,14 @@ public partial class GameBridge(ClientConfig config)
         {
             AgentConnectionStatus.Fail(via, ConnectionTrouble.ServerFull, $"relay full (max {replyBody[0]})", fatal: true);
             throw new ServerFullException(replyBody[0]);
+        }
+
+        if (replyType == Protocol.ContractRefusedDown)
+        {
+            string why = Encoding.UTF8.GetString(replyBody);
+            AgentConnectionStatus.Fail(via, ConnectionTrouble.RoomRefused, "room refused: " + why, fatal: true, why);
+            try { await ExecLuaAsync($"if KCD2MP_ShowNativeToast then KCD2MP_ShowNativeToast(\"KCD2-MP: the host's room refused this install: {EscapeLua(why)}\") end"); await _transport.FlushAsync(appCt); } catch { }
+            throw new RoomRefusedException(why);
         }
 
         if (replyType == Protocol.ReleaseVersionMismatch)
@@ -1445,6 +1463,8 @@ public partial class GameBridge(ClientConfig config)
 
         byte myId = replyBody[0];
         _myGhostId = myId;
+        (_roomMode, _roomMissing) = RoomContract.ParseAck(replyBody);
+        Console.WriteLine($"MP-ROOM mode={RoomContract.ModeWord(_roomMode)} missing={(_roomMissing.Length > 0 ? _roomMissing : "-")}");
         Console.WriteLine($"Connected! Assigned id={myId} (protocol v{Protocol.Version})");
         Console.WriteLine();
 
@@ -5008,6 +5028,19 @@ public partial class GameBridge(ClientConfig config)
                         await ExecLuaAsync($"if KCD2MP_ShowInteractionMsg then KCD2MP_ShowInteractionMsg(\"{EscapeLua(who)} died\") end");
                     }
                     catch { }
+                }
+                else if (type == Protocol.RoomModeDown && payloadLen >= 1)
+                {
+                    // v12: what kind of room this is now. Said in the game and in the launcher in plain words; never "shared" for a presence room.
+                    byte mode = payload[0];
+                    string missing = Encoding.UTF8.GetString(payload, 1, payloadLen - 1);
+                    if (mode != _roomMode || missing != _roomMissing)
+                    {
+                        (_roomMode, _roomMissing) = (mode, missing);
+                        string sentence = RoomContract.Sentence(mode, missing);
+                        Console.WriteLine($"MP-ROOM mode={RoomContract.ModeWord(mode)} missing={(missing.Length > 0 ? missing : "-")}");
+                        try { await ExecLuaAsync($"if KCD2MP_ShowNativeToast then KCD2MP_ShowNativeToast(\"KCD2-MP: {EscapeLua(sentence)}\") end"); } catch { }
+                    }
                 }
                 else if (type == Protocol.CombatRole && payloadLen == Protocol.CombatRolePayloadLen)
                 {

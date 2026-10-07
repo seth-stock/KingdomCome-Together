@@ -425,7 +425,8 @@ public partial class GameBridge
         string choice = host ? "" : W155ChoiceName();
         var (joined, free, asking) = host ? W155Counts() : (0, 0, 0);
         return CoopStatus.Json(role, sync, section, why, host ? _w153TetherOn : StorySections.ByCode(peer.Code) is { Tier: StoryTier.Rails }, _w153GameBuild, CoopStatus.BuildWarning(_w153GameBuild),
-                               choice, CoopStatus.RailsText(role, section.Length > 0 ? periodWhy : "", choice, joined, free, asking));
+                               choice, CoopStatus.RailsText(role, section.Length > 0 ? periodWhy : "", choice, joined, free, asking),
+                               RoomContract.ModeWord(_roomMode), inSession ? RoomContract.Sentence(_roomMode, _roomMissing) : "");
     }
 
     private string W153ActiveCode() { lock (_w153Lock) return _w153Lock.Active?.Code ?? "-"; }

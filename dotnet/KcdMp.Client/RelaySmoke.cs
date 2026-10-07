@@ -39,20 +39,16 @@ public static class RelaySmoke
             await tcp.ConnectAsync(host, port, cts.Token);
             var stream = tcp.GetStream();
 
-            // The exact handshake GameBridge.ConnectAndRunAsync sends.
-            var nameBytes = Encoding.UTF8.GetBytes(name);
-            var rel = Encoding.UTF8.GetBytes(ReleaseVersionInfo.Current);
-            int len = 2 + nameBytes.Length + rel.Length;
-            var hs = new byte[3 + len];
-            hs[0] = Protocol.Handshake;
-            BinaryPrimitives.WriteUInt16LittleEndian(hs.AsSpan(1), (ushort)len);
-            hs[3] = Protocol.Version;
-            hs[4] = (byte)nameBytes.Length;
-            nameBytes.CopyTo(hs, 5);
-            rel.CopyTo(hs, 5 + nameBytes.Length);
-            await stream.WriteAsync(hs, cts.Token);
+            // The exact handshake GameBridge.ConnectAndRunAsync sends (v12: with the room handshake and an identity of its own, never the player's).
+            var identity = Coop.Contract.ParticipantBindings.Identity.CreateEphemeral();
+            await stream.WriteAsync(RoomContract.BuildHandshake(name, ReleaseVersionInfo.Current, RoomContract.Current(), identity), cts.Token);
 
-            var (type, payload) = await ReadPacketAsync(stream, cts.Token);
+            var (type, payload) = await RoomContract.ReadAdmissionAsync(stream, identity, cts.Token);
+            if (type == Protocol.ContractRefusedDown)
+            {
+                Console.WriteLine($"RELAY-SMOKE FAIL room refused: {Encoding.UTF8.GetString(payload)}");
+                return 1;
+            }
             if (type == Protocol.VersionMismatch)
             {
                 Console.WriteLine($"RELAY-SMOKE FAIL protocol mismatch: relay speaks v{payload[0]}, this agent v{Protocol.Version}");

@@ -79,6 +79,7 @@ public enum ConnectionTrouble
     BadCode,           // the Steam code doesn't decode
     OwnCode,           // the Steam code is this account's own
     ServerFull,
+    RoomRefused,       // v12: the room's contract or identity check refused this install (another game, another mod payload, a bad identity)
     Lost,              // was connected, the connection dropped
     Unknown,
 }
@@ -135,6 +136,9 @@ public readonly record struct PlainConnectionError(ConnectionTrouble Kind, strin
         ConnectionTrouble.ServerFull => new(kind,
             "The host's game is full.",
             "Wait until someone leaves, then try again."),
+        ConnectionTrouble.RoomRefused => new(kind,
+            $"The host's room refused this install: {theirs ?? "(no reason given)"}.",
+            "Both players need the same package: install the same download, with the same game content, then try again."),
         ConnectionTrouble.Lost => new(kind,
             "The connection to the host was lost.",
             "It reconnects by itself; if it doesn't, check the host is still playing."),
@@ -157,6 +161,7 @@ public readonly record struct PlainConnectionError(ConnectionTrouble Kind, strin
         ConnectionTrouble.VersionMismatch => $"the host runs {theirs ?? "?"}, you run {mine ?? "?"}",
         ConnectionTrouble.ProtocolMismatch => "the host runs a different version of the mod",
         ConnectionTrouble.ServerFull => "the host's game is full",
+        ConnectionTrouble.RoomRefused => "the host's room refused this install: " + (theirs ?? "?"),
         ConnectionTrouble.Lost => "the connection dropped",
         _ => "something went wrong",
     };

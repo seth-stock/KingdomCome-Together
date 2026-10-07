@@ -89,6 +89,7 @@ public sealed class ClientSessionRunner
 			// left. Announced after RemoveClient above, so the role is
 			// recomputed over the set that actually remains.
 			_broadcastService.BroadcastCombatRole();
+			_broadcastService.BroadcastRoomMode();   // v12: the room's mode is the weakest of those who remain
 		}, CancellationToken.None);
 	}
 }

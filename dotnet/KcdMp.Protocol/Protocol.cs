@@ -795,7 +795,7 @@ public static partial class Protocol
     /// rows. A v9 relay would drop both as unknown types; v9 and v10 refuse
     /// each other at Handshake.
     /// </summary>
-    public const byte Version = 11; // scoped loot operations; legacy peers cannot safely retry mutations
+    public const byte Version = 12; // v12: the room handshake (contract + participant identity) and its refusals; v11 peers cannot be admitted to a room that verifies payloads
 
     // C→S
     public const byte Handshake      = 0x00;
@@ -828,6 +828,7 @@ public static partial class Protocol
     public const byte PlayerRespawnedUp = 0x3E;   // WO-113
     public const byte GraveAddUp        = 0x40;   // WO-113
     public const byte GraveRemoveUp     = 0x42;   // WO-113
+    public const byte IdentityProofUp   = 0x44;   // v12: [signature:UTF-8 base64] over the relay's IdentityChallengeDown nonce (Coop.Contract.ParticipantBindings)
 
     // S→C
     public const byte Ghost            = 0x02;
@@ -868,7 +869,13 @@ public static partial class Protocol
     public const byte PlayerRespawnedDown = 0x3F;   // WO-113
     public const byte GraveAddDown        = 0x41;   // WO-113
     public const byte GraveRemoveDown     = 0x43;   // WO-113
-    public const byte Ack              = 0xFF;
+    public const byte IdentityChallengeDown = 0x45;   // v12: [nonce:UTF-8] sent after the Handshake, before the Ack
+    public const byte ContractRefusedDown = 0x47;   // v12: [reason:UTF-8] the room handshake or identity was refused (different game/contract/payload, bad identity)
+    public const byte RoomModeDown        = 0x49;   // v12: [mode:1 0=presence 1=partial 2=shared][missing capabilities:UTF-8 comma list]; sent to every ready client when the room changes
+    public const byte Ack              = 0xFF;   // [id:1] and from v12 [mode:1][missing:UTF-8]
+
+    /// <summary>v12: the Handshake's trailing field is "release", optionally followed by this separator and the room handshake, and again by the participant identity "id;publicKey".</summary>
+    public const char HandshakeFieldSeparator = '\u0001';
 
     /// <summary>WO-98: ClockSyncUp payload -- one int64 of client UTC ticks.</summary>
     public const int ClockSyncUpPayloadLen = 8;

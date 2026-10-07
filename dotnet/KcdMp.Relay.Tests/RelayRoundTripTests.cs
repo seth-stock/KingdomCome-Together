@@ -38,8 +38,11 @@ namespace KcdMp.Relay.Tests;
 // =============================================================================
 
 /// <summary>One real relay, started once per test class, on free loopback ports.</summary>
-public sealed class RelayFixture : IAsyncLifetime
+public class RelayFixture : IAsyncLifetime
 {
+    /// <summary>The bare handshake tests speak no room contract; ContractRelayFixture turns the requirement back on.</summary>
+    protected virtual string[] ExtraArgs => new[] { "--Contract:Required", "false" };
+
     public int TcpPort { get; private set; }
     private WebApplication? _app;
 
@@ -56,7 +59,7 @@ public sealed class RelayFixture : IAsyncLifetime
             "--Urls", $"http://127.0.0.1:{httpPort}",
             // Keep the relay's rolling file sink out of the test tree.
             "--Serilog:WriteTo:1:Name", "Console",
-        });
+        }.Concat(ExtraArgs).ToArray());
         await _app.StartAsync();
 
         // TcpSocketService binds inside its own background task; wait for it.
@@ -879,7 +882,7 @@ public class RelayRoundTripTests : IClassFixture<RelayFixture>
         await using var _p = p;
         Assert.Equal(Protocol.VersionMismatch, type);
         Assert.Equal(Protocol.Version, payload[0]);
-        Assert.Equal(11, Protocol.Version);   // scoped loot operations
+        Assert.Equal(12, Protocol.Version);   // v12: the room handshake
     }
 
     // ---- WO-114: the leash 0x58..0x5B, protocol v10 -------------------------
@@ -890,7 +893,7 @@ public class RelayRoundTripTests : IClassFixture<RelayFixture>
         var (p, type, payload) = await Peer.ConnectRawAsync(_relay.TcpPort, "v9build", ReleaseVersionInfo.Current, 9);
         await using var _p = p;
         Assert.Equal(Protocol.VersionMismatch, type);
-        Assert.Equal(11, payload[0]);
+        Assert.Equal(Protocol.Version, payload[0]);
     }
 
     [Fact]

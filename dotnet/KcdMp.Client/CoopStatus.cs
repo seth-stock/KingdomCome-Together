@@ -91,14 +91,15 @@ public static partial class CoopStatus
     }
 
     public static string Json(string role, string sync, string section, string sectionWhy, bool tether, string? build, string? warning,
-                              string railsChoice = "", string railsText = "")
+                              string railsChoice = "", string railsText = "", string roomMode = "presence", string roomText = "")
     {
         var sb = new StringBuilder(320);
         sb.Append('{').Append(Js.Str("role", role)).Append(',').Append(Js.Str("sync", sync)).Append(',').Append(Js.Str("syncText", SyncText(sync)))
           .Append(',').Append(Js.Str("section", section)).Append(',').Append(Js.Str("sectionWhy", sectionWhy))
           .Append(",\"tether\":").Append(tether ? "true" : "false")
           .Append(',').Append(Js.Str("gameBuild", build)).Append(',').Append(Js.Str("buildWarning", warning))
-          .Append(',').Append(Js.Str("railsChoice", railsChoice)).Append(',').Append(Js.Str("railsText", railsText)).Append('}');
+          .Append(',').Append(Js.Str("railsChoice", railsChoice)).Append(',').Append(Js.Str("railsText", railsText))
+          .Append(',').Append(Js.Str("roomMode", roomMode)).Append(',').Append(Js.Str("roomText", roomText)).Append('}');
         return sb.ToString();
     }
 }

@@ -38,6 +38,7 @@ public class IdleTimeoutTests
             "--Urls", $"http://127.0.0.1:{httpPort}",
             "--Serilog:WriteTo:1:Name", "Console",
             "--Tcp:IdleTimeoutMs", "300",
+            "--Contract:Required", "false",
         });
         await app.StartAsync();
         await WaitForBindAsync(tcpPort);

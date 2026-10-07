@@ -84,7 +84,7 @@ public class Wo123Tests : IDisposable
         }
         Assert.Null(Protocol.JoinWireFor(Protocol.WorldSavedUp));
         Assert.False(Protocol.IsJoinDown(Protocol.WorldSavedDown, Protocol.WorldSavedDownPayloadLen));
-        Assert.Equal(11, Protocol.Version);   // scoped loot operations
+        Assert.Equal(12, Protocol.Version);   // v12: the room handshake (contract + participant identity)
         // the biggest frame the join sends fits a u16 length and the relay's queue many times over
         var chunk = Protocol.JoinWireFor(Protocol.WorldChunkUp)!.Value;
         Assert.Equal(Protocol.JoinHeaderLen + 4 + Protocol.WorldChunkMaxData, chunk.Max);

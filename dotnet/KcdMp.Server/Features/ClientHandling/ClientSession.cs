@@ -86,6 +86,16 @@ public class ClientSession
     /// release-version field (an old build, or a synthetic test peer).</summary>
     public string? ReleaseVersion { get; private set; }
 
+    /// <summary>v12: what this client told the room about itself (Coop.Contract). Null for a peer admitted without one (Contract:Required=false).</summary>
+    public Coop.Contract.RoomHandshake? Handshake { get; internal set; }
+    public Coop.Contract.RoomMode RoomMode { get; internal set; } = Coop.Contract.RoomMode.Presence;
+    public string RoomMissing { get; internal set; } = "";
+    public string ParticipantId { get; private set; } = "";
+
+    /// <summary>v12: the room is now this mode (0 presence, 1 partial, 2 shared) and these capabilities keep it from being fully shared.</summary>
+    public void EnqueueRoomMode(byte mode, string missing) =>
+        EnqueueRaw(BuildPacket(Protocol.RoomModeDown, [mode, .. Encoding.UTF8.GetBytes(missing)]));
+
     // WO-102.5 Phase 4: departure handoff needs the ungraceful case caught by
     // a timeout, not only a clean disconnect (FIN) or an immediate reset
     // (RST) -- a client whose machine or network vanishes silently (cable
@@ -112,6 +122,37 @@ public class ClientSession
         _sessions = sessions;
         _clientHandler = clientHandler;
         IsLoopback = conn.IsLoopback;
+    }
+
+    /// <summary>
+    /// v12: validates the room handshake, then proves the participant's identity with a challenge that is signed. Returns null when admitted, else the reason.
+    /// The client sends the proof only after the relay's challenge, so a captured handshake cannot be replayed to take a participant's id.
+    /// </summary>
+    private async Task<string?> AdmitContractAsync(string name, string? contractText, string? identityText)
+    {
+        var hs = Coop.Contract.RoomHandshake.TryDecode(contractText);
+        if (hs is null) return "this build did not send a room handshake: everyone must install the same build";
+        var idParts = (identityText ?? "").Split(';');
+        if (idParts.Length != 2) return "identity: this build did not send a participant identity";
+        string nonce = _clientHandler.Bindings.Challenge();
+        EnqueueRaw(BuildPacket(Protocol.IdentityChallengeDown, Encoding.UTF8.GetBytes(nonce)));
+        var frame = new byte[3];
+        await ReadExactWithIdleTimeoutAsync(frame);
+        int len = BinaryPrimitives.ReadUInt16LittleEndian(frame.AsSpan(1));
+        if (frame[0] != Protocol.IdentityProofUp || len is 0 or > 400) return "identity: the proof of identity did not follow the challenge";
+        var sig = new byte[len];
+        await ReadExactAsync(sig);
+        var claim = _clientHandler.Bindings.Claim(idParts[0], idParts[1], nonce, Encoding.UTF8.GetString(sig));
+        switch (claim)
+        {
+            case Coop.Contract.ParticipantBindings.Result.Bound: _clientHandler.SaveBindings(); break;
+            case Coop.Contract.ParticipantBindings.Result.Accepted: break;
+            case Coop.Contract.ParticipantBindings.Result.WrongKey: return "identity: that participant id belongs to another player's key";
+            case Coop.Contract.ParticipantBindings.Result.BadSignature: return "identity: the identity proof is not valid";
+            default: return "identity: the identity proof is malformed";
+        }
+        ParticipantId = idParts[0];
+        return _clientHandler.AdmitContract(this, hs);
     }
 
     public async Task RunAsync()
@@ -175,8 +216,15 @@ public class ClientSession
             // the name is the sender's release version, exactly zero bytes
             // for an old build that never sent one.
             int releaseVersionOffset = 2 + nameLen;
+            string? contractText = null, identityText = null;
             if (handshakeLen > releaseVersionOffset)
-                ReleaseVersion = Encoding.UTF8.GetString(handshakePayload, releaseVersionOffset, handshakeLen - releaseVersionOffset);
+            {
+                // v12: "release", then optionally SEP + the room handshake, then SEP + "participantId;publicKey"
+                var fields = Encoding.UTF8.GetString(handshakePayload, releaseVersionOffset, handshakeLen - releaseVersionOffset).Split(Protocol.HandshakeFieldSeparator);
+                ReleaseVersion = fields[0];
+                if (fields.Length > 1) contractText = fields[1];
+                if (fields.Length > 2) identityText = fields[2];
+            }
 
             // WO-110 R9: a declared release version must equal this relay's.
             // Protocol.cs, "Release-version enforcement": 0.26.4 + 0.26.5 must
@@ -205,6 +253,19 @@ public class ClientSession
                 return;
             }
 
+            // v12: the room contract. Same game, same contract and wire, the same mod payload, and who this participant is. The first failure is final and says why.
+            if (_clientHandler.ContractRequired || contractText is not null)
+            {
+                string? refusal = await AdmitContractAsync(name, contractText, identityText);
+                if (refusal is not null)
+                {
+                    _logger.Warning("[!] Rejecting '{Name}' from {ClientRemoteEndPoint}: {Reason}", name, _conn.Remote, refusal);
+                    _clientHandler.CountDrop(Protocol.Handshake, "contract-refused");
+                    EnqueueRaw(BuildPacket(Protocol.ContractRefusedDown, Encoding.UTF8.GetBytes(refusal)));
+                    return;
+                }
+            }
+
             if (!_clientHandler.TryMarkReady(this))
             {
                 _logger.Warning("[!] Rejecting '{Name}' from {ClientRemoteEndPoint}: server is full.",
@@ -225,8 +286,11 @@ public class ClientSession
             // and expects 0xFF -- dropped the connection ("Expected Ack, got
             // packet type ..."). The write queue is FIFO, so first-queued is
             // first-sent. Id is already assigned (TryMarkReady above).
-            EnqueueRaw(BuildPacket(Protocol.Ack, [Id]));
+            var (roomModeByte, roomMissing) = _clientHandler.RoomSummary();
+            var ownMode = RoomMode switch { Coop.Contract.RoomMode.SharedSimulation => (byte)2, Coop.Contract.RoomMode.Partial => (byte)1, _ => (byte)0 };
+            EnqueueRaw(BuildPacket(Protocol.Ack, [Id, ownMode, .. Encoding.UTF8.GetBytes(RoomMissing)]));
             Name = name;
+            if (Handshake is not null) _broadcastService.BroadcastRoomMode();
 
             _logger.Information("[+] '{Name}' connected (id={Id}, protocol v{Version}, release {Release}, loopback={Loopback}) from {ClientRemoteEndPoint}.",
                 Name, Id, clientVersion, ReleaseVersion ?? "(none)", IsLoopback ? 1 : 0, _conn.Remote);

@@ -363,6 +363,14 @@ public class TcpBroadcastService
     /// stale yes, which is the failure that would actually hurt (two authorities
     /// at once is exactly the N-damage-streams problem the role exists to stop).
     /// </summary>
+    /// <summary>v12: tells every ready client what kind of room this is now (presence, partial, shared) and what is missing.</summary>
+    public void BroadcastRoomMode()
+    {
+        var (mode, missing) = _clientHandler.RoomSummary();
+        foreach (var target in _clientHandler.GetClients().Where(c => c.IsReady && c.Handshake is not null))
+            target.EnqueueRoomMode(mode, missing);
+    }
+
     public void BroadcastCombatRole()
     {
         _clientHandler.LogAuthorityDecision("combat-role");   // WO-110 R4: MP-AUTHORITY-OWNER on every decision
