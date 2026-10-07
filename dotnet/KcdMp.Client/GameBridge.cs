@@ -990,6 +990,7 @@ public partial class GameBridge(ClientConfig config)
     private byte _myGhostId;
     private byte _roomMode;                // v12: 0 presence, 1 partial, 2 shared (the relay's answer; never assumed)
     private string _roomMissing = "";
+    private RoomContract.Flags _roomFlags = RoomContract.Flags.None;       // v12 contract 2: this player's content against the host's (from this player's own Ack only)
 
     // ---- Shared player combat (WO-28) ----
 
@@ -1463,8 +1464,13 @@ public partial class GameBridge(ClientConfig config)
 
         byte myId = replyBody[0];
         _myGhostId = myId;
-        (_roomMode, _roomMissing) = RoomContract.ParseAck(replyBody);
-        Console.WriteLine($"MP-ROOM mode={RoomContract.ModeWord(_roomMode)} missing={(_roomMissing.Length > 0 ? _roomMissing : "-")}");
+        (_roomMode, var ackMissing) = RoomContract.ParseAck(replyBody);
+        _roomFlags = RoomContract.ParseFlags(ackMissing);
+        _roomMissing = RoomContract.StripFlags(ackMissing);
+        Wo137Rules.DlcCapped = _roomFlags.DlcPeerExtra.Count > 0;      // the least DLC wins: this game's extra DLC does not take part in what is shared
+        Console.WriteLine($"MP-ROOM mode={RoomContract.ModeWord(_roomMode)} missing={(_roomMissing.Length > 0 ? _roomMissing : "-")} mods_differ={_roomFlags.ModsDiffer} dlc_host_extra={string.Join('+', _roomFlags.DlcHostExtra)} dlc_peer_extra={string.Join('+', _roomFlags.DlcPeerExtra)}");
+        if (RoomContract.ContentSentence(_roomFlags) is { Length: > 0 } contentSentence)
+            try { await ExecLuaAsync($"if KCD2MP_ShowNativeToast then KCD2MP_ShowNativeToast(\"KCD2-MP: {EscapeLua(contentSentence)}\") end"); } catch { }
         Console.WriteLine($"Connected! Assigned id={myId} (protocol v{Protocol.Version})");
         Console.WriteLine();
 
@@ -5034,6 +5040,7 @@ public partial class GameBridge(ClientConfig config)
                     // v12: what kind of room this is now. Said in the game and in the launcher in plain words; never "shared" for a presence room.
                     byte mode = payload[0];
                     string missing = Encoding.UTF8.GetString(payload, 1, payloadLen - 1);
+                    missing = RoomContract.StripFlags(missing);
                     if (mode != _roomMode || missing != _roomMissing)
                     {
                         (_roomMode, _roomMissing) = (mode, missing);

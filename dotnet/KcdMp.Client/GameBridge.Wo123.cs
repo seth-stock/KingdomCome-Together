@@ -618,10 +618,16 @@ public partial class GameBridge
     {
         if (!JoinerSharedEffective) { Console.WriteLine($"MP-JOIN mp_join_request needs a shared-world session ({(_hostModeKnown ? "the host runs separate worlds" : "mp_shared_world off here and no word from a host")})"); return; }
         if (!_wo122Connected || !_combatRoleApplied) { Console.WriteLine("MP-JOIN mp_join_request: no session"); return; }
-        if (RoomContract.ContentDiffers(_roomMissing))
+        if (_roomFlags.ModsDiffer)
         {
-            Console.WriteLine("MP-JOIN mp_join_request refused: the room says this install has other DLC or mods than the host's");
-            SetJoinUi("refused", "Your game has other DLC or mods than your host's, so the world cannot be moved to you safely. Install the same DLC and mods on both, or play without a shared world.");
+            Console.WriteLine("MP-JOIN mp_join_request refused: the room says this install has other mods than the host's");
+            SetJoinUi("refused", "Your game has other mods than your host's, so the world cannot be moved to you safely. Install the same mods on both, or play without a shared world.");
+            return;
+        }
+        if (_roomFlags.DlcHostExtra.Count > 0)
+        {
+            Console.WriteLine($"MP-JOIN mp_join_request refused: the host has DLC this install lacks ({string.Join('+', _roomFlags.DlcHostExtra)})");
+            SetJoinUi("refused", $"Your host's game has DLC you do not have ({string.Join(", ", _roomFlags.DlcHostExtra)}), and their saved world needs it. Get that DLC, or ask your host to play without it.");
             return;
         }
         if (_isDamageAuthority) { Console.WriteLine("MP-JOIN mp_join_request: this machine is the host -- the joiner asks"); return; }

@@ -76,8 +76,14 @@ public static class Wo137Rules
     /// </summary>
     public static volatile bool DlcShared = true;
 
+    /// <summary>
+    /// The room says THIS game has DLC the host's lacks: the host's game has those quest graphs hibernated, so the DLC stays out of what is shared however
+    /// <c>mp_quest_dlc</c> is set (this is the "play with the least DLC" rule). Cleared when the room is left.
+    /// </summary>
+    public static volatile bool DlcCapped;
+
     /// <summary>The veto's own question: is this a DLC path that must stay out (given whether DLC is shared)?</summary>
-    public static bool DlcBlocked(string path, bool? dlcShared = null) => !(dlcShared ?? DlcShared) && IsDlc(path);
+    public static bool DlcBlocked(string path, bool? dlcShared = null) => !(dlcShared ?? (DlcShared && !DlcCapped)) && IsDlc(path);
 
     public static bool IsDlc(string path)
     {

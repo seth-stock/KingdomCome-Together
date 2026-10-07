@@ -21,9 +21,9 @@ public class ContractRelayTests : IClassFixture<ContractRelayFixture>
     private readonly ContractRelayFixture _relay;
     public ContractRelayTests(ContractRelayFixture relay) { _relay = relay; }
 
-    internal static RoomHandshake Hs(string game = "kcd2", string lua = "a", string content = "", int contract = 1, IReadOnlyDictionary<string, CapabilityLevel>? caps = null) =>
+    internal static RoomHandshake Hs(string game = "kcd2", string lua = "a", string content = "", int contract = RoomHandshake.CurrentContractVersion, IReadOnlyDictionary<string, CapabilityLevel>? caps = null, string[]? dlc = null) =>
         new(game, ReleaseVersionInfo.Current, Protocol.Version, contract, "", lua.Length == 0 ? "" : new string(lua[0], 64), "", "", content.Length == 0 ? "" : new string(content[0], 64),
-            caps ?? new Dictionary<string, CapabilityLevel>());
+            caps ?? new Dictionary<string, CapabilityLevel>(), dlc);
 
     private static string Trailing(RoomHandshake hs, string identity) =>
         ReleaseVersionInfo.Current + Protocol.HandshakeFieldSeparator + hs.Encode() + Protocol.HandshakeFieldSeparator + identity;
@@ -82,7 +82,7 @@ public class ContractRelayTests : IClassFixture<ContractRelayFixture>
     {
         await using var host = await P.Connect(_relay.TcpPort);
         Assert.Equal(Protocol.Ack, (await host.Admit("host", Hs())).Type);
-        foreach (var (hs, expect) in new[] { (Hs(game: "kcd1"), "different games"), (Hs(contract: 2), "contract version"), (Hs(lua: "b"), "different mod payloads") })
+        foreach (var (hs, expect) in new[] { (Hs(game: "kcd1"), "different games"), (Hs(contract: RoomHandshake.CurrentContractVersion + 1), "contract version"), (Hs(lua: "b"), "different mod payloads") })
         {
             await using var p = await P.Connect(_relay.TcpPort);
             var (type, body) = await p.Admit("peer", hs);
@@ -169,7 +169,7 @@ public class ContractContentTests : IClassFixture<ContractRelayFixture>
     public ContractContentTests(ContractRelayFixture relay) { _relay = relay; }
 
     [Fact]
-    public async Task A_player_with_other_dlc_or_mods_is_admitted_as_presence_and_flagged_so_no_world_is_moved()
+    public async Task A_player_with_other_mods_is_admitted_as_presence_and_flagged_so_no_world_is_moved()
     {
         var caps = new Dictionary<string, CapabilityLevel> { ["authority.combat"] = CapabilityLevel.EngineVerified };
         await using var host = await ContractRelayTests.P.Connect(_relay.TcpPort);
@@ -180,6 +180,79 @@ public class ContractContentTests : IClassFixture<ContractRelayFixture>
         var (mode, missing) = RoomContract.ParseAck(ack);
         Assert.Equal(0, mode);                                                  // never partial or shared with different content
         Assert.True(RoomContract.ContentDiffers(missing));
-        Assert.Contains("other DLC or mods", RoomContract.Sentence(mode, missing));
+        Assert.True(RoomContract.ParseFlags(missing).ModsDiffer);
+        Assert.Contains("other mods", RoomContract.ContentSentence(RoomContract.ParseFlags(missing)));
+    }
+}
+
+/// <summary>Its own relay: the first client of a relay is its host, so a leftover connection from another test must not be the one compared against.</summary>
+public class ContractDlcExtraTests : IClassFixture<ContractRelayFixture>
+{
+    private readonly ContractRelayFixture _relay;
+    public ContractDlcExtraTests(ContractRelayFixture relay) { _relay = relay; }
+
+    private static readonly Dictionary<string, CapabilityLevel> Auth = new() { ["authority.combat"] = CapabilityLevel.EngineVerified };
+
+    [Fact]
+    public async Task A_player_with_more_dlc_than_the_host_is_not_capped_and_is_told_their_extra_dlc_stays_out()
+    {
+        await using var host = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        await host.Admit("host", ContractRelayTests.Hs(caps: Auth, dlc: Array.Empty<string>()));
+        await using var guest = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        var (type, ack) = await guest.Admit("guest", ContractRelayTests.Hs(caps: Auth, dlc: new[] { "MysteriaEcclesiae", "ForgeTycoon" }));
+        Assert.Equal(Protocol.Ack, type);
+        var (mode, missing) = RoomContract.ParseAck(ack);
+        Assert.Equal(1, mode);                                                           // partly shared: DLC does not cap a room
+        var f = RoomContract.ParseFlags(missing);
+        Assert.False(f.ModsDiffer);
+        Assert.Equal(new[] { "ForgeTycoon", "MysteriaEcclesiae" }, f.DlcPeerExtra);
+        Assert.Empty(f.DlcHostExtra);
+        Assert.Contains("turn it off in Steam", RoomContract.ContentSentence(f));
+        Assert.DoesNotContain("dlc", RoomContract.StripFlags(missing));
+        // the room announcement does not carry this one player's DLC
+        var room = await guest.Next(Protocol.RoomModeDown);
+        Assert.DoesNotContain("dlc-", System.Text.Encoding.UTF8.GetString(room.Body, 1, room.Body.Length - 1));
+    }
+}
+
+/// <summary>Its own relay: the first client of a relay is its host, so a leftover connection from another test must not be the one compared against.</summary>
+public class ContractDlcLacksTests : IClassFixture<ContractRelayFixture>
+{
+    private readonly ContractRelayFixture _relay;
+    public ContractDlcLacksTests(ContractRelayFixture relay) { _relay = relay; }
+
+    private static readonly Dictionary<string, CapabilityLevel> Auth = new() { ["authority.combat"] = CapabilityLevel.EngineVerified };
+
+    [Fact]
+    public async Task A_player_with_less_dlc_than_the_host_is_told_the_hosts_world_cannot_be_moved_to_them()
+    {
+        await using var host = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        await host.Admit("host", ContractRelayTests.Hs(caps: Auth, dlc: new[] { "MysteriaEcclesiae" }));
+        await using var guest = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        var (type, ack) = await guest.Admit("guest", ContractRelayTests.Hs(caps: Auth, dlc: Array.Empty<string>()));
+        Assert.Equal(Protocol.Ack, type);
+        var f = RoomContract.ParseFlags(RoomContract.ParseAck(ack).Missing);
+        Assert.Equal(new[] { "MysteriaEcclesiae" }, f.DlcHostExtra);
+        Assert.Contains("cannot be moved to you", RoomContract.ContentSentence(f));
+    }
+}
+
+/// <summary>Its own relay: the first client of a relay is its host, so a leftover connection from another test must not be the one compared against.</summary>
+public class ContractDlcUnknownTests : IClassFixture<ContractRelayFixture>
+{
+    private readonly ContractRelayFixture _relay;
+    public ContractDlcUnknownTests(ContractRelayFixture relay) { _relay = relay; }
+
+    private static readonly Dictionary<string, CapabilityLevel> Auth = new() { ["authority.combat"] = CapabilityLevel.EngineVerified };
+
+    [Fact]
+    public async Task Unknown_dlc_on_either_side_makes_no_claim()
+    {
+        await using var host = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        await host.Admit("host", ContractRelayTests.Hs(caps: Auth));                                     // the game has not logged its DLC yet
+        await using var guest = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        var (_, ack) = await guest.Admit("guest", ContractRelayTests.Hs(caps: Auth, dlc: new[] { "NewHomes" }));
+        var f = RoomContract.ParseFlags(RoomContract.ParseAck(ack).Missing);
+        Assert.Empty(f.DlcHostExtra); Assert.Empty(f.DlcPeerExtra);
     }
 }

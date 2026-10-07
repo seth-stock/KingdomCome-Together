@@ -85,6 +85,7 @@ public class ClientHandler
 		{
 			NegotiationResult room;
 			bool contentDiffers = false;
+			NegotiationResult? againstHost = null;
 			if (client.IsLoopback || client.ClaimsHost)
 			{
 				room = Negotiation.Negotiate(hs, hs, ContractPolicy);
@@ -93,6 +94,7 @@ public class ClientHandler
 					var r = Negotiation.Negotiate(hs, other.Handshake!, ContractPolicy);
 					if (!r.Admitted) { room = r; break; }
 					contentDiffers |= IsContentWarning(r);
+					againstHost ??= Negotiation.Negotiate(other.Handshake!, hs, ContractPolicy);                         // the first player already here stands for the host (the host joins first; a second loopback client is a test or a second copy)
 					if (r.Mode < room.Mode) room = r;          // the weakest agreement with anyone already here is the room's
 				}
 			}
@@ -100,11 +102,19 @@ public class ClientHandler
 			{
 				var host = _readyClients.FirstOrDefault(c => c.Handshake is not null && (c.IsLoopback || c.ClaimsHost));
 				room = host?.Handshake is null ? Negotiation.Negotiate(hs, hs, ContractPolicy) : Negotiation.Negotiate(host.Handshake, hs, ContractPolicy);
+				if (host?.Handshake is not null) againstHost = room;      // local = the host, remote = this player
 			}
 			if (!room.Admitted) return room.Describe();
 			contentDiffers |= IsContentWarning(room);
 			client.Handshake = hs; client.RoomMode = contentDiffers ? Coop.Contract.RoomMode.Presence : room.Mode;
-			client.RoomMissing = string.Join(',', room.Missing.Concat(contentDiffers ? new[] { Protocol.RoomContentDiffers } : Array.Empty<string>()));
+			var tokens = room.Missing.ToList();
+			if (contentDiffers) tokens.Add(Protocol.RoomContentDiffers);
+			if (againstHost is { } ah)
+			{
+				if (ah.LocalExtraDlc.Count > 0) tokens.Add(Protocol.RoomDlcHostExtra + "=" + string.Join('+', ah.LocalExtraDlc));     // the host has what this player lacks
+				if (ah.LocalLacksDlc.Count > 0) tokens.Add(Protocol.RoomDlcPeerExtra + "=" + string.Join('+', ah.LocalLacksDlc));     // this player has what the host lacks
+			}
+			client.RoomMissing = string.Join(',', tokens);
 			return null;
 		}
 	}
@@ -119,7 +129,9 @@ public class ClientHandler
 			var ready = _readyClients.Where(c => c.Handshake is not null).ToList();
 			if (ready.Count == 0) return (0, "");
 			RoomMode weakest = ready.Min(c => c.RoomMode);
-			string missing = string.Join(',', ready.Where(c => c.RoomMode == weakest).SelectMany(c => c.RoomMissing.Split(',', StringSplitOptions.RemoveEmptyEntries)).Distinct());
+			// the broadcast describes the ROOM; the per-player DLC tokens belong to that player's own Ack only
+			string missing = string.Join(',', ready.Where(c => c.RoomMode == weakest).SelectMany(c => c.RoomMissing.Split(',', StringSplitOptions.RemoveEmptyEntries))
+				.Where(m => !m.StartsWith(Protocol.RoomDlcHostExtra, StringComparison.Ordinal) && !m.StartsWith(Protocol.RoomDlcPeerExtra, StringComparison.Ordinal)).Distinct());
 			return (weakest switch { RoomMode.SharedSimulation => (byte)2, RoomMode.Partial => (byte)1, _ => (byte)0 }, missing);
 		}
 	}
