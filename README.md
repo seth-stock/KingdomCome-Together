@@ -5,7 +5,7 @@
 
 <h1 align="center">Kingdom Come: Together</h1>
 
-> Modified community reliability development branch. Implementation is incomplete; see [implementation status](docs/IMPLEMENTATION-STATUS.md). Protocol 11 requires matching agent/relay sources. No release or installation has been completed from this branch.
+> Modified community reliability development branch. Implementation is incomplete; see [implementation status](docs/IMPLEMENTATION-STATUS.md). Protocol 12 requires matching agent/relay sources and refuses a different mod payload. This branch is a playtest build: see [capabilities](docs/CAPABILITIES.md) for what each part is proved to do and [human acceptance tests](docs/HUMAN-ACCEPTANCE-TESTS.md) for what to try.
 <p align="center"><em>An <strong>unofficial</strong>, free co-op mod for Kingdom Come: Deliverance II.</em><br>
 <strong>Not affiliated with or endorsed by Warhorse Studios or PLAION.</strong></p>
 

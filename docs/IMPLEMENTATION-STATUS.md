@@ -63,6 +63,17 @@ Character snapshots must carry the selected playthrough's seed (capture after jo
 
 These are offline/synthetic checks. No two-computer or real-engine gameplay pass was performed in this implementation run. The full installer was not compiled against a newly published matching runtime payload.
 
+## Room contract and participant identity (2026-10-07, protocol 12)
+
+* One shared contract (`Coop.Contract`; the same source and test vectors as the KCD1 branch) decides who may share a room. A client's handshake carries the game id, release, wire and contract version, agent/Lua/native/engine/content hashes and an honest capability table. The relay refuses another game, contract or wire version, and a different or unverifiable `kdcmp.pak`, with a sentence the player can read. See [CAPABILITIES.md](CAPABILITIES.md).
+* Participants are bound to a P-256 key by challenge/response; the relay persists the bindings (`Contract:BindingsFile`). Replayed or stolen participant ids are refused.
+* Every room has a mode (Presence, Partial or Shared simulation), announced to every ready client (`0x49`) and surfaced in the launcher and game. A normal room reports **partly shared**: loot durability and the live checkpoint barrier are open. Admission takes the **weakest** agreement with anyone already present.
+* Installs with other DLC or mods are admitted as presence only; `mp_join_request` is refused for them.
+* `OperationJournal` (hash-chained, durable, forward-only states, quarantine on recovery) and `AuthorityGuard` (epoch and incarnation checks, double validation under one lock) exist with tests. They are **not yet attached** to the loot, economy or combat paths. That attachment is the remaining work for the loot gate below.
+* `Contract:Required false` and `Contract:AllowUnverifiedPayload true` exist for synthetic test peers and payload smoke tests only; the product defaults are strict.
+
+Validation on 2026-10-07: relay 71, client 1,290, Farkle 59 .NET tests pass; the 46 synthetic Lua suites (including static gates) exit 0; native `KCDMP_NativeTests.exe` 403 passed; `KCDMP.dll` and the injector build in Release. No two-computer or real-engine gameplay pass was performed. Human tests: [HUMAN-ACCEPTANCE-TESTS.md](HUMAN-ACCEPTANCE-TESTS.md).
+
 ## Gates not completed
 
 | Plan part | Remaining work |
@@ -71,12 +82,12 @@ These are offline/synthetic checks. No two-computer or real-engine gameplay pass
 | Combat | One health/death authority coordinated with NPC movement claims, unique hit IDs, death revisions and stale-state rejection |
 | Loot | Pre-transfer hook or controlled escrow/UI; exact item identities and metadata; host-local operations in the same authority queue; loose items/drops/takedowns; durable operation journal; save barriers; recovery of ambiguous mutations |
 | Save/load isolation | Global authority incarnation in all gameplay messages and cancellation of queued old-world mutations. Current scopes only protect body request/reply correlation and retries; they are not full world epochs |
-| Compatibility | Native/Lua/agent package fingerprint negotiation and verified DLC/mod profiles, beyond protocol/release checks |
+| Compatibility | Lua pak and DLC/mod content profile are enforced at admission (2026-10-07); native plugin and agent hashes are reported but not enforced; a matching-package audit on real installs is outstanding |
 | Release | Two/four-computer gameplay, long sessions, installer compile with a newly published matching payload, upgrade/rollback and final installers |
 
 Automatic recovery of uncertain inventory transfers is intentionally not invented: a journal and a running engine are not one atomic transaction. Do not ship this branch as duplication-proof. The existing optimistic loot screen can still let a player use an unconfirmed item; preventing that requires the pre-transfer/escrow gate.
 
-VERSION stays at 0.45.0 because no release was completed. Protocol 11 distinguishes these agent/relay sources from the baseline, but does not yet validate that a matching native plugin and Lua pak were installed. Do not mix this branch's agent with an older pak.
+VERSION stays at 0.45.0 (the user owns the version). Protocol 12 distinguishes these agent/relay sources from the baseline and now validates the Lua pak and content profile; the native plugin is reported but not enforced. Do not mix this branch's agent with an older pak.
 
 ## Continue from here
 
