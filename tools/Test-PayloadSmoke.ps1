@@ -138,8 +138,8 @@ try {
     Write-Host "  payload smoke: relay on 127.0.0.1:$port from a copy of the payload"
     $relayOut = Join-Path $work 'relay-stdout.txt'
     $relayErr = Join-Path $work 'relay-stderr.txt'
+    # v12: the room contract is on (the product default); only a missing mod payload is tolerated, because a build machine may have no game to measure.
     $relay = Start-Process -FilePath (Join-Path $work 'KcdMpServer.exe') `
-        # v12: the room contract is on (the product default); only a missing mod payload is tolerated, because a build machine may have no game to measure.
         -ArgumentList @('--port', "$port", '--Urls', 'http://127.0.0.1:0', '--Contract:AllowUnverifiedPayload', 'true') `
         -WorkingDirectory $work -PassThru -NoNewWindow `
         -RedirectStandardOutput $relayOut -RedirectStandardError $relayErr
