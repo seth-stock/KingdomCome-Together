@@ -34,7 +34,12 @@ public partial class GameBridge
 {
     private bool _w138Connected;
     private volatile bool _w138NativeSwitch = true;   // mp_w138_native (the mod's command)
-    private volatile bool _w138LeversSwitch = true;   // mp_w138_levers
+    private volatile bool _w138LeversSwitch = false;  // mp_w138_levers / mp_pause_mode off: menus never pause (the default is the shared pause, set at connect from the config)
+    private volatile bool _pauseShared = true;        // mp_pause_mode shared: another player's ESC menu holds this world too
+    private readonly SharedPauseTracker _sharedPause = new();
+    private bool _sharedHoldOn;
+    private long _sharedHoldAsked;
+    private bool _sharedHoldWarned;
     private volatile bool _w138NativeActive;          // the DLL's status says it sends
     private Wo138Cfg _w138Cfg = Wo138Cfg.Default;
     private bool _w138HaveTrack;
@@ -66,6 +71,10 @@ public partial class GameBridge
     private void Wo138OnConnect(CancellationToken ct)
     {
         _w138Connected = true;
+        _pauseShared = config.SharedPause;
+        _w138LeversSwitch = !_pauseShared;                // shared pause: the ESC menu pauses normally; off: it is declined, as before
+        _sharedPause.Clear();
+        _sharedHoldOn = false;
         _w138NativeActive = false;
         _w138HostId = -1;
         _w138LastFromMs.Clear();
@@ -99,8 +108,11 @@ public partial class GameBridge
             await _combat.Wo138Async(Wo138Codec.OpConfig, Wo138Codec.ConfigBody(false, _w138Cfg));
             await _combat.Wo138Async(Wo138Codec.OpLevers, Wo138Codec.LeversBody(false, Wo138Codec.DefaultMask));
             await _combat.Wo138Async(Wo138Codec.OpHold, [0]);
+            await _combat.Wo138Async(Wo138Codec.OpSharedHold, Wo138Codec.SharedHoldBody(false, 0));
         }
         catch { }
+        _sharedHoldOn = false;
+        _sharedPause.Clear();
         try
         {
             await _transport.ExecuteNowAsync("if KCD2MP_W138NativeSend then KCD2MP_W138NativeSend(0) end; " +
@@ -174,8 +186,10 @@ public partial class GameBridge
         {
             case "native on": _w138NativeSwitch = true; Interlocked.Exchange(ref _w138TrackDirty, 1); Console.WriteLine("MP-WO138 native sender switched ON (mp_w138_native)"); break;
             case "native off": _w138NativeSwitch = false; Interlocked.Exchange(ref _w138TrackDirty, 1); Console.WriteLine("MP-WO138 native sender switched off: the Lua sender streams (mp_w138_native)"); break;
-            case "levers on": _w138LeversSwitch = true; Console.WriteLine("MP-WO138 levers switched ON (mp_w138_levers)"); break;
-            case "levers off": _w138LeversSwitch = false; Console.WriteLine("MP-WO138 levers switched off: menus pause as usual (mp_w138_levers)"); break;
+            case "levers on": SetPauseMode(shared: false, "mp_w138_levers on"); break;
+            case "levers off": SetPauseMode(shared: true, "mp_w138_levers off"); break;
+            case "pause shared": SetPauseMode(shared: true, "mp_pause_mode shared"); break;
+            case "pause off": SetPauseMode(shared: false, "mp_pause_mode off"); break;
             case "status": Console.WriteLine(Wo138StatsLine()); break;
             default:
                 // Live checks: "pausetest <source> <1|0>" -- PauseGame through the DLL's gate (op 9).
@@ -193,6 +207,18 @@ public partial class GameBridge
                 }
                 break;
         }
+    }
+
+    /// <summary>The player's choice: shared pause (the default) or no pause at all in a session. Saved, so it survives a restart.</summary>
+    private void SetPauseMode(bool shared, string via)
+    {
+        _pauseShared = shared;
+        _w138LeversSwitch = !shared;
+        if (config.SharedPause != shared) { config.SharedPause = shared; config.Save(); }
+        Console.WriteLine(shared
+            ? $"MP-WO138 pause mode SHARED ({via}): the ESC menu pauses the game, and while another player's menu is open this world stands too"
+            : $"MP-WO138 pause mode OFF ({via}): in a session no menu pauses the game for anyone");
+        _ = Wo125ToastAsync(shared ? "Pausing is shared: the world stops for everyone while anyone is in the menu." : "Pausing is off: menus do not stop the game in a session.");
     }
 
     private void Wo138OnDialogLine(string arg)
@@ -247,6 +273,7 @@ public partial class GameBridge
 
     private void Wo138OnPeerPause(byte sourceId, byte state)
     {
+        _sharedPause.Note(sourceId, state, W138NowMs());       // the shared pause: every role listens to every other player's menu
         if (!W138Joiner) return;
         if (_w138HostId < 0) { _w138HostId = sourceId; Console.WriteLine($"MP-WO138 the host is ghost {sourceId} (its pause)"); }
         if (sourceId != _w138HostId) return;
@@ -367,6 +394,9 @@ public partial class GameBridge
                     _w138LeversApplied = levers;
                 }
 
+                // ---- both: the shared pause -- another player's open ESC menu holds this world (the DLL releases it itself if this agent stalls)
+                await Wo138SharedPauseTickAsync(now, ct);
+
                 if (now - lastStats >= 60_000)
                 {
                     lastStats = now;
@@ -376,6 +406,28 @@ public partial class GameBridge
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex) { Console.WriteLine($"MP-WO138 tick failed: {ex.GetType().Name}: {ex.Message}"); }
+        }
+    }
+
+    private async Task Wo138SharedPauseTickAsync(long now, CancellationToken ct)
+    {
+        bool want = _pauseShared && _combat.IsConnected && _where != GameWhere.Menu && _where != GameWhere.Loading
+                    && _sharedPause.ShouldHold(now, src => _w138LastFromMs.TryGetValue(src, out long l) ? l : 0);
+        // re-asserted every 2 s while on: the DLL's own deadline is 20 s after the last ask, so a stalled agent can never leave a stuck world
+        if (want == _sharedHoldOn && !(want && now - _sharedHoldAsked >= 2000)) return;
+        var r = await _combat.Wo138Async(Wo138Codec.OpSharedHold, Wo138Codec.SharedHoldBody(want, 20), ct);
+        _sharedHoldAsked = now;
+        bool ok = r is { Ok: true };
+        if (want != _sharedHoldOn)
+        {
+            if (want && !ok)
+            {
+                if (!_sharedHoldWarned) { _sharedHoldWarned = true; Console.WriteLine("MP-WO138 shared pause: the DLL could not hold this world (the PauseGame gate is not armed, or no DLL): another player's menu will not stop it here"); }
+                return;                                    // not on: try again at the next tick
+            }
+            _sharedHoldOn = want;
+            Console.WriteLine(want ? "MP-WO138 SHARED PAUSE on: another player's menu is open -- this world stands" : "MP-WO138 SHARED PAUSE off: no other menu is open -- this world runs");
+            await ExecLuaAsync($"if KCD2MP_ShowNativeToast then KCD2MP_ShowNativeToast(\"{(want ? "KCD2-MP: a friend paused the game" : "KCD2-MP: the game runs again")}\") end");
         }
     }
 

@@ -555,39 +555,65 @@ void install() {
 
 bool gate_armed() { return g_gateArmed.load(); }
 
-// ---- WO-151 3.8: the join hold -------------------------------------------------------------------
+// ---- WO-151 3.8: the join hold, and the shared pause --------------------------------------------
+// Two reasons hold the world through ONE engine source (ScriptBind): the engine counts a pause per source, so it is asked once when the first reason
+// starts and once to release when the last ends (R::HoldSet, tested engine-free).
 namespace {
 constexpr uint16_t kJoinHoldSource = 2;   // ScriptBind (Lua's Game.PauseGame is not registered on 1.5.5)
-std::atomic<bool> g_joinHeld{false};
-double g_joinSince = 0, g_joinDeadline = 0;
-}
+R::HoldSet g_holds;
+bool g_engineHeld = false;                // the single pause we asked the engine for
+double g_heldSince = 0;
+std::atomic<bool> g_joinHeld{false}, g_sharedHeld{false};
 
-bool join_hold(bool on, double maxS) {
+// Sets or clears one reason and makes the engine agree. Main thread (the pipe handler and tick run there).
+bool hold_reason(int reason, bool on, double maxS, double defaultS, const char* tag) {
     void* ca = g_cryAction.load();
     if (!ca && (ca = scan_cryaction()) != nullptr) g_cryAction = ca;
-    if (!g_gateArmed || !ca) { logf("WO151-JOINHOLD %s refused: %s", on ? "on" : "off", !g_gateArmed ? "the PauseGame gate is not armed" : "no CCryAction instance yet"); return false; }
+    if (!g_gateArmed || !ca) { logf("%s %s refused: %s", tag, on ? "on" : "off", !g_gateArmed ? "the PauseGame gate is not armed" : "no CCryAction instance yet"); return false; }
     const double now = now_s();
-    if (on) {
-        if (g_joinHeld.load()) { g_joinDeadline = now + (maxS > 0 ? maxS : 240.0); return true; }   // extended, not stacked
-        if (!call_pause(ca, true, kJoinHoldSource, false)) { logf("WO151-JOINHOLD on FAILED (PauseGame faulted)"); return false; }
-        g_joinHeld = true; g_joinSince = now; g_joinDeadline = now + (maxS > 0 ? maxS : 240.0);
-        logf("WO151-JOINHOLD on: the host's world is held for the join (PauseGame source %u, at most %.0f s; held=0x%X)", kJoinHoldSource,
-             g_joinDeadline - now, held_mask());
-        return true;
+    const bool wasWanted = g_holds.want[reason];
+    if (on) g_holds.start(reason, now, maxS, defaultS); else g_holds.stop(reason);
+    bool ok = true;
+    if (g_holds.any() && !g_engineHeld) {
+        if (!call_pause(ca, true, kJoinHoldSource, false)) {
+            g_holds.stop(reason);
+            logf("%s on FAILED (PauseGame faulted)", tag);
+            return false;
+        }
+        g_engineHeld = true; g_heldSince = now;
+        logf("%s on: this world is held (PauseGame source %u, at most %.0f s; held=0x%X)", tag, kJoinHoldSource, g_holds.deadline[reason] - now, held_mask());
+    } else if (!g_holds.any() && g_engineHeld) {
+        ok = call_pause(ca, false, kJoinHoldSource, false);
+        g_engineHeld = false;
+        logf("%s off after %.1f s%s (held=0x%X)", tag, now - g_heldSince, ok ? "" : " -- PauseGame FAULTED", held_mask());
+    } else if (on && !wasWanted) {
+        logf("%s on: joined the hold that is already on", tag);
     }
-    if (!g_joinHeld.exchange(false)) return true;
-    const bool ok = call_pause(ca, false, kJoinHoldSource, false);
-    logf("WO151-JOINHOLD off after %.1f s%s (held=0x%X)", now - g_joinSince, ok ? "" : " -- PauseGame FAULTED", held_mask());
+    g_joinHeld = g_holds.want[R::HoldSet::kJoin];
+    g_sharedHeld = g_holds.want[R::HoldSet::kShared];
     return ok;
 }
+}
 
+bool join_hold(bool on, double maxS) { return hold_reason(R::HoldSet::kJoin, on, maxS, 240.0, "WO151-JOINHOLD"); }
 bool join_held() { return g_joinHeld.load(); }
+bool shared_hold(bool on, double maxS) { return hold_reason(R::HoldSet::kShared, on, maxS, 600.0, "WO143-SHAREDPAUSE"); }
+bool shared_held() { return g_sharedHeld.load(); }
 
 void tick() {
     const double now = now_s();
-    if (g_joinHeld.load() && now > g_joinDeadline) {   // WO-151: the DLL's own deadline -- never a stuck world
-        logf("WO151-JOINHOLD the deadline passed -- released by the DLL");
-        join_hold(false, 0);
+    if (g_holds.any()) {   // the DLL's own deadlines -- never a stuck world
+        const bool joinWas = g_holds.want[R::HoldSet::kJoin], sharedWas = g_holds.want[R::HoldSet::kShared];
+        if (g_holds.expire(now) > 0) {
+            logf("WO151-HOLD a deadline passed -- released by the DLL (join %d->%d, shared %d->%d)", joinWas, g_holds.want[R::HoldSet::kJoin], sharedWas, g_holds.want[R::HoldSet::kShared]);
+            g_joinHeld = g_holds.want[R::HoldSet::kJoin]; g_sharedHeld = g_holds.want[R::HoldSet::kShared];
+            if (!g_holds.any() && g_engineHeld) {
+                void* ca = g_cryAction.load();
+                const bool ok = ca && call_pause(ca, false, kJoinHoldSource, false);
+                g_engineHeld = false;
+                logf("WO151-HOLD the world is released%s", ok ? "" : " -- PauseGame FAULTED or no instance");
+            }
+        }
     }
     meter(now, main_thread::last_dt());
     sender_tick(now);
@@ -600,7 +626,11 @@ void tick() {
 }
 
 void on_pipe_closed() {
-    if (g_joinHeld.load()) main_thread::post([] { logf("WO151-JOINHOLD the agent went away -- released"); join_hold(false, 0); });
+    if (g_joinHeld.load() || g_sharedHeld.load()) main_thread::post([] {
+        logf("WO151-HOLD the agent went away -- released");
+        join_hold(false, 0);
+        shared_hold(false, 0);
+    });
     if (g_on.exchange(false)) logf("WO138-SEND off (the agent went away)");
     if (g_leversOn.exchange(false)) logf("WO138-LEVERS off (the agent went away): menus pause again");
     npcdrive::set_hold_all(false);
@@ -729,6 +759,15 @@ uint8_t handle(const uint8_t* b, size_t len, uint8_t* out, size_t cap, size_t* o
         std::memcpy(out + 24, &us, 4);
         *outLen = 28;
         return found ? kROk : kRNotFound;
+    }
+    case kOpSharedHold: {
+        // [on:1][maxS:2]: the shared pause. Runs on the main thread (the handler is posted there by the pipe server like every op that calls the engine).
+        if (n != 3) return kRBadRequest;
+        uint16_t maxS = 0;
+        std::memcpy(&maxS, p + 1, 2);
+        const bool ok = shared_hold(p[0] != 0, maxS);
+        if (cap >= 1) { out[0] = shared_held() ? 1 : 0; *outLen = 1; }
+        return ok ? kROk : kRNotArmed;
     }
     case kOpPause: {
         if (n != 4) return kRBadRequest;

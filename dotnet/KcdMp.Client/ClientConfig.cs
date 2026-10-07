@@ -53,6 +53,14 @@ public sealed class ClientConfig
     public bool WeatherSyncEnabled { get; set; } = true;
 
     /// <summary>
+    /// Pausing in a session. True (the default): when another player opens the ESC menu this world stands too, and when you open yours the others' do, so nobody
+    /// plays on while a friend is in a menu. False: a menu never pauses the game in a session (the ESC menu pulls up and the world keeps running, for everyone);
+    /// the pre-0.46 behaviour. Only the ESC menu counts, never the inventory, a dialogue or a cutscene. Changed in the launcher's settings or in the game with
+    /// <c>mp_pause_mode shared|off</c>.
+    /// </summary>
+    public bool SharedPause { get; set; } = true;
+
+    /// <summary>
     /// WO-100.5 Phase 4: whether the guid-addressed damage fallback (0x12/0x14)
     /// may fire.
     ///
@@ -339,6 +347,12 @@ public sealed class ClientConfig
                         break;
                     case "--no-voice":
                         VoiceChatEnabled = false;
+                        break;
+                    case "--shared-pause":
+                        SharedPause = true;
+                        break;
+                    case "--no-shared-pause":
+                        SharedPause = false;
                         break;
                     case "--guid-damage-fallback":
                         GuidDamageFallbackEnabled = true;

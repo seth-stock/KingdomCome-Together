@@ -137,6 +137,30 @@ int wo138_rules_tests(int* passed) {
         RCHECK(!decline_pause(true, true, 40, 0xFFFFFFFFu), "a source past the mask width is never declined");
     }
 
+    // the holds: the join hold and the shared pause through one engine source
+    {
+        HoldSet h;
+        RCHECK(!h.any(), "nothing held at the start");
+        h.start(HoldSet::kShared, 100.0, 0, 600.0);
+        RCHECK(h.any() && h.want[HoldSet::kShared] && !h.want[HoldSet::kJoin], "the shared pause holds, the join hold does not");
+        h.start(HoldSet::kJoin, 101.0, 30.0, 240.0);
+        RCHECK(h.any(), "both hold");
+        h.stop(HoldSet::kShared);
+        RCHECK(h.any(), "the join hold still holds after the shared pause ended: the world is not released yet");
+        h.stop(HoldSet::kJoin);
+        RCHECK(!h.any(), "released when the last reason ends");
+
+        h.start(HoldSet::kShared, 200.0, 0, 600.0);
+        RCHECK(h.expire(799.0) == 0 && h.any(), "inside the default deadline (600 s): held");
+        RCHECK(h.expire(801.0) == 1 && !h.any(), "past the deadline: the DLL itself releases -- never a stuck world");
+        h.start(HoldSet::kShared, 1000.0, 5.0, 600.0);
+        h.start(HoldSet::kShared, 1004.0, 5.0, 600.0);
+        RCHECK(h.expire(1008.0) == 0, "a repeated start extends the deadline and does not stack");
+        RCHECK(h.expire(1010.0) == 1, "and ends it once");
+        h.start(HoldSet::kJoin, 0, 10.0, 240.0); h.start(HoldSet::kShared, 0, 20.0, 600.0);
+        RCHECK(h.expire(15.0) == 1 && h.want[HoldSet::kShared] && !h.want[HoldSet::kJoin], "each reason has its own deadline");
+    }
+
     if (passed) *passed = g_pass;
     return g_fail;
 }

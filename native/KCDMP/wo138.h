@@ -65,6 +65,7 @@ constexpr uint8_t kOpHold    = 6;
 constexpr uint8_t kOpText    = 7;
 constexpr uint8_t kOpRead    = 8;
 constexpr uint8_t kOpPause   = 9;
+constexpr uint8_t kOpSharedHold = 10;   // [on:1][maxS:2] -> [held:1]: the shared pause -- another player's ESC menu is open, so this world stands too (wo138::shared_hold)
 
 constexpr uint8_t kROk         = 0;
 constexpr uint8_t kRBadRequest = 1;
@@ -119,6 +120,10 @@ void on_pipe_closed();   // any thread: sender off, gate off, hold off
 // (the DLL's own deadline, checked every frame: the frame hook runs while paused), released
 // when the agent goes away. Main thread. True = the engine call ran.
 bool join_hold(bool on, double maxS);
+/// The shared pause: hold this world (PauseGame, ScriptBind) while another player's menu is open. Released by the DLL itself at the deadline (default 600 s)
+/// or when the agent goes away.
+bool shared_hold(bool on, double maxS);
+bool shared_held();
 bool join_held();
 
 // WO-141: every tracked name with a live entity (main thread).

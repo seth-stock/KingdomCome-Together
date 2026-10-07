@@ -145,4 +145,25 @@ inline bool decline_pause(bool leversOn, bool pause, uint16_t source, uint32_t m
     return leversOn && pause && source < 32 && ((mask >> source) & 1u) != 0;
 }
 
+// ---- the holds the agent asks for (ScriptBind, source 2) -------------------
+// Two reasons can hold the world through the same engine source: the join hold (WO-151 3.8: the host's world is held for a whole join) and the shared pause
+// (any other player's ESC menu is open). The engine counts a pause per source, so the DLL asks it ONCE when the first reason starts and ONCE to release when
+// the last one ends; each reason has its own deadline, so a lost agent can never leave a stuck world. Engine-free so the tests check exactly what ships.
+struct HoldSet {
+    static constexpr int kJoin = 0, kShared = 1, kCount = 2;
+    bool   want[kCount]     = { false, false };
+    double deadline[kCount] = { 0, 0 };
+
+    bool any() const { return want[0] || want[1]; }
+    /// Starts (or extends) a reason; a reason is never stacked.
+    void start(int r, double now, double maxS, double defaultS) { want[r] = true; deadline[r] = now + (maxS > 0 ? maxS : defaultS); }
+    void stop(int r) { want[r] = false; }
+    /// Ends every reason whose deadline passed. Returns how many ended.
+    int expire(double now) {
+        int n = 0;
+        for (int r = 0; r < kCount; ++r) if (want[r] && now > deadline[r]) { want[r] = false; ++n; }
+        return n;
+    }
+};
+
 } // namespace kcdmp::wo138rules

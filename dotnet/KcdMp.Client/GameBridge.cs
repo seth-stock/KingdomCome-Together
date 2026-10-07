@@ -4830,6 +4830,7 @@ public partial class GameBridge(ClientConfig config)
                     // A peer who disconnects mid-pause must not leave us
                     // slowed forever with no PauseDown(exit) ever coming.
                     await ApplyPeerPauseAsync(ghostId, paused: false, ct);
+                    _sharedPause.Left((byte)ghostId);      // the shared pause: a friend who left no longer holds this world
                     // WO-113: a gone peer's mirror gravestones go with them;
                     // the owner re-announces on its next connect.
                     try { await _combat.MirrorGraveAsync(2, ghostId, 0, 0, 0, 0, ct); } catch { }

@@ -17203,6 +17203,14 @@ function KCD2MP_W138SetNative(arg)
     mp_log("WO138 native sender " .. (w.nativeOn and "on" or "off") .. " (mp_w138_native)")
 end
 
+-- The player's pause choice (docs/CAPABILITIES.md): "shared" (the default) = the ESC menu pauses the game and, while any other player's menu is open, this world
+-- stands too; "off" = in a session no menu pauses the game for anyone. The agent applies it and saves it (kcdmp-client.json SharedPause).
+function KCD2MP_SetPauseMode(arg)
+    local s = tostring(arg or ""):lower()
+    if s:find("off") or s:find("never") then KCD2MP_EmitEvent("w138", "pause off"); KCD2MP.pauseShared = false
+    elseif s:find("shared") or s:find("on") then KCD2MP_EmitEvent("w138", "pause shared"); KCD2MP.pauseShared = true end
+end
+
 function KCD2MP_W138SetLevers(arg)
     local s = tostring(arg or ""):lower()
     if s:find("off") then KCD2MP_EmitEvent("w138", "levers off")
@@ -21402,6 +21410,7 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_quest_window", 'KCD2MP_QuestSetWindow(%line)', "WO-94: set the main-quest readiness prompt window: mp_quest_window <seconds> (default 120)")
     System.AddCCommand("mp_w138_status", "KCD2MP_W138Status()",    "WO-138: the native NPC sender (native or lua), the tracked set, the host's dialogue edge, the joiner's hold (WO138-STATUS here, MP-WO138 in agent.log)")
     System.AddCCommand("mp_w138_native", 'KCD2MP_W138SetNative(%line)', "WO-138: the host's NPC stream from the DLL's frame hook (default on); off = the Lua sender as before: mp_w138_native on|off")
+    System.AddCCommand("mp_pause_mode", 'KCD2MP_SetPauseMode(%line)', "Pausing in a session: mp_pause_mode shared (default: the ESC menu pauses the game, and while any other player's menu is open this world stands too) | off (no menu pauses the game for anyone)")
     System.AddCCommand("mp_w138_levers", 'KCD2MP_W138SetLevers(%line)', "WO-138: in a session with a partner, no menu stops the world (the ESC menu's and a video's pause declined, the inventory's time-scale divide off); default on: mp_w138_levers on|off")
     System.AddCCommand("mp_w138_pausetest", 'KCD2MP_W138PauseTest(%line)', "WO-138 live checks: mp_w138_pausetest <source> on|off -- the engine's PauseGame from that source (7 = the ESC menu) through the DLL's gate, a stand-in for a menu")
     for _, w in ipairs(KCD2MP_MARKS) do

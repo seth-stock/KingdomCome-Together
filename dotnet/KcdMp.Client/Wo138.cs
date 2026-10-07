@@ -38,7 +38,7 @@ public readonly record struct Wo138Cfg(ushort EmitMs, ushort HeartbeatMs, ushort
 /// </summary>
 public static class Wo138Codec
 {
-    public const byte OpConfig = 1, OpTrack = 2, OpAnchors = 3, OpStatus = 4, OpLevers = 5, OpHold = 6, OpText = 7, OpRead = 8, OpPause = 9;
+    public const byte OpConfig = 1, OpTrack = 2, OpAnchors = 3, OpStatus = 4, OpLevers = 5, OpHold = 6, OpText = 7, OpRead = 8, OpPause = 9, OpSharedHold = 10;
 
     // ---- PauseUp (0x1C) state byte: 0 = running, else the reasons (bits) ----
     public const byte ReasonMenu      = 0x01;   // the ESC menu (or mp_pause)
@@ -88,6 +88,15 @@ public static class Wo138Codec
         if (hostReasons == 0 || lastFromHostMs <= 0) return false;
         if (nowMs - lastFromHostMs > linkTimeoutMs) return false;
         return nowMs - pausedSinceMs <= maxHoldMs;
+    }
+
+    /// <summary>OpSharedHold's body: [on:1][maxS:2]. The DLL releases the hold itself maxS seconds after the last refresh.</summary>
+    public static byte[] SharedHoldBody(bool on, ushort maxS)
+    {
+        var b = new byte[3];
+        b[0] = (byte)(on ? 1 : 0);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(1), maxS);
+        return b;
     }
 
     /// <summary>The levers (no menu stops the world) are on only in a session with a partner here.</summary>
@@ -246,4 +255,48 @@ public static class Wo138Codec
 
     static ushort U16(ReadOnlySpan<byte> b, int o) => BinaryPrimitives.ReadUInt16LittleEndian(b[o..]);
     static uint U32(ReadOnlySpan<byte> b, int o) => BinaryPrimitives.ReadUInt32LittleEndian(b[o..]);
+}
+
+/// <summary>
+/// The shared pause (mp_pause_mode shared, the default): while ANOTHER player's ESC menu is open, this world stands too, so nobody plays on
+/// while a friend is in the menu. Only the menu counts (a real pause); the inventory, a dialogue or a cutscene never hold anyone (WO-13: a friend
+/// opening the inventory must not slow the others). A player counts only while their link is alive and only up to a cap, so a crashed friend can
+/// never freeze the others; leaving the session ends their hold at once.
+/// </summary>
+public sealed class SharedPauseTracker
+{
+    private readonly object _gate = new();
+    private readonly Dictionary<byte, long> _menuSince = new();
+
+    /// <summary>The latest PauseDown state of one other player.</summary>
+    public void Note(byte source, byte state, long nowMs)
+    {
+        lock (_gate)
+        {
+            if ((state & Wo138Codec.ReasonMenu) == 0) _menuSince.Remove(source);
+            else _menuSince.TryAdd(source, nowMs);
+        }
+    }
+
+    public void Left(byte source) { lock (_gate) _menuSince.Remove(source); }
+    public void Clear() { lock (_gate) _menuSince.Clear(); }
+
+    /// <summary>Players whose menu is open right now and who still count (link alive, under the cap).</summary>
+    public IReadOnlyList<byte> Holding(long nowMs, Func<byte, long> lastSeenMs, int linkTimeoutMs = 6000, long maxMs = 15 * 60 * 1000)
+    {
+        lock (_gate)
+        {
+            var r = new List<byte>();
+            foreach (var (src, since) in _menuSince)
+            {
+                long seen = lastSeenMs(src);
+                if (seen <= 0 || nowMs - seen > linkTimeoutMs) continue;      // a silent friend does not freeze the others
+                if (nowMs - since > maxMs) continue;                           // and neither does a menu left open for a quarter of an hour
+                r.Add(src);
+            }
+            return r;
+        }
+    }
+
+    public bool ShouldHold(long nowMs, Func<byte, long> lastSeenMs) => Holding(nowMs, lastSeenMs).Count > 0;
 }

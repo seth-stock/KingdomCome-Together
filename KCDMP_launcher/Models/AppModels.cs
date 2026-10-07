@@ -195,6 +195,10 @@ namespace KCDMP_launcher.Models
         // setting rather than something only reachable via the command line.
         public bool VoiceChatEnabled { get; set; } = true;
 
+        // Mirrors KcdMp.Client's --shared-pause/--no-shared-pause: when anyone opens the pause menu in a session the game pauses for everyone
+        // (the default). Unticked: menus never pause the game in a session (the menu pulls up and the world keeps running).
+        public bool SharedPause { get; set; } = true;
+
         // WO-127: "Also allow Steam" in the Host window (the relay also listens on Steam P2P).
         public bool HostAllowSteam { get; set; } = true;
 

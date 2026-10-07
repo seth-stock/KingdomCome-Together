@@ -149,7 +149,11 @@ end
 PAGES.rules = function()
     local w114, w137, w121 = KCD2MP.w114 or {}, KCD2MP.w137 or {}, KCD2MP.w121 or {}
     local ff, leash, qs = w121.ffSession ~= false, w114.leash ~= false, w137.sync ~= false
+    local pauseShared = get(function() return KCD2MP.pauseShared end, nil)
+    if pauseShared == nil then pauseShared = M.shadow.pauseShared ~= false end
     return "Session rules", {
+        { id = "MP_pause", label = "Pausing: " .. (pauseShared and "shared" or "off"), tip = "Shared: when anyone opens the pause menu the game pauses for everyone. Off: menus never pause the game in a session",
+          act = function() M.shadow.pauseShared = not pauseShared; lua_call("KCD2MP_SetPauseMode", pauseShared and "off" or "shared") end },
         { id = "MP_ff", label = "Friendly fire: " .. onoff(ff), tip = "Players can hurt each other (the host's value is the session's)",
           act = function() lua_call("KCD2MP_Wo121SetFriendlyFire", ff and "off" or "on") end },
         { id = "MP_leash", label = "Leash: " .. onoff(leash), tip = "Keep the joiner near the host (host only)",

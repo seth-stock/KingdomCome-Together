@@ -81,6 +81,14 @@
                     </label>
                 </div>
 
+                <div class="kcd-input-group">
+                    <label class="kcd-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" @bind="Settings.SharedPause" />
+                        Pause for everyone when anyone pauses
+                    </label>
+                    <div class="kcd-hint">Ticked: when any player opens the pause menu, the game pauses for everybody. Unticked: the menu pulls up but never pauses the game in a session. Can also be changed in the game: mp_pause_mode shared|off.</div>
+                </div>
+
                 @* WO-127: advanced. Both players must pick the same one. *@
                 <div class="kcd-input-group">
                     <label class="kcd-label">Advanced: Steam app for Steam connections</label>

@@ -247,6 +247,7 @@ namespace KCDMP_launcher.Pages
                 : $"--host {server.Ip} --port {server.Port}";
             var agentArgs = target +
                 (settings.VoiceChatEnabled ? "" : " --no-voice") +
+                (settings.SharedPause ? " --shared-pause" : " --no-shared-pause") +
                 (isHosting ? " --hosting" : "");
 
             var agentStartInfo = new ProcessStartInfo
