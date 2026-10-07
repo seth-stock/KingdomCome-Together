@@ -32,11 +32,12 @@ DLL="$(find "$PLUGIN_DIR" -name KCDMP.dll | head -n1)"; INJ="$(find "$PLUGIN_DIR
 cp "$DLL" "$INJ" "$PKG/plugin/"
 
 echo "== mod + launcher + docs"
+python3 "$REPO/tools/Build-ModPak.py"
 cp -r "$REPO/kdcmp" "$PKG/mod/kdcmp"
 rm -rf "$PKG/mod/kdcmp/ConfigPatch"      # embedded in the agent; not a mod file
 cp "$REPO/linux/kcdmp" "$PKG/kcdmp"; chmod +x "$PKG/kcdmp"
 cp "$REPO/VERSION" "$REPO/LICENSE" "$REPO/NOTICE" "$REPO/AUTHORS" "$PKG/"
-cp "$REPO/docs/LINUX.md" "$PKG/docs/" 2>/dev/null || true
+for doc in LINUX.md CAPABILITIES.md HUMAN-ACCEPTANCE-TESTS.md SESSION2-RESULTS.md FEATURE-PARITY.md; do cp "$REPO/docs/$doc" "$PKG/docs/"; done
 cat >"$PKG/READ-ME-FIRST.txt" <<EOF
 Kingdom Come: Together $VERSION -- Linux build (unofficial, community)
 

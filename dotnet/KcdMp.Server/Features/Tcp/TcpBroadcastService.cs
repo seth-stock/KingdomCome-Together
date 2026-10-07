@@ -49,7 +49,7 @@ public class TcpBroadcastService
         if (source.Name is null) return;
 
         foreach (var target in Others(source))
-            target.EnqueueName(source.Id, source.Name);
+            target.EnqueueName(source.Id, source.Name, source.ParticipantId);
     }
 
     /// <summary>
@@ -394,7 +394,7 @@ public class TcpBroadcastService
     public void SendAllNamesTo(ClientSession newClient)
     {
         foreach (var c in Others(newClient))
-            newClient.EnqueueName(c.Id, c.Name!);
+            newClient.EnqueueName(c.Id, c.Name!, c.ParticipantId);
     }
 
     /// <summary>

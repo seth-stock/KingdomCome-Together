@@ -5308,7 +5308,13 @@ KCD2MP.w125 = { snaps = 0, snapRefused = 0 }
 function KCD2MP_Wo125Snapshot(tok)
     local w = KCD2MP.w125
     local ok, r = false, nil
-    if KCD2MP.w134 and KCD2MP.w134.settlePending then pcall(KCD2MP.w134.settlePending, 0) end   -- no unconfirmed take goes into a snapshot
+    if KCD2MP.w134 and KCD2MP.w134.settlePending then
+        local settled, _, unresolved = pcall(KCD2MP.w134.settlePending, 0)
+        if not settled or (unresolved or 0) > 0 then
+            KCD2MP_EmitEvent('wo124_reply', tostring(tok) .. ' ok=false unresolved-loot')
+            return false
+        end
+    end
     if Game and Game.QuickSave then
         pcall(KCD2MP_Wo122HitchArm, 6.0)
         ok, r = pcall(Game.QuickSave)
@@ -16253,21 +16259,53 @@ end
 -- snapshot or the next world: it is lost if the host did give it, never kept twice. maxAgeS 0 settles every pending take now (before a snapshot).
 function W134.settlePending(maxAgeS)
     local w = KCD2MP.w134
-    local now, taken = os.clock(), 0
+    local now, taken, unresolved = os.clock(), 0, 0
     for bname, sess in pairs(w.sessions or {}) do
         for tok, t in pairs(sess.pend or {}) do
             if maxAgeS <= 0 or (now - (t.at or now)) > maxAgeS then
-                sess.pend[tok] = nil
                 local n = W134.deleteClass(player, t.cls, t.amt, t.hp, t.pinv)
+                if n >= t.amt then sess.pend[tok] = nil
+                else t.amt = t.amt - n; unresolved = unresolved + 1 end -- preserve uncertainty; a failed rollback must block snapshots
                 taken = taken + 1
                 w.stats.takeSettled = (w.stats.takeSettled or 0) + 1
                 W134.log(string.format("WO134-BODY unconfirmed npc=%s tok=%s -- no answer from the host: %d of %d taken back off Henry (never kept without the host's yes)", bname, tok, n, t.amt))
             end
         end
     end
-    return taken
+    return taken, unresolved
 end
 KCD2MP.w134.settlePending = W134.settlePending
+
+-- Candidate checkpoint gate. Native hold has its own 20-second lease; this gate also expires after an agent crash.
+local checkpointUntil = 0
+function KCD2MP_SetCheckpointMode(mode)
+    mode = tostring(mode or '')
+    if mode ~= 'candidate' and mode ~= 'off' then
+        mp_log('Checkpoint barrier is Candidate and defaults off. Use mp_checkpoint_mode candidate|off.')
+        return
+    end
+    KCD2MP_EmitEvent('checkpoint_mode', mode)
+end
+function KCD2MP_CheckpointBlocked() return os.clock() < checkpointUntil end
+function KCD2MP_CheckpointRelease() checkpointUntil = 0 end
+function KCD2MP_CheckpointPrepare(tok)
+    checkpointUntil = os.clock() + 95
+    local _, unresolved = W134.settlePending(0)
+    for _, sess in pairs(KCD2MP.w134.sessions or {}) do
+        for _ in pairs(sess.puts or {}) do unresolved = unresolved + 1 end
+    end
+    for _ in pairs(KCD2MP.w134.itemReq or {}) do unresolved = unresolved + 1 end
+    KCD2MP_EmitEvent('wo124_reply', tostring(tok) .. ' ok=' .. (unresolved == 0 and 'true' or 'false'))
+end
+
+function W134.revokeTake(sess, tok, t)
+    local n = W134.deleteClass(player, t.cls, t.amt, t.hp, t.pinv)
+    if n < t.amt then
+        t.amt = t.amt - n
+        sess.pend[tok] = t -- failed native rollback remains unsettled and blocks a snapshot
+    end
+    return n
+end
 
 function KCD2MP_W134TakeResult(tok, verdict, name)
     local w = KCD2MP.w134
@@ -16284,12 +16322,12 @@ function KCD2MP_W134TakeResult(tok, verdict, name)
                 -- a single take, a retry) or an item the host's body never held
                 -- (the copy's own): taken back quietly -- nobody else got anything.
                 w.stats.takeDup = (w.stats.takeDup or 0) + 1
-                local n = W134.deleteClass(player, t.cls, t.amt, t.hp, t.pinv)
+                local n = W134.revokeTake(sess, tok, t)
                 W134.log(string.format("WO134-BODY result npc=%s tok=%s %s -- %s: %d of %d taken back off Henry, no notice", bname, tok, verdict,
                     verdict == "mine" and "already mine (a duplicate of my own take)" or "never in the host's body", n, t.amt))
             else
                 w.stats.takeGone = w.stats.takeGone + 1
-                local n = W134.deleteClass(player, t.cls, t.amt, t.hp, t.pinv)
+                local n = W134.revokeTake(sess, tok, t)
                 W134.log(string.format("WO134-BODY result npc=%s tok=%s gone -- someone else took it first: %d of %d taken back off Henry", bname, tok, n, t.amt))
                 KCD2MP_ShowNativeToast("Someone already took that.")
             end
@@ -16361,6 +16399,7 @@ function W134.hostTakeOnce(peer, tok, name, cls, amt, hp)
 end
 
 function KCD2MP_W134HostTake(peer, tok, name, cls, amt, hp, scope)
+    if KCD2MP_CheckpointBlocked() then return end
     local ops = KCD2MP_LootOperations
     if not ops then return end
     local fp = table.concat({ 'take', tostring(name), tostring(cls), tostring(amt), tostring(hp) }, '|')
@@ -16372,6 +16411,7 @@ end
 
 -- Agent -> host: a joiner put an item into its copy of this body: it goes into the host's too.
 function KCD2MP_W134HostPut(peer, tok, name, cls, amt, hp, scope)
+    if KCD2MP_CheckpointBlocked() then return end
     local ops = KCD2MP_LootOperations
     if not ops then return end
     local fp = table.concat({ 'put', tostring(name), tostring(cls), tostring(amt), tostring(hp) }, '|')
@@ -16435,6 +16475,7 @@ end
 -- The wrapped pickup (PickableItem.OnUsed / OnUsedHold, what the game's use action
 -- calls). Returns handled, result.
 function W134.onPickup(self, user, slot, hold, orig)
+    if user == player and KCD2MP_CheckpointBlocked() then return true, false end
     local w = KCD2MP.w134
     if W134.bypass or not w.items or user ~= player then return false end
     if KCD2MP_W134JoinerActive() then
@@ -16485,7 +16526,7 @@ end
 
 -- Agent -> host: a joiner wants this world item. body = 1: an item that fell off a
 -- corpse (each machine's physics placed it; matched within deadBodyMatchM).
-function KCD2MP_W134HostItem(peer, tok, cls, x, y, z, body)
+function W134.hostItemOnce(peer, tok, cls, x, y, z, body)
     local w = KCD2MP.w134
     x, y, z = tonumber(x), tonumber(y), tonumber(z)
     local tol = (tonumber(body) == 1) and w.deadBodyMatchM or w.matchM
@@ -16493,9 +16534,13 @@ function KCD2MP_W134HostItem(peer, tok, cls, x, y, z, body)
     local verdict = "unknown"
     local how = ""
     if e then
+        local name = W134.name(e)
+        if not name then return nil end
+        how = W134.takeAway(e, peer)
+        local readOk, remaining = pcall(function() return System.GetEntityByName(name) end)
+        if not readOk or remaining then return nil end -- no success based only on a non-throwing mutation
         verdict = "ok"
         w.hostTaken[#w.hostTaken + 1] = { cls = cls, x = x, y = y, z = z, at = os.clock(), by = tostring(peer) }
-        how = W134.takeAway(e, peer)
     else
         for _, t in ipairs(w.hostTaken) do
             if t.cls == cls and (t.x - x) ^ 2 + (t.y - y) ^ 2 + (t.z - z) ^ 2 <= tol * tol then
@@ -16505,22 +16550,35 @@ function KCD2MP_W134HostItem(peer, tok, cls, x, y, z, body)
             end
         end
     end
-    KCD2MP_EmitEvent("w134_ires", string.format("%s %s %s %s %.3f %.3f %.3f", tostring(peer), tostring(tok), verdict, tostring(cls), x, y, z))
     W134.log(string.format("WO134-ITEM host-take cls=%s at=(%.2f,%.2f,%.2f) from=%s -> %s%s", tostring(cls), x, y, z, tostring(peer), verdict,
         e and string.format(" (matched %.3f m, %s)", d, how) or ""))
+    return verdict
+end
+
+function KCD2MP_W134HostItem(peer, tok, cls, x, y, z, body, scope)
+    if KCD2MP_CheckpointBlocked() then return end
+    local ops = KCD2MP_LootOperations
+    if not ops then return end
+    local fp = table.concat({'item', tostring(cls), tostring(x), tostring(y), tostring(z), tostring(body)}, '|')
+    local verdict, status = ops.execute(scope, peer, tok, fp, function()
+        return W134.hostItemOnce(peer, tok, cls, x, y, z, body)
+    end)
+    if verdict then
+        KCD2MP_EmitEvent('w134_ires', string.format('%s %s %s %s %.3f %.3f %.3f %s', tostring(peer), tostring(tok), verdict, tostring(cls), x, y, z, scope))
+    else W134.log('WO134-OP unresolved=' .. tostring(status) .. ' -- item not retried automatically') end
 end
 
 -- Agent -> joiner: the host's answer. ok = the host's copy is gone, pick mine up;
 -- gone = someone took it first; unknown = the host has no such item (a spawned or
--- moved one): left per machine, picked up here as before.
+-- moved one): refused; lack of a match is not authority to grant an item.
 function KCD2MP_W134ItemResult(tok, verdict)
     local w = KCD2MP.w134
     tok = tostring(tok)
     local r = w.itemReq[tok]
     if not r then return end
     w.itemReq[tok] = nil
-    if verdict == "ok" or verdict == "unknown" then
-        if verdict == "ok" then w.stats.itemOk = w.stats.itemOk + 1 else w.stats.itemUnmatched = w.stats.itemUnmatched + 1 end
+    if verdict == "ok" then
+        w.stats.itemOk = w.stats.itemOk + 1
         W134.bypass = true
         local ok, res = pcall(function() return r.orig(r.ent, player, r.slot) end)
         W134.bypass = false
@@ -16529,6 +16587,10 @@ function KCD2MP_W134ItemResult(tok, verdict)
         if ok and steal and KCD2MP_W139Stole then pcall(KCD2MP_W139Stole, steal) end   -- WO-139
         W134.log(string.format("WO134-ITEM %s tok=%s cls=%s -- picked up here ok=%s res=%s%s", verdict == "ok" and "ok" or "unmatched", tok, tostring(r.cls),
             tostring(ok), tostring(res), verdict == "ok" and " (the host's copy is gone)" or " (the host has no such item: per machine, as before)"))
+    elseif verdict == "unknown" then
+        w.stats.itemUnmatched = w.stats.itemUnmatched + 1
+        W134.log(string.format('WO134-ITEM unknown tok=%s -- no host proof; item stays, nothing granted', tok))
+        KCD2MP_ShowNativeToast("The host could not confirm that item.")
     elseif verdict == "mine" then
         -- WO-136 Phase 7: my own earlier take of it (a retry): removed here, no notice.
         w.stats.itemDup = (w.stats.itemDup or 0) + 1
@@ -21279,6 +21341,7 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_owner_death",         'KCD2MP_SetOwnerDeath(%line)',           "WO-122: an NPC its owner streams dead dies here even when this copy is alive, after a load too (default on; off = WO-86 witnessed transitions only): mp_owner_death on|off")
     System.AddCCommand("mp_autosave_minutes",    'KCD2MP_SetAutosaveMinutes(%line)',      "WO-122: the host's world-save cadence with mp_shared_world on (default 5; 0 = none): mp_autosave_minutes <n>; bare = report")
     System.AddCCommand("mp_world_save",          "KCD2MP_WorldSaveNow()",                 "WO-122: the host writes a world save now and the agent reports the file (host, mp_shared_world on)")
+    System.AddCCommand("mp_checkpoint_mode", 'KCD2MP_SetCheckpointMode(%line)', "Candidate checkpoint barrier, default off: candidate|off; requires coordinated hold/save engine testing")
     do
         local w = KCD2MP.w122
         mp_log(string.format("WO122-BUILD shared_world=%s owner_death=%s autosave_minutes=%d lock=%s lock_text=\"%s\" world_save=EnqueueAutoSave"

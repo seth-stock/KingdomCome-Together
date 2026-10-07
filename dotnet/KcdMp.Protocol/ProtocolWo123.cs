@@ -99,6 +99,8 @@ public static partial class Protocol
         (ActivityExtraUp, ActivityExtraDown, "activity-extra", JoinHeaderLen + ExtraBodyMin, JoinHeaderLen + ExtraBodyMax, JoinFrom.Host),
         // WO-148: carrying (ProtocolWo148.cs) -- the LootMsg shape; a joiner's goes to the host, the host's to one joiner
         (CarryUp,       CarryDown,       "carry",        JoinHeaderLen + LootFixedLen + 1, JoinHeaderLen + LootFixedLen + CarryTextMax, JoinFrom.Either),
+        (CheckpointHostUp, CheckpointHostDown, "checkpoint-host", JoinHeaderLen + CheckpointPacket.Header + 1, JoinHeaderLen + CheckpointPacket.Header + CheckpointPacket.ChunkBytes, JoinFrom.Host),
+        (CheckpointPeerUp, CheckpointPeerDown, "checkpoint-peer", JoinHeaderLen + CheckpointPacket.Header + 1, JoinHeaderLen + CheckpointPacket.Header + CheckpointPacket.ChunkBytes, JoinFrom.Joiner),
     };
 
     /// <summary>The JoinWire row for an up type, or null.</summary>

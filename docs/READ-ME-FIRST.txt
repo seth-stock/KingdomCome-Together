@@ -6,7 +6,8 @@ Everyone in the room -- the host and every friend -- needs THIS installer (the s
 
 PLAYTEST BUILD. This is a development build for testing, not a finished release. Nobody has played it with two people yet.
 The room tells you what it is: normally "partly shared" -- you see each other and fight and talk together, but loot is not yet duplication-proof and there is no
-consistent world checkpoint, so do not use your only save. A friend with other DLC or mods than the host is let in as presence only, and no world is moved to them.
+consistent world checkpoint, so do not use your only save. Different other mods cap the room at presence. A richer-DLC guest may join a lower-DLC host; a poorer guest cannot receive an existing richer host save.
+Disable extra DLC in Steam and restart as instructed; the mod does not convert DLC saves.
 If the launcher says "shared simulation", that is a bug: report it. Tests to try, step by step: HUMAN-ACCEPTANCE-TESTS.md (next to this file);
 what is proved and what is not: CAPABILITIES.md.
 
@@ -34,3 +35,7 @@ IF SOMETHING GOES WRONG
   * Full guide: docs\PLAYING-TOGETHER.md (installed next to the launcher). Known limits: docs\IMPLEMENTATION-STATUS.md.
 
 UNINSTALL: Windows Settings > Apps > Kingdom Come: Together. Your saves are never touched.
+
+SESSION 2 UPDATE
+Protocol 13: install this build on EVERY machine, including the relay. Durable loot decisions reduce retry duplication but do not prove a complete duplication-proof economy.
+The live checkpoint barrier is Candidate and defaults off; shared pause has not had two-person acceptance. See SESSION2-RESULTS.md and the new human tests.

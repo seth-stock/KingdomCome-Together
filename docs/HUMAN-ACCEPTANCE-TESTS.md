@@ -91,3 +91,22 @@ The loot path is **not** duplication-proof. This test is meant to find the failu
 
 For each test: ID, pass/fail, what you saw, time, the launcher's version line, and the installer's SHA-256. Send it with the evidence above.
 Anything failed stays `candidate` or `engine-verified` in [CAPABILITIES.md](CAPABILITIES.md) until fixed and repeated.
+
+## Session 2 tests: pending human acceptance
+
+All cases below are PENDING. Record both machines' release tags, installer hashes, VERSION, engine builds, active DLC, settings and logs. Use disposable save copies. Do not mark overall shared simulation accepted from any individual passing case.
+
+| ID | Test | Required result |
+|---|---|---|
+| H-31 | Host with no save-affecting DLC, guest with all; restart after disabling extras as instructed. | Guest is admitted; extra DLC is identified and excluded from mirroring; lower-DLC world loads. No automatic Steam entitlement removal is claimed. |
+| H-32 | Host with all DLC, guest with none; try moving that host world. Then reverse the host roles. | First transfer is refused before installation. Lower-content host world may be joined. Original saves remain preserved. |
+| H-33 | Different other mods or different Lua build. | Other mods cap presence and block world moves; differing Lua payload is refused. |
+| H-34 | Host opens ESC, then guest opens ESC; leave it open for 15 minutes. | KCD2: both worlds stop and resume together with shared pause enabled. KCD1: shared pause is unavailable; document independent worlds instead of reporting a pass. |
+| H-35 | Set pause off on both KCD2 clients; open ESC on each. | Menu works while both worlds continue. KCD1: unavailable until a native interception path is proved. |
+| H-36 | Disconnect/kill an agent during shared pause. | KCD2 hold releases within 20 seconds of the last refresh. Normal offline menu pause remains available. |
+| H-37 | Open Multiplayer in the pause menu; use status, Back and settings, then resume. | Correct live-session pages and navigation; main-menu-only evidence is insufficient. |
+| H-38 | Two guests take the same body/loose item at once; retry/delay replies; restart host between intent/mutation/result. | One host mutation; retries replay; uncertain mutations quarantine. No stale-scope reply grants an item. Record any lost item separately; no duplication claim from unit tests. |
+| H-39 | KCD2: `mp_checkpoint_mode candidate`, save with all clients joined; disconnect/load or withhold one capture. | All participants' native holds, matching world MD5, distinct characters and ledgers, final manifest after ACKs; otherwise abort and release. No partial checkpoint is selectable. Save while held and all native inventory exclusion must be separately demonstrated. |
+| H-40 | Reconnect from divergent checkpoints and choose one; stage personalized characters. | Both alternatives preserved, no independent-world merge, no unrelated character substitution. Guest archive transfer/live promotion are still unresolved; do not treat offline preparation as native acceptance. |
+| H-41 | KCD1: on disposable matching worlds, enable `kcdus_quest_mode candidate` on both; complete an open base objective, repeat, then try rails/DLC/local events. | Native readback agrees; replay does not repeat mutation; vetoed paths stay untouched. Compare rewards, XP, NPC spawns and save/reload. Full quest completion without native proof must report unverified. |
+| H-42 | Extract Linux archive, validate SHA256SUMS, run doctor/install on fake Steam, then real Proton on two computers. | Fake fixtures and real gameplay reported separately; verify Windows/Linux feature negotiation. Missing KCD1 native adapter paths stay unavailable. |

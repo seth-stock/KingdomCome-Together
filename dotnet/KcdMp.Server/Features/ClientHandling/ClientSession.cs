@@ -1361,13 +1361,15 @@ public class ClientSession
     }
 
     /// <summary>Thread-safe: enqueue a Name packet (0x03) to be sent to this client.</summary>
-    public void EnqueueName(byte ghostId, string name)
+    public void EnqueueName(byte ghostId, string name, string participantId = "")
     {
         var nameBytes = Encoding.UTF8.GetBytes(name);
         var payload = new byte[1 + nameBytes.Length];
         payload[0] = ghostId;
         nameBytes.CopyTo(payload, 1);
         EnqueueRaw(BuildPacket(Protocol.Name, payload));
+        if (Guid.TryParseExact(participantId, "N", out _))
+            EnqueueRaw(BuildPacket(Protocol.ParticipantBindingDown, new[] { ghostId }.Concat(Encoding.ASCII.GetBytes(participantId)).ToArray()));
     }
 
     /// <summary>Thread-safe: enqueue a ReleaseVersion packet (0x1E, WO-19) to be sent to this client.</summary>

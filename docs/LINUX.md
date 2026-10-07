@@ -144,3 +144,7 @@ size that differs between platforms, and two that called the Windows registry (t
   `CombatPipe.cs` (TCP client), `GameHost.cs` (Steam/Proton/saves discovery), `linux/kcdmp`.
 * Tests: `native/tests/transport_rules_tests.cpp`, `dotnet/KcdMp.Client.Tests/LinuxTransportTests.cs`, `GameHostTests.cs`.
 * The version string is the repository's `VERSION` and was not changed for this.
+
+## This playtest
+
+Rebuilt packages must be identified by SHA-256/release tag. Real Proton gameplay remains unproved. KCD1 native startup adapter support is Windows-only at present; rebuilding the native Linux agent does not prove outfits or full native character restoration under Proton. See SESSION2-RESULTS.md and HUMAN-ACCEPTANCE-TESTS.md.

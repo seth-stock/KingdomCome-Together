@@ -122,23 +122,9 @@ foreach ($rel in $Files) {
     }
 }
 
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-if (Test-Path $PakPath) { Remove-Item $PakPath -Force }
-
-$zip = [System.IO.Compression.ZipFile]::Open($PakPath, [System.IO.Compression.ZipArchiveMode]::Create)
-try {
-    foreach ($rel in $Files) {
-        $entry  = $zip.CreateEntry($rel.Replace('\', '/'), [System.IO.Compression.CompressionLevel]::NoCompression)
-        $entry.LastWriteTime = [DateTimeOffset]::new(2026, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
-        $stream = $entry.Open()
-        $bytes  = [System.IO.File]::ReadAllBytes((Join-Path $SrcRoot $rel))
-        $stream.Write($bytes, 0, $bytes.Length)
-        $stream.Close()
-        "  packed {0,-50} {1,8:N0} bytes" -f $rel, $bytes.Length
-    }
-} finally { $zip.Dispose() }
+# Canonical builder shared with Linux so cross-platform peers agree on the payload hash.
+& python (Join-Path $ScriptDir 'Build-ModPak.py')
+if ($LASTEXITCODE -ne 0) { throw 'Deterministic mod pak build failed' }
 
 Write-Host ("Built {0} ({1:N0} bytes)" -f $PakPath, (Get-Item $PakPath).Length) -ForegroundColor Green
 

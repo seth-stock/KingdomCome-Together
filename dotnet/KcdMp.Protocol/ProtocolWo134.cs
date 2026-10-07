@@ -39,7 +39,7 @@ namespace KcdMp.Wire;
 //   6 TakedownResult "<ok|refused> <body> <kind>"   WO-135
 //   7 Build      "<BuildInfo>"                     WO-135: the host world's game build (on change, every 30 s)
 //
-// Protocol 11: all LootAsk text and body TakeResult text carry an
+// Protocol 13: all LootAsk text, body TakeResult and loose ItemResult text carry an
 // @<32-hex connection/load scope> prefix before the fields listed above.
 // Results echo the request scope; a stale response cannot resolve a new
 // incarnation's reused numeric token. Legacy protocol peers are refused.

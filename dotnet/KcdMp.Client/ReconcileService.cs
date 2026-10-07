@@ -31,7 +31,7 @@ public sealed class ReconcileService
         if (ledger.Entries.Any(e => !Wo134Rules.Valid(e))) throw new InvalidDataException("Invalid chest ledger row.");
     }
     public CheckpointManifest Capture(string worldId, string branchId, string? parentId, string contentFingerprint,
-        byte[] world, IReadOnlyList<CaptureCharacter> characters)
+        byte[] world, IReadOnlyList<CaptureCharacter> characters, string? checkpointId = null, bool publish = true)
     {
         var verified = WhsSave.Verify(world);
         if (!verified.Ok) throw new InvalidDataException("World does not verify: " + verified.Reason);
@@ -58,9 +58,10 @@ public sealed class ReconcileService
                 if (!ownedItems.Add(instance)) throw new InvalidDataException("An item instance is owned by two checkpoint participants.");
             VerifyLedger(c.ChestLedger); references.Add(p);
         }
-        var manifest = new CheckpointManifest(1, worldId, Guid.NewGuid().ToString("N"), parentId, branchId,
+        var manifest = new CheckpointManifest(1, worldId, checkpointId ?? Guid.NewGuid().ToString("N"), parentId, branchId,
             build, contentFingerprint, _store.PutArtifact(world), references);
-        _store.PublishCheckpoint(manifest); return manifest;
+        if (publish) _store.PublishCheckpoint(manifest);
+        return manifest;
     }
     public Selection Select(string localId, string remoteId, string? chooseId = null)
     {

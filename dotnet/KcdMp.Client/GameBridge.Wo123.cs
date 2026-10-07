@@ -262,6 +262,10 @@ public partial class GameBridge
             case Protocol.LootHostDown:
                 await Wo134OnFrameAsync(type, src, body);
                 return;
+            case Protocol.CheckpointHostDown:
+            case Protocol.CheckpointPeerDown:
+                await CheckpointFrameAsync(type, src, body);
+                return;
             case Protocol.QuestHostDown:    // WO-137
             case Protocol.QuestAskDown:
                 await Wo137OnFrameAsync(type, src, body);

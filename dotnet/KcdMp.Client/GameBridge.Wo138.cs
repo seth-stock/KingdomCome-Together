@@ -71,6 +71,8 @@ public partial class GameBridge
     private void Wo138OnConnect(CancellationToken ct)
     {
         _w138Connected = true;
+        _checkpointIdentities.Clear();
+        _checkpointEpoch = Guid.NewGuid();
         _pauseShared = config.SharedPause;
         _w138LeversSwitch = !_pauseShared;                // shared pause: the ESC menu pauses normally; off: it is declined, as before
         _sharedPause.Clear();
@@ -99,6 +101,8 @@ public partial class GameBridge
     private async Task Wo138OnDisconnectAsync()
     {
         _w138Connected = false;
+        if (_checkpointHost is { } checkpointHost) checkpointHost.Aborted = true;
+        if (_checkpointPeer is { } checkpointPeer) await CheckpointReleaseAsync(checkpointPeer);
         _combat.OnNpcStream = null;
         _combat.OnWorld = null;
         _w138Rows?.Writer.TryComplete();
@@ -379,7 +383,7 @@ public partial class GameBridge
                 bool partner = false;
                 var fresh = DateTime.UtcNow - TimeSpan.FromSeconds(10);
                 foreach (var kv in _ghostLastPos) if (kv.Value.AtUtc >= fresh) { partner = true; break; }
-                bool levers = Wo138Codec.LeversOn(_w138Connected, _combat.IsConnected, partner, _w138LeversSwitch) && _where != GameWhere.Menu;
+                bool levers = Wo138Codec.LeversOn(_w138Connected, _combat.IsConnected, partner, _w138LeversSwitch) && _where != GameWhere.Menu && !CheckpointHolding;
                 if (levers != _w138LeversApplied || now - lastLevers >= 5000)
                 {
                     lastLevers = now;
@@ -411,8 +415,8 @@ public partial class GameBridge
 
     private async Task Wo138SharedPauseTickAsync(long now, CancellationToken ct)
     {
-        bool want = _pauseShared && _combat.IsConnected && _where != GameWhere.Menu && _where != GameWhere.Loading
-                    && _sharedPause.ShouldHold(now, src => _w138LastFromMs.TryGetValue(src, out long l) ? l : 0);
+        bool want = _combat.IsConnected && _where != GameWhere.Menu && _where != GameWhere.Loading
+                    && (CheckpointHolding || (_pauseShared && _sharedPause.ShouldHold(now, src => _w138LastFromMs.TryGetValue(src, out long l) ? l : 0)));
         // re-asserted every 2 s while on: the DLL's own deadline is 20 s after the last ask, so a stalled agent can never leave a stuck world
         if (want == _sharedHoldOn && !(want && now - _sharedHoldAsked >= 2000)) return;
         var r = await _combat.Wo138Async(Wo138Codec.OpSharedHold, Wo138Codec.SharedHoldBody(want, 20), ct);

@@ -399,7 +399,7 @@ check("I3 host gone: removed here, not picked up, told", ENTS["egg000351"] == ni
 local sw = mkPickable("shortsword000628", SWORD, 1, 1, 105, 100, 10, newItem(SWORD, 1, 1))
 LOG = {}; PickableItem.OnUsed(sw, player)
 KCD2MP_W134ItemResult(firstTok("w134_item"), "unknown")
-check("I4 host unknown (no such item there): picked up here as before (per machine)", ENTS["shortsword000628"] == nil and player.inventory:GetCountOfClass(SWORD) == 1)
+check("I4 host unknown (no such item there): not granted without host proof", ENTS["shortsword000628"] ~= nil and player.inventory:GetCountOfClass(SWORD) == 0)
 local ax = mkPickable("axe000354", "1fc42528-2bef-4dde-bf8a-04febeef41c8", 1, 1, 106, 100, 10, newItem("1fc42528-2bef-4dde-bf8a-04febeef41c8", 1, 1))
 LOG = {}; TOASTS = {}; PickableItem.OnUsed(ax, player)
 for i = 1, 20 do loop() end
@@ -422,18 +422,21 @@ check("I7 ... nor one 0.5 m off (no guessing)", ENTS["egg000349"] ~= nil)
 world(); asHost(1)
 mkPickable("egg000400", EGG, 1, 1, 101, 100, 10, newItem(EGG, 1, 1))
 LOG = {}
-KCD2MP_W134HostItem(1, 71, EGG, 101.0, 100.0, 10.0, 0)
+KCD2MP_W134HostItem(1, 71, EGG, 101.0, 100.0, 10.0, 0, '0123456789abcdef0123456789abcdef')
 check("I8 the host matches the joiner's item by class + position and removes its copy: ok", events("w134_ires")[1] ~= nil and string.find(events("w134_ires")[1], "1 71 ok ", 1, true) == 1 and ENTS["egg000400"] == nil, events("w134_ires")[1])
 LOG = {}
-KCD2MP_W134HostItem(2, 72, EGG, 101.0, 100.0, 10.0, 0)
+KCD2MP_W134HostItem(1, 71, EGG, 101.0, 100.0, 10.0, 0, '0123456789abcdef0123456789abcdef')
+check('I8a retry replays the scoped success instead of claiming mine', string.find(events('w134_ires')[1] or '', '1 71 ok ', 1, true) == 1)
+LOG = {}
+KCD2MP_W134HostItem(2, 72, EGG, 101.0, 100.0, 10.0, 0, '0123456789abcdef0123456789abcdef')
 check("I9 the same item asked again: gone", events("w134_ires")[1] ~= nil and string.find(events("w134_ires")[1], "2 72 gone ", 1, true) == 1, events("w134_ires")[1])
 LOG = {}
-KCD2MP_W134HostItem(1, 73, SWORD, 50, 50, 10, 0)
+KCD2MP_W134HostItem(1, 73, SWORD, 50, 50, 10, 0, '0123456789abcdef0123456789abcdef')
 check("I10 nothing there: unknown", events("w134_ires")[1] ~= nil and string.find(events("w134_ires")[1], "1 73 unknown ", 1, true) == 1)
 mkPickable("onion007777", ONION, 1, 1, 104, 100, 10, newItem(ONION, 1, 1))
 KCD2MP.itemDrops["3000000011"] = { state = "ground", entName = "onion007777", mine = true }
 LOG = {}
-KCD2MP_W134HostItem(1, 74, ONION, 104, 100, 10, 0)
+KCD2MP_W134HostItem(1, 74, ONION, 104, 100, 10, 0, '0123456789abcdef0123456789abcdef')
 check("I11 a host's tracked drop is never handed out as a world item", ENTS["onion007777"] ~= nil and string.find(events("w134_ires")[1] or "", " unknown ", 1, true) ~= nil)
 local hegg2 = mkPickable("egg000401", EGG, 1, 1, 102, 100, 10, newItem(EGG, 1, 1))
 LOG = {}
@@ -510,7 +513,7 @@ KCD2MP.ghosts["1"] = { entity = gh }
 local slotw = newItem(EGG, 1, 1)
 mkPickable("egg000500", EGG, 1, 1, 101, 100, 10, slotw)
 LOG = {}
-KCD2MP_W134HostItem(1, 81, EGG, 101.0, 100.0, 10.0, 0)
+KCD2MP_W134HostItem(1, 81, EGG, 101.0, 100.0, 10.0, 0, '0123456789abcdef0123456789abcdef')
 check("X2 the host takes the item away through the asker's avatar (the engine's take, no slot respawn)", ENTS["egg000500"] == nil and ITEMS[slotw] == nil and #gh.inventory.list == 0)
 check("X2 ... and says so", string.find(table.concat(LOG, " "), "taken)", 1, true) ~= nil)
 
@@ -525,6 +528,20 @@ KCD2MP.w134LoopRunning = false                                     -- the load k
 KCD2MP.w134.startLoop(); TIMERS = {}
 LOG = {}; loop()
 check("X3 a chest that changed across a load is not recorded as a take or a put", #events("w134_chest") == 0, events("w134_chest")[1])
+
+world(); asJoiner()
+LOG = {}
+KCD2MP_CheckpointPrepare(991)
+check('CP1 empty pending loot allows checkpoint preparation', events('wo124_reply')[1] == '991 ok=true')
+check('CP2 checkpoint blocks new loose pickups', KCD2MP_CheckpointBlocked())
+local guarded = mkPickable('checkpoint_egg', EGG, 1, 1, 105, 100, 10, newItem(EGG, 1, 1))
+LOG = {}; PickableItem.OnUsed(guarded, player)
+check('CP3 pickup is refused while held, without asking host', ENTS['checkpoint_egg'] ~= nil and #events('w134_item') == 0)
+KCD2MP_CheckpointRelease()
+check('CP4 release clears the Lua gate', not KCD2MP_CheckpointBlocked())
+KCD2MP_CheckpointPrepare(992); NOW = NOW + 96
+check('CP5 Lua gate expires after an agent crash', not KCD2MP_CheckpointBlocked())
+KCD2MP_CheckpointRelease()
 
 check("no Lua errors", #ERRS == 0, ERRS[1])
 local pass, fail = 0, 0

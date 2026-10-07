@@ -231,6 +231,10 @@ public partial class GameBridge
             case "world_save_request":
                 _ = RequestWorldSaveAsync(string.IsNullOrWhiteSpace(arg) ? "manual" : arg.Trim());
                 return;
+            case "checkpoint_mode":
+                _candidateCheckpoints = arg == "candidate";
+                Console.WriteLine("MP-CHECKPOINT Candidate barrier " + (_candidateCheckpoints ? "enabled for this agent session" : "off; existing save path"));
+                return;
         }
     }
 
@@ -246,8 +250,10 @@ public partial class GameBridge
     private async Task<string?> RequestWorldSaveAsync(string why) => (await RequestWorldSaveCoreAsync(why))?.Display;
 
     /// <summary>The request itself; WO-123's join takes the file (path, md5, WorldSaved seq) from here.</summary>
-    private async Task<ObservedSave?> RequestWorldSaveCoreAsync(string why)
+    private async Task<ObservedSave?> RequestWorldSaveCoreAsync(string why, bool checkpointInternal = false)
     {
+        if (!checkpointInternal && _candidateCheckpoints && _sharedWorld && Wo134HostRole && _hostWorldSeed is not null && LivePartners().Count > 0
+            && !Wo123HostJoinActive) return await RequestCheckpointAsync(why);
         if (!_sharedWorld || !_combatRoleApplied || !_isDamageAuthority)
         {
             string cause = !_sharedWorld ? "mp_shared_world off" : !_combatRoleApplied ? "role unknown (no session)" : "this machine is not the host";

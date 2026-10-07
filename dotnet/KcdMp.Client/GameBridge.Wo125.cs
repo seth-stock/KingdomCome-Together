@@ -788,6 +788,7 @@ public partial class GameBridge
             {
                 var snap = _henry.Store(_joinedTag!, parts!, md5, HenryStore.SourceSnapshot, $"host {Protocol.SaveKindName(w.Kind)} playline{w.Playline}/{w.FileName} seq={w.Seq}");
                 Wo134OnSnapshotStored(snap);   // WO-134: the chest ledger pairs with it
+                await CheckpointSnapshotAsync(snap, parts!);
                 Console.WriteLine(FormattableString.Invariant(
                     $"MP-HENRY joiner: PAIRED host save seq={w.Seq} md5={md5[..8]} with snapshot {snap.Short}: host-save-in -> request {lagS:F2} s, -> file verified {(tFile - tReq).TotalSeconds:F2} s ({SaveDisplay(path)}, {bytes.Length} B)"));
             }

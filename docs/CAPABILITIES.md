@@ -1,6 +1,6 @@
 # Capabilities and what a room really is
 
-Kingdom Come: Together development build (VERSION 0.45.0, protocol 12). Every claim here has a level, and the level is what the room handshake sends to the other computer.
+Kingdom Come: Together development build (VERSION 0.45.0, protocol 13). Every claim here has a level, and the level is what the room handshake sends to the other computer.
 Two computers agree on the **lower** of their two levels for each capability, so neither side can promise more than the other can do. The same contract, test vectors and wording
 are used by the KCD1 sibling (Deliver Us).
 
@@ -25,21 +25,21 @@ are used by the KCD1 sibling (Deliver Us).
 | `authority.npc` | engine-verified **only with the native plugin (KCDMP.dll) present**, else candidate | Host-side NPC claims, scan and drive. `KCDMP_NativeTests.exe`: 403 passed. |
 | `authority.combat` | engine-verified **only with the native plugin present**, else candidate | Damage authority exists; coordination with NPC claims and unique hit ids are incomplete (see gates). |
 | `authority.quest` | engine-verified | Quest-state sync with host attribution. |
-| `authority.loot` | candidate | Scoped in-memory body retry cache with host readback. **No durable operation journal, no pre-transfer escrow.** Do not call this duplication-proof. |
+| `authority.loot` | candidate | Scoped durable host body/loose decisions and native readback; recipient receipt and complete pre-transfer escrow/economy interception remain unproved. Do not call this duplication-proof. |
 
 ## Room modes, in plain words
 
 | Mode | What you are told | When |
 |---|---|---|
 | **Refused** | The reason, in a sentence, and what to do. | Another game, another contract or wire version, a different or unverifiable mod payload (the `kdcmp.pak`), or no handshake at all. |
-| **Presence** | "Room: presence only. You see each other, but shared NPC, combat, loot and quest authority is NOT active (…)." | No authority capability is engine-verified on both sides, **or** the installs have different DLC or other mods. |
+| **Presence** | "Room: presence only. You see each other, but shared NPC, combat, loot and quest authority is NOT active (…)." | No authority capability is engine-verified on both sides, **or** the installs have different other mods. |
 | **Partial** ("partly shared") | "Room: partly shared (not every authority capability is verified: …)." | At least one authority capability is engine-verified on both sides, and not all of the required ones are integration-verified. **This is what a normal two-player room with the native plugin reports today**, and it names `authority.npc`, `authority.combat`, `authority.quest`, `authority.loot`, `checkpoint.barrier` and `character.personal` among the missing (each is engine-verified at best, not yet integration-verified). |
 | **Shared simulation** | "Room: shared simulation." | Every capability required for a shared simulation is integration-verified on both sides. **This build cannot reach it** (loot durability and the live checkpoint barrier are open). |
 
 ### Different DLC or mods
 
-Two installs with different DLC or other mods are admitted but capped at Presence. The room's list of what is missing gains "your game has other DLC or mods than the host's", and
-`mp_join_request` is refused with a sentence on screen; no world is moved to the player whose content differs.
+Different other mods cap Presence and block world moves. Richer-DLC guests may join a lower-DLC host; extra DLC quest mirroring is vetoed and the guest is told to disable extras in Steam and restart.
+A poorer-DLC guest cannot receive an existing richer host save. Choose a lower-content host world; the mod cannot convert a DLC-dependent save or deactivate Steam entitlements.
 
 ## What decides a payload match
 
@@ -59,3 +59,18 @@ Recorded rather than faked. Full list with reasons: [IMPLEMENTATION-STATUS.md](I
 * Linux and Proton packages: not rebuilt from this branch; the published "Untested Linux support" release is unchanged.
 * No Warhorse modding terms text for KCD2 was found, so the installer does not claim one.
 * Two-computer, four-player and multi-hour soak testing.
+
+## Session 2 continuation: 2026-10-07
+
+This remains a playtest build. No capability has human acceptance, and the two games do **not** yet have equivalent shared simulation. VERSION remains KCD1 0.1.0 / KCD2 0.45.0; distinguish downloads by release tag, commit and SHA-256, not VERSION alone.
+
+* KCD2 protocol 13 refuses older agents/relays. Durable host body take/put and loose-item decisions are journaled before the Lua mutation and before the reply. Interrupted unknown mutations are quarantined, never retried automatically. `HostDecisionComplete` means the host decision is durable, not that the recipient received/kept an item. Loose-item replies now carry the same connection/load scope as body replies. Unknown loose items are refused; successful removal requires entity readback.
+* KCD2 checkpoint barrier is **Candidate, default off**. Host console: `mp_checkpoint_mode candidate` (off reverses it for this agent session). It uses a fixed relay-verified participant roster, authority incarnation and checkpoint UUID, acknowledged native holds, loot settlement, a verified host save, bounded/acknowledged guest character uploads, matching save MD5s, chest ledgers, cross-participant item-instance checks, durable prepared artifacts, commit acknowledgements, and manifest publication before release. Disconnect, roster/load change, missing data or the 90-second deadline aborts. The native hold expires 20 seconds after the agent's last refresh. A guest keeps its paired personal artifacts and receipt; it does not yet receive a full host checkpoint archive for offline reconciliation.
+* Checkpoints still need proof that native saves work while held and that **all** inventory/quest/combat mutations are excluded. The Lua pickup gate is not complete native inventory interception. Ordinary autosaves still follow the existing path; interrupted capture is not automatically promoted. Offline checkpoint selection/preparation remains separate from live reconnect promotion.
+* KCD1 quest mirror is **Candidate, default off**. Console `kcdus_quest_mode candidate` on both test clients enables one-way host snapshots; `off` disables it. Identifiers come from the installed quest tables. Only open, base-game main/side/activity quests are eligible. DLC, rails/mixed scenes, local system/random events and unknown objectives are vetoed. It reads native state before applying and after mutation, replays completed objectives without repeating the call, refuses inactive objectives and unverified quest completion, and never treats cancel/deactivate as success. Objective reward/spawn side effects and full quest/variable coverage remain unproved.
+* Private KCD1 engine evidence: `q_revenge/findVonAulitz` changed from started/not-completed to completed through the real adapter; repeated application read back completed. This proves one objective binding, not full quest authority. `t_scale=0` stopped observed calendar progression; it was restored to 1. Production shared pause remains **Absent**: there is no proved crash-safe engine lease or menu-pause interception. A Lua timer cannot safely release a freeze that stops its timers.
+* KCD1 enemies/combat decision: **do not enable shared combat/NPC drive**. Existing damage probes did not prove the ordinary hit path; presence NPCs are not host-authoritative combatants. Damage interception, AI suppression/drive, targeting all players, one death/reward revision and a shared inventory ledger remain implementation gates. Do not replace this with cosmetic attacks or health setters.
+* KCD2 shared pause and its off option remain Candidate until the two-computer tests pass. DLC uses the host's lower-content world: richer guests are allowed and extra DLC quest mirroring is gated; poorer guests cannot receive an existing richer host save. Disable extra DLC in Steam and restart as instructed. The mod does not rewrite a DLC save or deactivate Steam entitlements. Different other mods still cap the room at presence and block world/character moves.
+* Linux packages are experimental. A successful WSL build/fake Steam test is not proof of Proton gameplay. KCD1's Windows startup adapter paths are not proved under the native Linux agent. No Linux engine feature is upgraded by rebuilding a tarball.
+
+Human acceptance is pending. KCD1 ESC-menu Multiplayer entry and its Status/Host/Join/Leave/Game world/Story/Keys/Settings/Back page were visually observed in the disposable loaded game. That does not prove buttons in a connected session. KCD2 pause-menu behavior still needs verification. Run the new test cases on disposable copies, record release/commit hashes and logs, and leave failed capabilities Candidate. No real saves or firewall rules were changed by this continuation's guarded probes.

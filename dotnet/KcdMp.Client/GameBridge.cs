@@ -1150,6 +1150,7 @@ public partial class GameBridge(ClientConfig config)
         finally
         {
             _versionIpcServer?.Stop();
+            _durableLoot?.Dispose();
             _versionIpcServer = null;
             _discordPresence?.Dispose();
             if (!ReferenceEquals(_transport, http))
@@ -4768,6 +4769,11 @@ public partial class GameBridge(ClientConfig config)
                     // WO-121: friendly fire -- a partner's hit on our Henry.
                     await OnPlayerHitV8InAsync(payload.AsSpan(0, payloadLen).ToArray(), ct);
                 }
+                else if (type == Protocol.ParticipantBindingDown && payloadLen == 33)
+                {
+                    string participant = Encoding.ASCII.GetString(payload, 1, 32);
+                    if (Guid.TryParseExact(participant, "N", out _)) _checkpointIdentities[payload[0]] = participant;
+                }
                 else if (type == Protocol.Name && payloadLen >= 2)
                 {
                     // Name packet: [ghostId:1][name:UTF-8...]
@@ -4787,6 +4793,9 @@ public partial class GameBridge(ClientConfig config)
                 }
                 else if (type == Protocol.Disconnect && payloadLen == 1)
                 {
+                    _checkpointIdentities.TryRemove(payload[0], out _);
+                    if (_checkpointHost is { } checkpointHost) checkpointHost.Aborted = true;
+                    if (_checkpointPeer is { } checkpointPeer) _ = CheckpointReleaseAsync(checkpointPeer);
                     // Disconnect packet: [ghostId:1]
                     byte ghostId = payload[0];
                     Console.WriteLine($"[disconnect] ghost {ghostId} removed");
@@ -5840,6 +5849,7 @@ public partial class GameBridge(ClientConfig config)
                 return;
             case "npc_owner_dead":   // WO-122 Phase 1: needs no interaction session
             case "world_save_request":
+            case "checkpoint_mode":
                 Wo122OnEvent(name, arg);
                 return;
             case "join_try":         // WO-123

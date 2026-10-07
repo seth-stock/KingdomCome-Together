@@ -795,7 +795,7 @@ public static partial class Protocol
     /// rows. A v9 relay would drop both as unknown types; v9 and v10 refuse
     /// each other at Handshake.
     /// </summary>
-    public const byte Version = 12; // v12: the room handshake (contract + participant identity) and its refusals; v11 peers cannot be admitted to a room that verifies payloads
+    public const byte Version = 13; // v13: loose-item results echo the connection/load scope; v12 peers cannot safely interpret these replies
 
     // C→S
     public const byte Handshake      = 0x00;

@@ -74,7 +74,7 @@ public class Wo123Tests : IDisposable
         foreach (var r in Protocol.JoinWire)
         {
             Assert.Equal(r.Up + 1, r.Down);
-            Assert.True(r.Up >= 0x48 && r.Down <= 0x71, $"{r.Name} outside 0x48..0x71");   // WO-114 added 0x58..0x5B, WO-134 0x5C..0x5F, WO-137 0x60..0x63, WO-139 0x64..0x67, WO-140 0x68/0x69, WO-141 0x6A..0x6D, WO-143 0x6E/0x6F, WO-148 0x70/0x71
+            Assert.True(r.Up >= 0x48 && r.Down <= 0x81, $"{r.Name} outside allocated join-channel range");
             Assert.True(r.Min >= Protocol.JoinHeaderLen && r.Max >= r.Min && r.Max + 1 <= ushort.MaxValue, r.Name);
             Assert.True(Protocol.IsJoinDown(r.Down, r.Min + 1));
             Assert.True(Protocol.IsJoinDown(r.Down, r.Max + 1));
@@ -84,7 +84,7 @@ public class Wo123Tests : IDisposable
         }
         Assert.Null(Protocol.JoinWireFor(Protocol.WorldSavedUp));
         Assert.False(Protocol.IsJoinDown(Protocol.WorldSavedDown, Protocol.WorldSavedDownPayloadLen));
-        Assert.Equal(12, Protocol.Version);   // v12: the room handshake (contract + participant identity)
+        Assert.Equal(13, Protocol.Version);   // v13: loose-item results echo connection/load scope
         // the biggest frame the join sends fits a u16 length and the relay's queue many times over
         var chunk = Protocol.JoinWireFor(Protocol.WorldChunkUp)!.Value;
         Assert.Equal(Protocol.JoinHeaderLen + 4 + Protocol.WorldChunkMaxData, chunk.Max);
