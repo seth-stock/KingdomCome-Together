@@ -285,6 +285,28 @@ check("B3 host says gone: the coat is taken back off Henry", player.inventory:Ge
 check("B3 ... with the plain line", lastToast() == "Someone already took that.", lastToast())
 KCD2MP_W134BodyState("bandit_7", "update", 1, 1, 1, {})
 check("B4 the host's looting empties the copy", #b.inventory.list == 0)
+-- an unconfirmed take is not kept: no answer for 20 s, or a snapshot, takes it back off Henry
+local base = player.inventory:GetCountOfClass(MONEY)
+b.inventory:CreateItem(MONEY, 1, 40); local uw = nil
+KCD2MP_W134BodyState("bandit_7", "update", 1, 1, 1, { { MONEY, 40, 1, false } })   -- the host's body holds it: the copy's snapshot has it
+for _, w in ipairs(b.inventory.list) do if ITEMS[w].class == MONEY then uw = w end end
+b.inventory:RemoveItem(uw); player.inventory:AddItem(uw)
+LOG = {}; loop()
+check("B4a an unanswered take is pending", events("w134_take")[1] ~= nil and player.inventory:GetCountOfClass(MONEY) == base + 40, tostring(player.inventory:GetCountOfClass(MONEY)))
+NOW = NOW + 10; KCD2MP_W134Tick(true, false, true, 1)
+check("B4a ... still Henry's after 10 s (the host may just be slow)", player.inventory:GetCountOfClass(MONEY) == base + 40)
+NOW = NOW + 15; KCD2MP_W134Tick(true, false, true, 1)
+check("B4a ... taken back after 20 s without the host's yes", player.inventory:GetCountOfClass(MONEY) == base, tostring(player.inventory:GetCountOfClass(MONEY)))
+check("B4a ... and logged as unconfirmed", (function() for _, l in ipairs(LOG) do if string.find(l, "unconfirmed", 1, true) then return true end end return false end)())
+b.inventory:CreateItem(MONEY, 1, 25); uw = nil
+KCD2MP_W134BodyState("bandit_7", "update", 1, 1, 1, { { MONEY, 25, 1, false } })
+for _, w in ipairs(b.inventory.list) do if ITEMS[w].class == MONEY then uw = w end end
+b.inventory:RemoveItem(uw); player.inventory:AddItem(uw)
+LOG = {}; loop()
+check("B4b a second unanswered take is pending", player.inventory:GetCountOfClass(MONEY) == base + 25)
+check("B4b a snapshot settles every pending take at once", KCD2MP.w134.settlePending(0) == 1 and player.inventory:GetCountOfClass(MONEY) == base)
+KCD2MP_W134BodyState("bandit_7", "update", 1, 1, 1, {})
+asJoiner()   -- the 25 s above let the agent's once-a-second role call go stale: it comes again
 -- WO-136: a put is an item out of the player's own pack (the game's own additions are not puts).
 player.inventory:CreateItem(APPLE, 1, 1)
 LOG = {}; loop()

@@ -5308,6 +5308,7 @@ KCD2MP.w125 = { snaps = 0, snapRefused = 0 }
 function KCD2MP_Wo125Snapshot(tok)
     local w = KCD2MP.w125
     local ok, r = false, nil
+    if KCD2MP.w134 and KCD2MP.w134.settlePending then pcall(KCD2MP.w134.settlePending, 0) end   -- no unconfirmed take goes into a snapshot
     if Game and Game.QuickSave then
         pcall(KCD2MP_Wo122HitchArm, 6.0)
         ok, r = pcall(Game.QuickSave)
@@ -16247,6 +16248,27 @@ end
 
 -- Agent -> joiner: the host's answer to a take. ok = it came out of the host's
 -- body; gone = someone had taken it first: the item is taken back off Henry.
+-- A take the host has not answered is not Henry's yet. An answer normally comes in milliseconds; one that has not come after maxAgeS seconds (the host's link
+-- is gone, its game is busy) is taken back off Henry, so an item that was never confirmed can neither be used for long nor travel with him into a save, a
+-- snapshot or the next world: it is lost if the host did give it, never kept twice. maxAgeS 0 settles every pending take now (before a snapshot).
+function W134.settlePending(maxAgeS)
+    local w = KCD2MP.w134
+    local now, taken = os.clock(), 0
+    for bname, sess in pairs(w.sessions or {}) do
+        for tok, t in pairs(sess.pend or {}) do
+            if maxAgeS <= 0 or (now - (t.at or now)) > maxAgeS then
+                sess.pend[tok] = nil
+                local n = W134.deleteClass(player, t.cls, t.amt, t.hp, t.pinv)
+                taken = taken + 1
+                w.stats.takeSettled = (w.stats.takeSettled or 0) + 1
+                W134.log(string.format("WO134-BODY unconfirmed npc=%s tok=%s -- no answer from the host: %d of %d taken back off Henry (never kept without the host's yes)", bname, tok, n, t.amt))
+            end
+        end
+    end
+    return taken
+end
+KCD2MP.w134.settlePending = W134.settlePending
+
 function KCD2MP_W134TakeResult(tok, verdict, name)
     local w = KCD2MP.w134
     tok = tostring(tok)
@@ -16763,6 +16785,7 @@ function KCD2MP_W134Tick(joiner, host, shared, peers)
     w.aliveAt = os.clock()
     pcall(W134.installPickup)
     if w.shared and (w.joiner or w.host) then W134.startLoop() end
+    if w.joiner then pcall(W134.settlePending, 20) end
 end
 
 function KCD2MP_W134Status()
