@@ -21,14 +21,14 @@ public class ContractRelayTests : IClassFixture<ContractRelayFixture>
     private readonly ContractRelayFixture _relay;
     public ContractRelayTests(ContractRelayFixture relay) { _relay = relay; }
 
-    private static RoomHandshake Hs(string game = "kcd2", string lua = "a", string content = "", int contract = 1, IReadOnlyDictionary<string, CapabilityLevel>? caps = null) =>
+    internal static RoomHandshake Hs(string game = "kcd2", string lua = "a", string content = "", int contract = 1, IReadOnlyDictionary<string, CapabilityLevel>? caps = null) =>
         new(game, ReleaseVersionInfo.Current, Protocol.Version, contract, "", lua.Length == 0 ? "" : new string(lua[0], 64), "", "", content.Length == 0 ? "" : new string(content[0], 64),
             caps ?? new Dictionary<string, CapabilityLevel>());
 
     private static string Trailing(RoomHandshake hs, string identity) =>
         ReleaseVersionInfo.Current + Protocol.HandshakeFieldSeparator + hs.Encode() + Protocol.HandshakeFieldSeparator + identity;
 
-    private sealed class P : IAsyncDisposable
+    internal sealed class P : IAsyncDisposable
     {
         public readonly TcpClient Tcp = new();
         public NetworkStream S = null!;
@@ -159,5 +159,27 @@ public class ContractRelayTests : IClassFixture<ContractRelayFixture>
         // other tests' presence-only peers may share this relay, so only this peer's OWN negotiated mode is asserted exactly
         Assert.Equal(1, RoomContract.ParseAck(ackB).Mode);
         Assert.Equal("partial", RoomContract.ModeWord(1));
+    }
+}
+
+/// <summary>Its own relay: the first client of a relay is its host, so a leftover connection from another test must not be the one compared against.</summary>
+public class ContractContentTests : IClassFixture<ContractRelayFixture>
+{
+    private readonly ContractRelayFixture _relay;
+    public ContractContentTests(ContractRelayFixture relay) { _relay = relay; }
+
+    [Fact]
+    public async Task A_player_with_other_dlc_or_mods_is_admitted_as_presence_and_flagged_so_no_world_is_moved()
+    {
+        var caps = new Dictionary<string, CapabilityLevel> { ["authority.combat"] = CapabilityLevel.EngineVerified };
+        await using var host = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        await host.Admit("host", ContractRelayTests.Hs(content: "a", caps: caps));
+        await using var guest = await ContractRelayTests.P.Connect(_relay.TcpPort);
+        var (type, ack) = await guest.Admit("guest", ContractRelayTests.Hs(content: "b", caps: caps));
+        Assert.Equal(Protocol.Ack, type);
+        var (mode, missing) = RoomContract.ParseAck(ack);
+        Assert.Equal(0, mode);                                                  // never partial or shared with different content
+        Assert.True(RoomContract.ContentDiffers(missing));
+        Assert.Contains("other DLC or mods", RoomContract.Sentence(mode, missing));
     }
 }

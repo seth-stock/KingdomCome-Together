@@ -84,6 +84,7 @@ public class ClientHandler
 		lock (_lock)
 		{
 			NegotiationResult room;
+			bool contentDiffers = false;
 			if (client.IsLoopback || client.ClaimsHost)
 			{
 				room = Negotiation.Negotiate(hs, hs, ContractPolicy);
@@ -91,6 +92,8 @@ public class ClientHandler
 				{
 					var r = Negotiation.Negotiate(hs, other.Handshake!, ContractPolicy);
 					if (!r.Admitted) { room = r; break; }
+					contentDiffers |= IsContentWarning(r);
+					if (r.Mode < room.Mode) room = r;          // the weakest agreement with anyone already here is the room's
 				}
 			}
 			else
@@ -99,10 +102,14 @@ public class ClientHandler
 				room = host?.Handshake is null ? Negotiation.Negotiate(hs, hs, ContractPolicy) : Negotiation.Negotiate(host.Handshake, hs, ContractPolicy);
 			}
 			if (!room.Admitted) return room.Describe();
-			client.Handshake = hs; client.RoomMode = room.Mode; client.RoomMissing = string.Join(',', room.Missing);
+			contentDiffers |= IsContentWarning(room);
+			client.Handshake = hs; client.RoomMode = contentDiffers ? Coop.Contract.RoomMode.Presence : room.Mode;
+			client.RoomMissing = string.Join(',', room.Missing.Concat(contentDiffers ? new[] { Protocol.RoomContentDiffers } : Array.Empty<string>()));
 			return null;
 		}
 	}
+
+	private static bool IsContentWarning(NegotiationResult r) => r.Notes.Any(n => n.StartsWith("different game content", StringComparison.Ordinal));
 
 	/// <summary>The room's honest mode: the weakest negotiated mode among the ready clients, with what is missing.</summary>
 	public (byte Mode, string Missing) RoomSummary()

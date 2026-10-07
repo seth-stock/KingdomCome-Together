@@ -618,6 +618,12 @@ public partial class GameBridge
     {
         if (!JoinerSharedEffective) { Console.WriteLine($"MP-JOIN mp_join_request needs a shared-world session ({(_hostModeKnown ? "the host runs separate worlds" : "mp_shared_world off here and no word from a host")})"); return; }
         if (!_wo122Connected || !_combatRoleApplied) { Console.WriteLine("MP-JOIN mp_join_request: no session"); return; }
+        if (RoomContract.ContentDiffers(_roomMissing))
+        {
+            Console.WriteLine("MP-JOIN mp_join_request refused: the room says this install has other DLC or mods than the host's");
+            SetJoinUi("refused", "Your game has other DLC or mods than your host's, so the world cannot be moved to you safely. Install the same DLC and mods on both, or play without a shared world.");
+            return;
+        }
         if (_isDamageAuthority) { Console.WriteLine("MP-JOIN mp_join_request: this machine is the host -- the joiner asks"); return; }
         if (_joinRx is not null) { Console.WriteLine("MP-JOIN mp_join_request: a transfer is already running"); return; }
         _joinOutId = (uint)Random.Shared.Next(1, int.MaxValue);

@@ -871,6 +871,8 @@ public static partial class Protocol
     public const byte GraveRemoveDown     = 0x43;   // WO-113
     public const byte IdentityChallengeDown = 0x45;   // v12: [nonce:UTF-8] sent after the Handshake, before the Ack
     public const byte ContractRefusedDown = 0x47;   // v12: [reason:UTF-8] the room handshake or identity was refused (different game/contract/payload, bad identity)
+    /// <summary>v12: listed among a room's "missing" entries when a player's DLC or other mods differ from the host's; worlds and Henrys are then not moved between them.</summary>
+    public const string RoomContentDiffers = "different-dlc-or-mods";
     public const byte RoomModeDown        = 0x49;   // v12: [mode:1 0=presence 1=partial 2=shared][missing capabilities:UTF-8 comma list]; sent to every ready client when the room changes
     public const byte Ack              = 0xFF;   // [id:1] and from v12 [mode:1][missing:UTF-8]
 

@@ -44,7 +44,8 @@ public static class RoomContract
                     sb.Append("M:").Append(d!.ToLowerInvariant()).Append('\n');
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
-        return sb.Length == 0 ? "" : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();
+        // an install with no extra DLC or mods still has a profile (of nothing): "" would mean "unknown" and hide a real difference
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()))).ToLowerInvariant();
     }
 
     public static Fingerprint Measure(string? gameDir, string? nativeDll)
@@ -116,12 +117,15 @@ public static class RoomContract
         }
     }
 
+    /// <summary>True when a player in the room has other DLC or mods than the host: a world or a Henry must not be moved between differently-equipped installs.</summary>
+    public static bool ContentDiffers(string missing) => missing.Contains(Protocol.RoomContentDiffers, StringComparison.Ordinal);
+
     public static string ModeWord(byte mode) => mode switch { 2 => "shared", 1 => "partial", _ => "presence" };
 
     /// <summary>"Room: presence only ..." in plain words; never "shared" for a room that is not.</summary>
     public static string Sentence(byte mode, string missing)
     {
-        string m = missing.Length > 0 ? missing.Replace(",", ", ") : "";
+        string m = missing.Length > 0 ? missing.Replace(Protocol.RoomContentDiffers, "your game has other DLC or mods than the host's").Replace(",", ", ") : "";
         return mode switch
         {
             2 => "Room: shared simulation.",
