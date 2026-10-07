@@ -18,11 +18,17 @@
     Compile the installer against whatever release\KCDMP already contains.
     Only useful when iterating on the .iss -- a full publish is minutes.
 
+.PARAMETER PlaytestBuild
+    Skip ONLY the frame-rate soak gate, for a build that friends will playtest before the soak has been run
+    for this code. Every other gate (relay, client and native tests, every synthetic suite, the payload smoke)
+    still runs. The result is not release-grade and says so; do not call it a release.
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File tools\Build-Installer.ps1
 #>
 param(
     [switch]$SkipPublish,
+    [switch]$PlaytestBuild,
     [string]$Version
 )
 
@@ -59,9 +65,13 @@ Write-Host "Inno Setup compiler: $iscc"
 # known issue; the soak record carries the git trees of the code it ran, and this stops
 # a build whose DLL, Lua, agent, relay or protocol differ from them.
 $soak = Join-Path $root "tools\perf\soak.py"
-if (-not (Test-Path $soak)) { throw "tools\perf\soak.py missing -- the frame-rate soak gate cannot run" }
-& python $soak check
-if ($LASTEXITCODE -ne 0) { throw "the frame-rate soak has not passed for this code (tools\perf\soak.py check). Not shipping." }
+if ($PlaytestBuild) {
+    Write-Host "   frame-rate soak gate SKIPPED by -PlaytestBuild (the installer is not release-grade)" -ForegroundColor Yellow
+} else {
+    if (-not (Test-Path $soak)) { throw "tools\perf\soak.py missing -- the frame-rate soak gate cannot run" }
+    & python $soak check
+    if ($LASTEXITCODE -ne 0) { throw "the frame-rate soak has not passed for this code (tools\perf\soak.py check). Not shipping." }
+}
 
 $payload = Join-Path $root "release\KCDMP"
 

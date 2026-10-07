@@ -139,7 +139,8 @@ try {
     $relayOut = Join-Path $work 'relay-stdout.txt'
     $relayErr = Join-Path $work 'relay-stderr.txt'
     $relay = Start-Process -FilePath (Join-Path $work 'KcdMpServer.exe') `
-        -ArgumentList @('--port', "$port", '--Urls', 'http://127.0.0.1:0') `
+        # v12: the room contract is on (the product default); only a missing mod payload is tolerated, because a build machine may have no game to measure.
+        -ArgumentList @('--port', "$port", '--Urls', 'http://127.0.0.1:0', '--Contract:AllowUnverifiedPayload', 'true') `
         -WorkingDirectory $work -PassThru -NoNewWindow `
         -RedirectStandardOutput $relayOut -RedirectStandardError $relayErr
     $null = $relay.Handle   # cache the handle so ExitCode is readable later (PS 5.1 quirk)
