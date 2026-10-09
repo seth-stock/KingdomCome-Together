@@ -56,20 +56,23 @@ public static partial class Protocol
     // ---- ask kinds (APPEND-ONLY) ----
     public const byte LootAskBodyOpen = 1, LootAskBodyTake = 2, LootAskBodyPut = 3, LootAskItemTake = 4;
     public const byte LootAskTakedown = 5;                                  // WO-135
+    public const byte LootAskContainerTake = 6, LootAskContainerPut = 7, LootAskContainerOpen = 8;
     // ---- host kinds (APPEND-ONLY) ----
     public const byte LootHostBodyState = 1, LootHostTakeResult = 2, LootHostItemResult = 3, LootHostItemGone = 4, LootHostLedger = 5;
     public const byte LootHostTakedownResult = 6, LootHostBuild = 7;          // WO-135
+    public const byte LootHostContainerResult = 8, LootHostContainerState = 9, LootHostContainerMode = 10, LootHostQuestReward = 11;
 
     public static string LootAskName(byte k) => k switch
     {
         LootAskBodyOpen => "body-open", LootAskBodyTake => "body-take", LootAskBodyPut => "body-put", LootAskItemTake => "item-take",
-        LootAskTakedown => "takedown", _ => $"unknown-{k}",
+        LootAskTakedown => "takedown", LootAskContainerTake => "container-take", LootAskContainerPut => "container-put", LootAskContainerOpen => "container-open", _ => $"unknown-{k}",
     };
 
     public static string LootHostName(byte k) => k switch
     {
         LootHostBodyState => "body-state", LootHostTakeResult => "take-result", LootHostItemResult => "item-result",
-        LootHostItemGone => "item-gone", LootHostLedger => "ledger", LootHostTakedownResult => "takedown-result", LootHostBuild => "build", _ => $"unknown-{k}",
+        LootHostItemGone => "item-gone", LootHostLedger => "ledger", LootHostTakedownResult => "takedown-result", LootHostBuild => "build",
+        LootHostContainerResult => "container-result", LootHostContainerState => "container-state", LootHostContainerMode => "container-mode", LootHostQuestReward => "quest-reward", _ => $"unknown-{k}",
     };
 }
 

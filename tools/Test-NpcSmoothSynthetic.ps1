@@ -101,7 +101,12 @@ $parts = $scenarioText -split [regex]::Escape($marker), 2
 $mod = Get-Content $KdcmpLua -Raw
 $operationsPath = Join-Path (Split-Path $KdcmpLua -Parent) 'kdcmp_loot_operations.lua'
 $operations = if (Test-Path -LiteralPath $operationsPath) { Get-Content -LiteralPath $operationsPath -Raw } else { '' }
-$code = $parts[0] + "`n" + $operations + "`n" + $mod + "`n" + $parts[1]
+$extraModules = ''
+foreach ($module in 'kdcmp_containers.lua','kdcmp_rewards.lua') {
+    $modulePath = Join-Path (Split-Path $KdcmpLua -Parent) $module
+    if (Test-Path -LiteralPath $modulePath) { $extraModules += "`n" + (Get-Content -LiteralPath $modulePath -Raw) }
+}
+$code = $parts[0] + "`n" + $operations + $extraModules + "`n" + $mod + "`n" + $parts[1]
 
 Write-Host $Title
 Write-Host "  scenario  : $((Resolve-Path $Scenario).Path)"

@@ -32,19 +32,19 @@ to `human-accepted` in [CAPABILITIES.md](CAPABILITIES.md); a failure is a bug re
 
 | # | Do | Expect |
 |---|---|---|
-| H-07 | Install a build with a different `kdcmp.pak` (the maintainer sends one) on a friend; join. | "The host's room refused this install: … different mod payloads …", plus "install the same download". Nothing else breaks. |
+| H-07 | Install a build with a different `kdcmp.pak` (the maintainer sends one) on a friend; join. | "The host's room refused this install: â€¦ different mod payloads â€¦", plus "install the same download". Nothing else breaks. |
 | H-08 | Install an older release (0.44.x) on a friend; join. | The release or protocol mismatch message, as before. |
 | H-09 | Host a room limited to two players (`ServerInfo:MaxPlayers` 2 on a relay you run); a third tries. | "The host's game is full". |
 | H-10 | A third machine joins the host's room while the host and friend are in it, then the friend leaves. | The third is admitted; the room line recalculates for who remains. |
 | H-11 | A friend with an extra DLC or mod folder in `Mods\` joins. | **Admitted.** Both launchers/rooms say the room is **presence only** and that this game has other DLC or mods. |
-| H-12 | The friend from H-11 triggers the world join (`mp_join_request`, or the menu's join). | Refused with: "Your game has other DLC or mods than your host's…". The host is not paused. |
+| H-12 | The friend from H-11 triggers the world join (`mp_join_request`, or the menu's join). | Refused with: "Your game has other DLC or mods than your host'sâ€¦". The host is not paused. |
 
 ## C. The room says what it is (10 minutes)
 
 | # | Do | Expect | Failure looks like |
 |---|---|---|---|
-| H-13 | Read the launcher's room line with host and one friend connected. | "Room: partly shared (not every authority capability is verified: …)". | The word "shared simulation" anywhere. |
-| H-14 | Optional, if you have a host install without the native plugin (`KCDMP.dll` not loaded). | The room drops to "presence only … NOT active". | Still "partly shared". |
+| H-13 | Read the launcher's room line with host and one friend connected. | "Room: partly shared (not every authority capability is verified: â€¦)". | The word "shared simulation" anywhere. |
+| H-14 | Optional, if you have a host install without the native plugin (`KCDMP.dll` not loaded). | The room drops to "presence only â€¦ NOT active". | Still "partly shared". |
 | H-15 | A friend disconnects. | The remaining room line recalculates within seconds. | A stale line. |
 
 ## D. Gameplay still works (two machines, 45 minutes)
@@ -110,3 +110,18 @@ All cases below are PENDING. Record both machines' release tags, installer hashe
 | H-40 | Reconnect from divergent checkpoints and choose one; stage personalized characters. | Both alternatives preserved, no independent-world merge, no unrelated character substitution. Guest archive transfer/live promotion are still unresolved; do not treat offline preparation as native acceptance. |
 | H-41 | KCD1: on disposable matching worlds, enable `kcdus_quest_mode candidate` on both; complete an open base objective, repeat, then try rails/DLC/local events. | Native readback agrees; replay does not repeat mutation; vetoed paths stay untouched. Compare rewards, XP, NPC spawns and save/reload. Full quest completion without native proof must report unverified. |
 | H-42 | Extract Linux archive, validate SHA256SUMS, run doctor/install on fake Steam, then real Proton on two computers. | Fake fixtures and real gameplay reported separately; verify Windows/Linux feature negotiation. Missing KCD1 native adapter paths stay unavailable. |
+
+## Session 4 acceptance: all PENDING (two computers, disposable worlds only)
+
+Record release tag/commit, installer/Lua/native hashes, engine build, content and both logs. Use protocol-14 agents and relay. Compare total quantities across both Henrys and source inventories; unexpected loss also fails. Tests must use the game's actual inventory/trade/quest screens, not console stand-ins.
+
+| ID | Procedure | Required outcome / remaining gate |
+|---|---|---|
+| H-43 | Default live mode: open same chest on both PCs, race for its last item; put/split/withdraw stacks. | Matching stock; exactly one confirmed take/put; no duplicate, lost or recreated item after save/reload. |
+| H-44 | Named horse saddlebags: same races, move horse away and return, rejoin/load. Try anonymous horse. | Named identity matches; anonymous moving identity refused; no wrong-horse mutation, duplicate or disappearance. |
+| H-45 | Shop stock beyond 9 m: simultaneous purchase of last item, multi-item barter, refused and delayed replies. | Goods settle once, measured refused debit refunded once; no invented refunds. Shared wallets/barter/crime are not promised. |
+| H-46 | Fresh restock occurs without pack transfer; stock multipart updates arrive out of order while take is pending. | No false put/take; pending transfer not overwritten; stale generation cannot replace newer stock. |
+| H-47 | Host mp_shared_containers off, rejoin; test old personal chest ledger; mp_loot_chests off/on. | Personal-ledger behavior preserved; off disables live watcher. Session-local mode must be reapplied after agent restart. |
+| H-48 | Mirrored supported quest pays items/currency natively; retry/cascade; complete alongside known loot and unrelated gains. | Native-paid amount subtracted, early reward waits for verified state, same-load retry not paid twice. Record heuristic attribution errors, XP and load/restart gaps as unresolved. |
+| H-49 | Interrupt guest/host agent between journal intent/native mutation/result; withhold reply for >20 s, then attempt supported snapshot. | Durable unknown host mutation not retried; take rolled back. Inert native removal blocks snapshot. Rejected put loss, recipient persistence and crash/reload conservation must be recorded, not waived. |
+| H-50 | Repeat existing combat, body/loose/drop, pause, DLC, quest and Candidate checkpoint tests on the packaged build, then real Proton. | No feature regression; platform absence honestly negotiated. Checkpoint remains Candidate until complete native exclusion and held-save proof. |

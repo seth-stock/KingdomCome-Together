@@ -5926,6 +5926,15 @@ public partial class GameBridge(ClientConfig config)
                 return;
             case "w134_open":        // WO-134: world items
             case "w134_take":
+            case "w134_ctake":
+            case "w134_cput":
+            case "w134_copen":
+            case "w134_cres":
+            case "w134_cstate":
+            case "w134_container_mode":
+            case "w134_reward":
+            case "w134_reward_applied":
+            case "w134_reward_unverified":
             case "w134_put":
             case "w134_item":
             case "w134_bstate":

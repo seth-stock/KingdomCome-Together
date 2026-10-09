@@ -1,5 +1,19 @@
 # Co-op reliability implementation
 
+## Session 4 current status (2026-10-08)
+
+VERSION stays 0.45.0; **wire protocol is now 14** so older agents/relays are refused. All participants must install this same tagged build. This remains partly shared, with no human acceptance or shared-simulation claim.
+
+Live container/reward parity is **Candidate: synthetic Lua and agent tests only, no fresh KCD2 engine proof**. `kdcmp_containers.lua` extends WO-134 with named horse saddlebags, shop-linked stashes and live chest stock. It uses existing scoped durable host decisions, native inventory readback, bounded multipart stock generations and duplicate/restart quarantine. Guest takes require pack gain and puts require pack loss. Stock is applied only after pending transfers settle; stale generations are ignored. Failed rollback blocks supported character/checkpoint capture.
+
+The host defaults to live shared stock. `mp_shared_containers off` restores the existing personal per-world chest-ledger behavior; the setting is session-local and must be reapplied after restarting the agent. `mp_loot_chests off` disables the new container watcher too. Bodies, loose pickups, drops, NPC/combat/quests, shared pause, DLC rules and checkpoint Candidate mode remain in place.
+
+Native inventory screens move items before polling: this is **not pre-transfer escrow**. Containers use class/count/condition, not exact per-instance metadata. Anonymous moving horses are refused; stable names or position identities must match. Simultaneous host-native UI transfers, streaming, restocks, barter/theft, recipient persistence and interruption conservation need engine/two-computer proof. A refused purchase refunds only the measured personal debit once; wallets are not shared. A rejected/unknown put removes the optimistic local stock without a speculative Henry refund, so items can be lost. Consume/equip before rollback can prevent settlement; the supported save path then refuses rather than declaring success. Crashing/reloading outside that path is not a proved receipt protocol.
+
+`kdcmp_rewards.lua` observes a three-second host inventory window around verified mirrored quest steps. It excludes observed loot and subtracts native guest payment; same-quest cascades coalesce, early messages wait for verified application, and uncertain native creation is not retried. First observations/checkpoints are not rewarded retroactively. The window is heuristic, may confuse unrelated unobserved gains, is not durable across loads/restarts, has no XP or offline backfill, and cannot establish all quest side effects.
+
+See [SESSION4-RESULTS.md](SESSION4-RESULTS.md), [SESSION4-PARITY-DESIGN.md](SESSION4-PARITY-DESIGN.md), and H-43 through H-50 in [HUMAN-ACCEPTANCE-TESTS.md](HUMAN-ACCEPTANCE-TESTS.md). The live checkpoint barrier remains Candidate, default off.
+
 Baseline: `6ed6bf1`, isolated worktree `../codex-reliability`, branch `codex/coop-reliability`.
 This is an **incomplete development branch**, not a multiplayer release. Original game installations and saves remain unchanged.
 

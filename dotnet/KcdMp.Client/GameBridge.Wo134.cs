@@ -31,6 +31,8 @@ public partial class GameBridge
     private void Wo134OnLoadStarted()
     {
         _w134RequestScope = Guid.NewGuid().ToString("N");
+        _hostContainerScope = "";
+        _w137RewardSeen.Clear();
         Wo134InvalidateDurable();
         if (_checkpointHost is { } host) host.Aborted = true;
         if (_checkpointPeer is { } peer) _ = CheckpointReleaseAsync(peer);
@@ -58,6 +60,8 @@ public partial class GameBridge
     {
         _w134Connected = true;
         _w134RequestScope = Guid.NewGuid().ToString("N");
+        _hostContainerScope = "";
+        _w137RewardSeen.Clear();
         _w134Worn.Clear();
         _ = Wo134LoopAsync(ct);
     }
@@ -83,7 +87,8 @@ public partial class GameBridge
                 bool host = Wo134HostRole;
                 bool shared = joiner ? JoinerSharedEffective : _sharedWorld;
                 int peers = LivePartners().Count;   // WO-144
-                _ = ExecLuaAsync($"if KCD2MP_W134Tick then KCD2MP_W134Tick({B(joiner)}, {B(host)}, {B(shared)}, {peers}) end");
+                await ContainerModeTickAsync();
+                _ = ExecLuaAsync($"if KCD2MP_W134Tick then KCD2MP_W134Tick({B(joiner)}, {B(host)}, {B(shared)}, {peers},{B(ContainersEffective)},\"{(host ? _w134RequestScope : _hostContainerScope)}\") end");
                 Wo134FlushHost();
                 Wo135HostTick();   // WO-135: the host world's build to every joiner
                 await Wo134ApplyIfReadyAsync(timeout: false);
@@ -119,6 +124,7 @@ public partial class GameBridge
 
     private void Wo134OnEvent(string name, string? arg)
     {
+        ContainerEvent(name,arg);
         var f = (arg ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         uint U(string s) => uint.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint v) ? v : 0;
         switch (name)
@@ -218,6 +224,7 @@ public partial class GameBridge
             m = m with { Text = payload };
         }
         if (await Wo135OnLootFrameAsync(type, src, m)) return;   // WO-135: takedowns, the host's build
+        if (await ContainerFrameAsync(type,src,m,scope)) return;
         if (type == Protocol.LootHostDown && m.Kind is Protocol.LootHostTakeResult or Protocol.LootHostItemResult)
         {
             if (!LootMsg.TryUnscope(m.Text, out string responseScope, out string payload) || responseScope != _w134RequestScope)
@@ -459,7 +466,7 @@ public partial class GameBridge
             if (!hostIn && !late && !timeout) return;
             tag = t;
             _w134ApplyTag = null;
-            rows = Wo134Rules.JoinRows(_w134RxLedger ?? new Wo134Rules.Ledger(), _w134JoinerLedger);
+            rows = ContainersEffective ? new List<Wo134Rules.Entry>() : Wo134Rules.JoinRows(_w134RxLedger ?? new Wo134Rules.Ledger(), _w134JoinerLedger);
         }
         if (!hostIn) Console.WriteLine("MP-WO134 chests: the host's ledger did not arrive within 15 s -- only this joiner's own takes are applied");
         var calls = Wo134Rules.ApplyCalls(rows);

@@ -1,3 +1,9 @@
+SESSION 4 PLAYTEST (2026-10-08): VERSION 0.45.0 unchanged, wire 14. Use this SAME release on every machine.
+Candidate live chests, named saddlebags, shop stock and inventory quest rewards added; no fresh engine/two-person proof.
+Host console mp_shared_containers off selects the preserved personal chest ledger; setting is session-local.
+No full economic escrow, shared wallets/XP or durable universal rewards. Interrupted puts can lose items.
+Read SESSION4-RESULTS.md, CAPABILITIES.md and the new acceptance tests before trusting real progress.
+
 KINGDOM COME: TOGETHER 0.45.0 (playtest build 2026-10-07) -- co-op for Kingdom Come: Deliverance II
 ==================================================================================================
 

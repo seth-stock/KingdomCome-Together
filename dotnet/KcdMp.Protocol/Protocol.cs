@@ -795,7 +795,7 @@ public static partial class Protocol
     /// rows. A v9 relay would drop both as unknown types; v9 and v10 refuse
     /// each other at Handshake.
     /// </summary>
-    public const byte Version = 13; // v13: loose-item results echo the connection/load scope; v12 peers cannot safely interpret these replies
+    public const byte Version = 14; // v14: scoped live-container stock and quest reward messages; older peers cannot share this inventory policy
 
     // C→S
     public const byte Handshake      = 0x00;

@@ -5308,6 +5308,9 @@ KCD2MP.w125 = { snaps = 0, snapRefused = 0 }
 function KCD2MP_Wo125Snapshot(tok)
     local w = KCD2MP.w125
     local ok, r = false, nil
+    if KCD2MP_Containers and KCD2MP_Containers.settle(0)>0 then
+        KCD2MP_EmitEvent('wo124_reply',tostring(tok)..' ok=false unresolved-containers'); return false
+    end
     if KCD2MP.w134 and KCD2MP.w134.settlePending then
         local settled, _, unresolved = pcall(KCD2MP.w134.settlePending, 0)
         if not settled or (unresolved or 0) > 0 then
@@ -15789,9 +15792,12 @@ KCD2MP.w134 = {
               chestTakes = 0, chestPuts = 0, applied = 0, expired = 0, skipped = 0, bcasts = 0 },
 }
 local W134 = {}
+KCD2MP.w134.api = W134
 do
     local ok, err = pcall(Script.ReloadScript, 'Scripts/Startup/kdcmp_loot_operations.lua')
     if not ok then mp_log('WO134-OP module unavailable: ' .. tostring(err)) end
+    pcall(Script.ReloadScript, 'Scripts/Startup/kdcmp_containers.lua')
+    pcall(Script.ReloadScript, 'Scripts/Startup/kdcmp_rewards.lua')
 end
 
 function W134.log(line)
@@ -15822,6 +15828,7 @@ end
 -- (the host's solo takes are what a later join must put back).
 function W134.chestsRecording()
     local w = KCD2MP.w134
+    if KCD2MP_Containers and KCD2MP_Containers.active() then return false end
     if not (w.chests and w.shared and W134.fresh()) then return false end
     if w.joiner then return KCD2MP_W134JoinerActive() end
     return w.host
@@ -16216,6 +16223,7 @@ function W134.diffSession(name, sess, e)
             local tok = W134.tok()
             local hp = W134.hpOf(sess.snap, cls)
             sess.pend[tok] = { cls = cls, amt = n - m, hp = hp, at = os.clock(), pinv = sess.pinv }
+            if KCD2MP_Containers then KCD2MP_Containers.gain(cls,n-m) end
             w.stats.takes = w.stats.takes + 1
             KCD2MP_EmitEvent("w134_take", string.format("%s %s %s %d %.4f", tok, name, cls, n - m, hp))
             W134.log(string.format("WO134-BODY take npc=%s cls=%s amt=%d tok=%s -- sent to the host", name, cls, n - m, tok))
@@ -16272,6 +16280,7 @@ function W134.settlePending(maxAgeS)
             end
         end
     end
+    if KCD2MP_Containers then unresolved=unresolved+KCD2MP_Containers.settle(maxAgeS) end
     return taken, unresolved
 end
 KCD2MP.w134.settlePending = W134.settlePending
@@ -16295,6 +16304,7 @@ function KCD2MP_CheckpointPrepare(tok)
         for _ in pairs(sess.puts or {}) do unresolved = unresolved + 1 end
     end
     for _ in pairs(KCD2MP.w134.itemReq or {}) do unresolved = unresolved + 1 end
+    if KCD2MP_Containers then unresolved=unresolved+KCD2MP_Containers.settle(0) end
     KCD2MP_EmitEvent('wo124_reply', tostring(tok) .. ' ok=' .. (unresolved == 0 and 'true' or 'false'))
 end
 
@@ -16579,6 +16589,7 @@ function KCD2MP_W134ItemResult(tok, verdict)
     w.itemReq[tok] = nil
     if verdict == "ok" then
         w.stats.itemOk = w.stats.itemOk + 1
+        if KCD2MP_Containers then KCD2MP_Containers.gain(r.cls,1) end
         W134.bypass = true
         local ok, res = pcall(function() return r.orig(r.ent, player, r.slot) end)
         W134.bypass = false
@@ -16729,6 +16740,9 @@ end
 -- engine (it restocks on its own); restock 0 never expires.
 function KCD2MP_W134ChestApply(rows)
     local w = KCD2MP.w134
+    if KCD2MP_Containers and KCD2MP_Containers.mode then
+        KCD2MP_EmitEvent('w134_applied','0 0 0'); return -- shared live stock does not apply personal inverse ledgers
+    end
     local now = W134.worldTime()
     local applied, expired, skipped = 0, 0, 0
     for _, r in ipairs(rows or {}) do
@@ -16759,6 +16773,9 @@ end
 
 KCD2MP.w134LoopRunning = false
 KCD2MP._w134LoopAliveAt = nil
+function KCD2MP_SetSharedContainers(value)
+    if KCD2MP_Containers then KCD2MP_Containers.setShared(value) end
+end
 function W134.loop()
     local w = KCD2MP.w134
     if not KCD2MP.w134LoopRunning then return end
@@ -16767,6 +16784,8 @@ function W134.loop()
     if not player then return end
     if KCD2MP_W136Held and KCD2MP_W136Held() then return end   -- WO-136: bodies and chests wait for the world
     local now = os.clock()
+    if KCD2MP_Containers then KCD2MP_Containers.pass(); KCD2MP_Containers.settle(20) end
+    if KCD2MP_Rewards then KCD2MP_Rewards.step() end
     -- joiner: loot sessions (a session ends 5 m away or after 10 min)
     for name, sess in pairs(w.sessions) do
         local e = nil
@@ -16776,11 +16795,10 @@ function W134.loop()
             w.sessions[name] = nil
         else
             W134.diffSession(name, sess, e)
-            for tok, t in pairs(sess.pend) do
-                if (now - t.at) > 15 then sess.pend[tok] = nil end   -- no answer: kept (the host's next state decides the copy)
-            end
+            -- Pending takes remain visible to settlePending: forgetting them at 15 seconds bypassed the 20-second rollback.
         end
     end
+    W134.settlePending(20)
     -- joiner: a kept host list for a copy that has now died
     for name, list in pairs(w.stash) do
         local e = nil
@@ -16816,6 +16834,7 @@ end
 
 function W134.forgetWorld(why)
     local w = KCD2MP.w134
+    if KCD2MP_Containers then KCD2MP_Containers.reset() end
     local n = 0
     for _ in pairs(w.chestSess) do n = n + 1 end
     w.chestSess = {}; w.sessions = {}; w.pendingOpen = {}; w.itemReq = {}; w.stash = {}; w.partial = {}; w.hostVerify = {}
@@ -16838,13 +16857,15 @@ KCD2MP.w134.startLoop = W134.startLoop   -- WO-134 test hook
 KCD2MP.w134.loopOnce = function() local r = KCD2MP.w134LoopRunning; KCD2MP.w134LoopRunning = true; W134.loop(); KCD2MP.w134LoopRunning = r end
 
 -- The agent, once a second while connected: this machine's role in a shared world.
-function KCD2MP_W134Tick(joiner, host, shared, peers)
+function KCD2MP_W134Tick(joiner, host, shared, peers, liveContainers, containerScope)
     local w = KCD2MP.w134
     w.joiner = joiner == true
     w.host = host == true
     w.shared = shared == true
     w.peers = tonumber(peers) or 0
     w.aliveAt = os.clock()
+    if KCD2MP_ContainerMode and liveContainers~=nil then KCD2MP_ContainerMode(liveContainers,containerScope) end
+    if KCD2MP_RewardMode and containerScope then KCD2MP_RewardMode(w.host,containerScope) end
     pcall(W134.installPickup)
     if w.shared and (w.joiner or w.host) then W134.startLoop() end
     if w.joiner then pcall(W134.settlePending, 20) end
@@ -21394,6 +21415,7 @@ local ok, err = pcall(function()
     System.AddCCommand("mp_loot_bodies",         'KCD2MP_SetLootBodies(%line)',         "WO-134: NPC bodies are shared (the joiner's loot is a request to the host): on|off (default on); bare = report")
     System.AddCCommand("mp_loot_items",          'KCD2MP_SetLootItems(%line)',          "WO-134: loose world items are per world (a joiner's pickup asks the host): on|off (default on); bare = report")
     System.AddCCommand("mp_loot_chests",         'KCD2MP_SetLootChests(%line)',         "WO-134: chests per player, remembered per world (takes recorded for the join ledgers): on|off (default on); bare = report")
+    System.AddCCommand("mp_shared_containers", 'KCD2MP_SetSharedContainers(%line)', "Shared live chest/saddlebag/shop stock (host): on|off; off retains personal chest ledgers")
     System.AddCCommand("mp_leash",               'KCD2MP_SetLeash(%line)',                "WO-114: keep the joiner near the host (HOST only -- the host's value is the session's): a warning past mp_leash_warn_m, a 10 s countdown past mp_leash_pull_m, then the joiner is brought beside the host: mp_leash on|off (default on); bare = report")
     System.AddCCommand("mp_leash_warn_m",        'KCD2MP_SetLeashWarn(%line)',            "WO-114: the leash warning distance in metres (HOST; default 600; below mp_leash_pull_m): mp_leash_warn_m <metres>; bare = report")
     System.AddCCommand("mp_leash_pull_m",        'KCD2MP_SetLeashPull(%line)',            "WO-114: the leash pull distance in metres (HOST; default 650; above mp_leash_warn_m): mp_leash_pull_m <metres>; bare = report")

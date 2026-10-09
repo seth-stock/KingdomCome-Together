@@ -72,6 +72,7 @@ local function mkInventory()
         self.list[#self.list + 1] = w
     end
     inv.DeleteItem = function(self, w, n)
+        if ITEMS[w] and n and n>0 and ITEMS[w].amount>n then ITEMS[w].amount=ITEMS[w].amount-n; return true end
         for i, x in ipairs(self.list) do if x == w then table.remove(self.list, i); ITEMS[w] = nil; return true end end
         return false
     end
@@ -295,7 +296,9 @@ LOG = {}; loop()
 check("B4a an unanswered take is pending", events("w134_take")[1] ~= nil and player.inventory:GetCountOfClass(MONEY) == base + 40, tostring(player.inventory:GetCountOfClass(MONEY)))
 NOW = NOW + 10; KCD2MP_W134Tick(true, false, true, 1)
 check("B4a ... still Henry's after 10 s (the host may just be slow)", player.inventory:GetCountOfClass(MONEY) == base + 40)
-NOW = NOW + 15; KCD2MP_W134Tick(true, false, true, 1)
+NOW = NOW + 6; KCD2MP_W131Tick(true,true); loop()
+check("B4a the real body loop retains the pending take past its old 15s deletion bug", next(KCD2MP.w134.sessions['bandit_7'].pend)~=nil and player.inventory:GetCountOfClass(MONEY)==base+40)
+NOW = NOW + 9; KCD2MP_W134Tick(true, false, true, 1)
 check("B4a ... taken back after 20 s without the host's yes", player.inventory:GetCountOfClass(MONEY) == base, tostring(player.inventory:GetCountOfClass(MONEY)))
 check("B4a ... and logged as unconfirmed", (function() for _, l in ipairs(LOG) do if string.find(l, "unconfirmed", 1, true) then return true end end return false end)())
 b.inventory:CreateItem(MONEY, 1, 25); uw = nil

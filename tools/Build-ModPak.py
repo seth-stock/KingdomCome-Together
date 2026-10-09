@@ -4,6 +4,7 @@ import zipfile
 import hashlib
 root = Path(__file__).resolve().parents[1] / 'kdcmp' / 'Data'
 files = ('Scripts/Startup/kdcmp.lua', 'Scripts/Startup/kdcmp_menu.lua', 'Scripts/Startup/kdcmp_loot_operations.lua',
+         'Scripts/Startup/kdcmp_containers.lua','Scripts/Startup/kdcmp_rewards.lua',
          'Libs/Tables/item/clothing_preset__kdcmp.xml', 'Libs/Tables/rpg/buff__kcdmp.xml')
 contents = {name: (root / name).read_bytes() for name in files}
 for name, data in contents.items():

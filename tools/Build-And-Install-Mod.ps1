@@ -48,6 +48,8 @@ $Files = @(
     'Scripts\Startup\kdcmp.lua',
     'Scripts\Startup\kdcmp_menu.lua',    # the in-game Multiplayer tab (docs/MENU.md)
     'Scripts\Startup\kdcmp_loot_operations.lua', # scoped inventory retry results
+    'Scripts\Startup\kdcmp_containers.lua',
+    'Scripts\Startup\kdcmp_rewards.lua',
     'Libs\Tables\item\clothing_preset__kdcmp.xml',
     'Libs\Tables\rpg\buff__kcdmp.xml'    # WO-113: the death-guard buff row
 )

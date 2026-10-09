@@ -37,7 +37,7 @@ cp -r "$REPO/kdcmp" "$PKG/mod/kdcmp"
 rm -rf "$PKG/mod/kdcmp/ConfigPatch"      # embedded in the agent; not a mod file
 cp "$REPO/linux/kcdmp" "$PKG/kcdmp"; chmod +x "$PKG/kcdmp"
 cp "$REPO/VERSION" "$REPO/LICENSE" "$REPO/NOTICE" "$REPO/AUTHORS" "$PKG/"
-for doc in LINUX.md CAPABILITIES.md HUMAN-ACCEPTANCE-TESTS.md SESSION2-RESULTS.md FEATURE-PARITY.md; do cp "$REPO/docs/$doc" "$PKG/docs/"; done
+for doc in LINUX.md CAPABILITIES.md HUMAN-ACCEPTANCE-TESTS.md SESSION2-RESULTS.md SESSION4-RESULTS.md SESSION4-PARITY-DESIGN.md FEATURE-PARITY.md; do cp "$REPO/docs/$doc" "$PKG/docs/"; done
 cat >"$PKG/READ-ME-FIRST.txt" <<EOF
 Kingdom Come: Together $VERSION -- Linux build (unofficial, community)
 
@@ -50,6 +50,9 @@ Kingdom Come: Together $VERSION -- Linux build (unofficial, community)
 6. ./kcdmp inject          then, once you are in the world
 7. ./kcdmp host   or   ./kcdmp join HOST[:PORT]
 
+Session 4 PLAYTEST, wire protocol 14: all participants need this same tagged build.
+Live containers and inventory quest rewards are Candidate; not a complete shared economy.
+Read docs/SESSION4-RESULTS.md and docs/SESSION4-PARITY-DESIGN.md before testing.
 This is NEW and has not been run under a real Proton by its authors: read docs/LINUX.md ("What is and is not tested") first.
 Not affiliated with or endorsed by Warhorse Studios or PLAION. GPL-3.0-only; see LICENSE and NOTICE.
 EOF

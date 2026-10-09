@@ -230,6 +230,7 @@ public partial class GameBridge
             if (_w137HostSeen.Count > 4000) Wo137TrimSeen();
             _w137HostSeenDirty = true;
             string text = Wo137Rules.ChangeText(c);
+            if (!_w137RewardSeen.TryAdd(c.Path,0)) await RewardArmAsync(c,true); // first observation is a baseline
             var peers = Wo134Peers();
             foreach (byte g in peers) await Wo137SendAsync(Protocol.QuestHostUp, g, Protocol.QuestHostChange, 0, text);
             Wo148NoteQuestChange($"#{c.Seq} {c.Path} {c.Old}->{c.New}");   // WO-148 3.3: a quest reacting to a partner's carry is logged
@@ -427,6 +428,7 @@ public partial class GameBridge
             Console.WriteLine(FormattableString.Invariant($"MP-W137 joiner: host change #{c.Seq} {c.Path} {c.Old}->{c.New} came through no port -- not applicable here (the checkpoint compares it)"));
             return true;
         }
+        await RewardArmAsync(c,false);
         var r = await _combat.Wo137ApplyAsync(c.Seq, c.Path, c.Port);
         if (r is not { } a)
         {
@@ -452,6 +454,7 @@ public partial class GameBridge
         {
             case 0:
                 Interlocked.Increment(ref _w137Applied);
+                if (a.New==c.New) await ExecLuaAsync($"if KCD2MP_RewardReady then KCD2MP_RewardReady(\"{RewardKey(c)}\") end");
                 Wo147LearnPortValue(c.Path, c.Port, a.New, a.Type);   // WO-147
                 Console.WriteLine(FormattableString.Invariant(
                     $"MP-W137 joiner applied host change #{c.Seq} {c.Path} {c.Port} {a.Old}->{a.New}{(a.New != c.New ? $" (the host had {c.New})" : "")}"));
