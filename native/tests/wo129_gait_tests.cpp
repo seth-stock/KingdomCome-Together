@@ -212,6 +212,10 @@ int main() {
         g_fail += cf;
     }
 
+    {
+        extern int combat_watch_tests(int* passed);
+        g_fail += combat_watch_tests(&g_pass);
+    }
     std::printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

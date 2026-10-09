@@ -99,6 +99,10 @@ FinishedLabel=Setup has finished installing [name] on your computer. The applica
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
+Source: "..\docs\SESSION6-RESULTS.md"; DestDir: "{app}\docs"; Flags: ignoreversion overwritereadonly
+Source: "..\docs\FEATURE-PARITY.md"; DestDir: "{app}\docs"; Flags: ignoreversion overwritereadonly
+Source: "..\docs\CAPABILITIES.md"; DestDir: "{app}\docs"; Flags: ignoreversion overwritereadonly
+Source: "..\docs\HUMAN-ACCEPTANCE-TESTS.md"; DestDir: "{app}\docs"; Flags: ignoreversion overwritereadonly
 ; The whole Publish-Release.ps1 output: launcher, agent, relay, native DLL,
 ; injector, and the self-contained .NET runtime beside them. The launcher
 ; resolves relative DllPath/AgentPath/RelayPath against its own directory,

@@ -25,6 +25,7 @@
 #include "respawn_actions.h"
 #include "rttr_abi.h"
 #include "wo136.h"
+#include "combat_watch_rules.h"
 
 namespace kcdmp::hits {
 namespace {
@@ -94,13 +95,10 @@ HitFn g_origMelee = nullptr, g_origMissile = nullptr;
 std::atomic<bool> g_ff{true}, g_attribution{true}, g_pvpHook{true};
 
 // ---- avatars (main thread writes, any thread reads) --------------------------------
-struct AvatarSlot { std::atomic<uint32_t> eid{0}; std::atomic<void*> soul{nullptr}; };
-AvatarSlot g_avatars[16];
+combatwatch::Targets g_avatars;
 
 void* avatar_soul(uint32_t eid) {
-    if (!eid) return nullptr;
-    for (auto& a : g_avatars) if (a.eid.load(std::memory_order_relaxed) == eid) return a.soul.load(std::memory_order_relaxed);
-    return nullptr;
+    return g_avatars.find(eid).soul;
 }
 
 // ---- the hook's queue (any thread -> main thread) -----------------------------------
@@ -116,10 +114,10 @@ std::vector<PlayerHitMark> g_marks;
 // kWatchDiscard: put back, never forwarded -- the joiner's damage comes only
 // from the host).
 enum WatchKind : uint8_t { kWatchPvp = 0, kWatchNpc = 1, kWatchDiscard = 2 };
-struct NewWatch { void* soul; uint32_t eid; float hp0, st0; uint8_t flags, material; uint8_t kind; uint32_t attackerEid; };
+struct NewWatch { void* soul; uint32_t eid; float hp0, st0; uint8_t flags, material; uint8_t kind; uint32_t attackerEid; uint64_t generation; };
 std::vector<NewWatch> g_newWatches;
 struct Watch { void* soul; uint32_t eid; float hp0, st0, dh = 0, ds = 0; uint8_t flags, material; double t0; int frames = 0, landedAt = -1;
-               uint8_t kind = 0; uint32_t attackerEid = 0; };
+               uint8_t kind = 0; uint32_t attackerEid = 0; uint64_t generation = 0; bool uncertain = false; };
 std::vector<Watch> g_watches;   // main thread only
 constexpr double kWatchS = 0.6;
 std::atomic<uint64_t> g_playerWuid{0};
@@ -147,7 +145,7 @@ std::unordered_map<std::string, uint32_t> g_nameEids;
 
 std::atomic<uint32_t> c_melee{0}, c_missile{0}, c_avatarHits{0}, c_restored{0}, c_ffQueued{0}, c_marks{0},
     c_attrib{0}, c_attribHistory{0}, c_skirmish{0}, c_pvpIn{0}, c_faults{0},
-    c_npcAvatarHits{0}, c_npcHitsSent{0}, c_discardHits{0}, c_discarded{0}, c_skirmishKept{0}, c_skirmishRemove{0};
+    c_npcAvatarHits{0}, c_npcHitsSent{0}, c_discardHits{0}, c_discarded{0}, c_skirmishKept{0}, c_skirmishRemove{0}, c_restoreUnverified{0};
 
 double now_s() { LARGE_INTEGER q, f; QueryPerformanceCounter(&q); QueryPerformanceFrequency(&f); return double(q.QuadPart) / double(f.QuadPart); }
 
@@ -159,7 +157,8 @@ void* hit_common(bool missile, HitFn orig, void* self, void* out, const uint8_t*
     (missile ? c_missile : c_melee).fetch_add(1, std::memory_order_relaxed);
     uint64_t aw = 0, vw = 0; uint32_t aeid = 0, veid = 0; uint8_t mat = 0;
     if (!g_pvpHook.load(std::memory_order_relaxed) || !read_hit(data, &aw, &aeid, &vw, &veid, &mat)) return orig(self, out, data);
-    void* vsoul = avatar_soul(veid);
+    const auto avatar = g_avatars.find(veid);
+    void* vsoul = avatar.soul;
     if (vsoul) {
         // A hit on a peer's avatar. NEVER skipped: the caller expects a cause
         // back (session 1: an empty one crashed the game). Measured and put back.
@@ -195,7 +194,7 @@ void* hit_common(bool missile, HitFn orig, void* self, void* out, const uint8_t*
         if (r0) {
             std::lock_guard<std::mutex> lock(g_qMutex);
             g_newWatches.push_back({vsoul, veid, hp0, st0, static_cast<uint8_t>(missile ? 0x02 : 0), mat,
-                                    static_cast<uint8_t>(byPlayer ? kWatchPvp : kWatchNpc), byPlayer ? 0u : aeid});
+                                    static_cast<uint8_t>(byPlayer ? kWatchPvp : kWatchNpc), byPlayer ? 0u : aeid, avatar.generation});
         }
         return res;
     }
@@ -210,7 +209,7 @@ void* hit_common(bool missile, HitFn orig, void* self, void* out, const uint8_t*
         void* res = orig(self, out, data);
         if (r0) {
             std::lock_guard<std::mutex> lock(g_qMutex);
-            g_newWatches.push_back({psoul, veid, hp0, st0, static_cast<uint8_t>(missile ? 0x02 : 0), mat, static_cast<uint8_t>(kWatchDiscard), aeid});
+            g_newWatches.push_back({psoul, veid, hp0, st0, static_cast<uint8_t>(missile ? 0x02 : 0), mat, static_cast<uint8_t>(kWatchDiscard), aeid, 0});
         }
         return res;
     }
@@ -369,12 +368,7 @@ uint8_t on_config(const uint8_t* body, size_t len) {
 }
 
 void note_avatar(uint32_t eid, void* soul, bool on) {
-    if (on) {
-        for (auto& a : g_avatars) if (a.eid.load() == eid) { a.soul = soul; return; }
-        for (auto& a : g_avatars) if (a.eid.load() == 0) { a.soul = soul; a.eid = eid; return; }
-    } else {
-        for (auto& a : g_avatars) if (a.eid.load() == eid) { a.eid = 0; a.soul = nullptr; }
-    }
+    g_avatars.note(eid, soul, on);
 }
 
 AttribResult apply_attributed(const uint8_t* body, size_t len) {
@@ -523,14 +517,7 @@ bool skirmish_remove(void* soul, uint64_t* rv) {
 void* soul_of_eid(uint32_t eid) { return soul_of_actor(actor_by_eid(eid)); }
 
 int avatar_list(uint32_t* eids, void** souls, int max) {
-    int n = 0;
-    for (auto& a : g_avatars) {
-        if (n >= max) break;
-        const uint32_t e = a.eid.load(std::memory_order_relaxed);
-        if (!e) continue;
-        eids[n] = e; souls[n] = a.soul.load(std::memory_order_relaxed); ++n;
-    }
-    return n;
+    return g_avatars.list(eids, souls, max);
 }
 
 void set_npc_watch(bool on) { g_npcWatch = on; }
@@ -562,11 +549,12 @@ void tick() {
         nw.swap(g_newWatches);
     }
     for (const auto& n : nw) {
+        if (n.kind != kWatchDiscard && !g_avatars.live({n.eid, n.soul, n.generation})) continue;
         bool merged = false;   // a second hit inside the window: same baseline, longer window
-        for (auto& w : g_watches) if (w.soul == n.soul && w.kind == n.kind) { w.t0 = now; w.flags |= n.flags; merged = true; break; }
+        for (auto& w : g_watches) if (w.soul == n.soul && w.eid == n.eid && w.generation == n.generation && w.kind == n.kind) { w.t0 = now; w.flags |= n.flags; merged = true; break; }
         if (!merged) {
             Watch w{n.soul, n.eid, n.hp0, n.st0, 0, 0, n.flags, n.material, now};
-            w.kind = n.kind; w.attackerEid = n.attackerEid;
+            w.kind = n.kind; w.attackerEid = n.attackerEid; w.generation = n.generation;
             g_watches.push_back(w);
         }
     }
@@ -576,28 +564,42 @@ void tick() {
         ++w.frames;
         // The soul must still be this avatar's (a release or a respawn ends the watch).
         // A discard watch is on the local player's soul (a load replaces it).
-        const bool live = w.kind == kWatchDiscard ? rttr::read_player_soul() == w.soul : avatar_soul(w.eid) == w.soul;
+        const bool live = w.kind == kWatchDiscard ? rttr::read_player_soul() == w.soul : g_avatars.live({w.eid, w.soul, w.generation});
         float hp = 0, st = 0;
         if (live && rttr::soul_state(w.soul, "health", &hp) && rttr::soul_state(w.soul, "stamina", &st)) {
             bool dropped = false;
-            if (hp < w.hp0 - 0.01f) { w.dh += w.hp0 - hp; rttr::soul_set_state(w.soul, "health", w.hp0); dropped = true; }
-            if (st < w.st0 - 0.25f) { w.ds += w.st0 - st; rttr::soul_set_state(w.soul, "stamina", w.st0); dropped = true; }
+            auto restore = [&](const char* state, float baseline, float before, float tolerance, float& total) {
+                if (!(before < baseline - tolerance)) return;
+                const bool wrote = rttr::soul_set_state(w.soul, state, baseline);
+                float after = 0;
+                const bool read = rttr::soul_state(w.soul, state, &after);
+                const float amount = combatwatch::restored_amount(baseline, before, after, wrote, read);
+                total += amount;dropped |= amount > 0;
+                if (!combatwatch::fully_restored(baseline, after, tolerance, wrote, read) && !w.uncertain) {
+                    w.uncertain = true;c_restoreUnverified.fetch_add(1);
+                    logf("HITS-UNVERIFIED restore eid=0x%X state=%s requested=%.2f before=%.2f after=%.2f wrote=%d read=%d; watch will NOT forward damage", w.eid, state, baseline, before, after, wrote, read);
+                }
+            };
+            restore("health", w.hp0, hp, 0.01f, w.dh);
+            restore("stamina", w.st0, st, 0.25f, w.ds);
             if (dropped) { c_restored.fetch_add(1); if (w.landedAt < 0) w.landedAt = w.frames; }
         }
         if (live && now - w.t0 < kWatchS) { ++it; continue; }
         if (w.kind == kWatchPvp) {
             logf("WO121-HITS player hit on avatar eid=0x%X measured hp -%.2f st -%.2f (landed at frame %d of %d) -> %s", w.eid, w.dh, w.ds,
-                 w.landedAt, w.frames, !live ? "avatar gone, dropped" : (w.dh > 0 || w.ds > 0) ? (g_ff.load() ? "forwarded" : "dropped (friendly fire off)") : "no damage, nothing sent");
-            if (live && (w.dh > 0 || w.ds > 0)) pvp.push_back({w.eid, w.ds, w.dh, w.flags, w.material});
+                 w.landedAt, w.frames, !live ? "avatar gone, dropped" : w.uncertain ? "unverified, NOT forwarded" : (w.dh > 0 || w.ds > 0) ? (g_ff.load() ? "forwarded" : "dropped (friendly fire off)") : "no damage, nothing sent");
+            if (live && !w.uncertain && (w.dh > 0 || w.ds > 0)) pvp.push_back({w.eid, w.ds, w.dh, w.flags, w.material});
         } else if (w.kind == kWatchNpc) {
             logf("WO132-HITS npc hit on avatar eid=0x%X by eid=0x%X measured hp -%.2f st -%.2f (landed at frame %d of %d) -> %s", w.eid, w.attackerEid,
-                 w.dh, w.ds, w.landedAt, w.frames, !live ? "avatar gone, dropped" : (w.dh > 0 || w.ds > 0) ? "to the agent" : "no damage, nothing sent");
-            if (live && (w.dh > 0 || w.ds > 0)) npcDone.push_back(w);
+                 w.dh, w.ds, w.landedAt, w.frames, !live ? "avatar gone, dropped" : w.uncertain ? "unverified, NOT forwarded" : (w.dh > 0 || w.ds > 0) ? "to the agent" : "no damage, nothing sent");
+            if (live && !w.uncertain && (w.dh > 0 || w.ds > 0)) npcDone.push_back(w);
         } else {
-            c_discarded.fetch_add(1);
-            logf("WO132-HITS local hit on the player by engaged copy eid=0x%X discarded: hp -%.2f st -%.2f put back (landed at frame %d of %d)",
-                 w.attackerEid, w.dh, w.ds, w.landedAt, w.frames);
-            if (DiscardFn fn = g_discardFn.load()) fn(w.attackerEid, w.ds, w.dh);
+            if (live && !w.uncertain) c_discarded.fetch_add(1);
+            logf("WO132-HITS local hit on the player by engaged copy eid=0x%X hp -%.2f st -%.2f (landed at frame %d of %d) -> %s",
+                 w.attackerEid, w.dh, w.ds, w.landedAt, w.frames, w.uncertain ? "restore unverified" : !live ? "player gone, dropped" : "put back");
+            if (live && !w.uncertain) {
+                if (DiscardFn fn = g_discardFn.load()) fn(w.attackerEid, w.ds, w.dh);
+            }
         }
         it = g_watches.erase(it);
     }
@@ -639,12 +641,12 @@ int status_text(char* out, int n) {
     return std::snprintf(out, n,
         "hit_slot=%s attribution=%s ff=%d attrib_cfg=%d melee=%u missile=%u avatar_hits=%u restored=%u ff_sent=%u player_marks=%u "
         "attributed=%u history=%u skirmish=%u pvp_in=%u hit_faults=%u npc_watch=%s npc_avatar_hits=%u npc_hits_sent=%u "
-        "discard_hits=%u discarded=%u discard_eids=%d skirmish_kept_host=%u skirmish_remove=%u",
+        "discard_hits=%u discarded=%u discard_eids=%d skirmish_kept_host=%u skirmish_remove=%u restore_unverified=%u",
         g_hookArmed ? "armed" : "off", g_attribArmed ? "armed" : "off", g_ff.load() ? 1 : 0, g_attribution.load() ? 1 : 0,
         c_melee.load(), c_missile.load(), c_avatarHits.load(), c_restored.load(), c_ffQueued.load(), c_marks.load(),
         c_attrib.load(), c_attribHistory.load(), c_skirmish.load(), c_pvpIn.load(), c_faults.load(),
         (g_hookArmed && g_npcWatch.load()) ? "armed" : "off", c_npcAvatarHits.load(), c_npcHitsSent.load(),
-        c_discardHits.load(), c_discarded.load(), discard_count(), c_skirmishKept.load(), c_skirmishRemove.load());
+        c_discardHits.load(), c_discarded.load(), discard_count(), c_skirmishKept.load(), c_skirmishRemove.load(), c_restoreUnverified.load());
 }
 
 } // namespace kcdmp::hits

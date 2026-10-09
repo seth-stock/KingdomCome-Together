@@ -44,6 +44,8 @@ void install();   // main thread, after motion::install(); logs WO121-HITS
 uint8_t on_config(const uint8_t* body, size_t len);
 
 // Avatars, from motion.cpp (main thread): the soul the hook restores.
+// Coherent entity/soul/lifetime publication. Releasing and reusing BOTH the
+// numeric entity ID and soul address cannot revive a queued old hit.
 void note_avatar(uint32_t eid, void* soul, bool on);
 
 struct AttribResult { bool ok = false; uint8_t steps = 0; uint8_t reason = 0; uint64_t attackerWuid = 0, victimWuid = 0; };

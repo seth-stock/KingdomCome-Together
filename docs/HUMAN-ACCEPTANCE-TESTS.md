@@ -133,3 +133,9 @@ Record release tag/commit, installer/Lua/native hashes, engine build, content an
 | H-51 | Put a whole item with condition, theft/provenance and extensions into a chest/horse/shop. Receive a definitive refusal. | Same observed native item returns to Henry with metadata preserved; no class-only substitute. Split/merge/change the item and verify ambiguous compensation refuses. |
 | H-52 | Restart host between put intent and outcome, lose a result, retry, then attempt capture and mode off. | Quarantined `uncertain` differs from `gone`; no speculative refund. Pending evidence survives mode refusal and new watcher asks suspend. Native-screen locks and recipient persistence remain unresolved. |
 | H-53 | Native return/remove/add is inert or throws after a partial change; retry and reconnect/load. | No unverified success or repeated compensation. Supported capture refuses; record the unresolved recipient crash/load and partial-move recovery path. |
+
+## Session 6 cases: all PENDING
+
+| ID | Test | Required evidence |
+|---|---|---|
+| H-54 | While hits on a peer avatar are pending, repeatedly leave/rejoin, stream out/back and reload disposable copies. Repeat normal same-life updates during a fight. | No old avatar watch affects a replacement; valid same-life hits remain. Confirm measured/forwarded damage agrees with native restoration; record restore_unverified logs, mixed-cause attribution errors and player-load gaps. Native lifetime unit tests do not replace this gameplay test. |
