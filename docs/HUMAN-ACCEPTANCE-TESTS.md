@@ -125,3 +125,11 @@ Record release tag/commit, installer/Lua/native hashes, engine build, content an
 | H-48 | Mirrored supported quest pays items/currency natively; retry/cascade; complete alongside known loot and unrelated gains. | Native-paid amount subtracted, early reward waits for verified state, same-load retry not paid twice. Record heuristic attribution errors, XP and load/restart gaps as unresolved. |
 | H-49 | Interrupt guest/host agent between journal intent/native mutation/result; withhold reply for >20 s, then attempt supported snapshot. | Durable unknown host mutation not retried; take rolled back. Inert native removal blocks snapshot. Rejected put loss, recipient persistence and crash/reload conservation must be recorded, not waived. |
 | H-50 | Repeat existing combat, body/loose/drop, pause, DLC, quest and Candidate checkpoint tests on the packaged build, then real Proton. | No feature regression; platform absence honestly negotiated. Checkpoint remains Candidate until complete native exclusion and held-save proof. |
+
+## Session 5 cases: all PENDING
+
+| ID | Test | Required evidence |
+|---|---|---|
+| H-51 | Put a whole item with condition, theft/provenance and extensions into a chest/horse/shop. Receive a definitive refusal. | Same observed native item returns to Henry with metadata preserved; no class-only substitute. Split/merge/change the item and verify ambiguous compensation refuses. |
+| H-52 | Restart host between put intent and outcome, lose a result, retry, then attempt capture and mode off. | Quarantined `uncertain` differs from `gone`; no speculative refund. Pending evidence survives mode refusal and new watcher asks suspend. Native-screen locks and recipient persistence remain unresolved. |
+| H-53 | Native return/remove/add is inert or throws after a partial change; retry and reconnect/load. | No unverified success or repeated compensation. Supported capture refuses; record the unresolved recipient crash/load and partial-move recovery path. |

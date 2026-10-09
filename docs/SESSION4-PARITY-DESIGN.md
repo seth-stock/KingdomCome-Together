@@ -1,3 +1,5 @@
+> Session 4 historical design. Session 5 uses wire 15, original whole-item compensation on definitive refusal, and unresolved/suspended handling for unknown puts. Read SESSION5-RESULTS.md.
+
 # Session 4 KCD2 live container and reward design
 
 Status: Candidate, 2026-10-08. No fresh KCD2 native gameplay or human multiplayer proof.

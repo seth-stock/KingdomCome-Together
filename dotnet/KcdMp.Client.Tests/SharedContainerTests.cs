@@ -16,6 +16,7 @@ public sealed class SharedContainerTests
         Assert.True(LootMsg.TryUnscope(scoped,out var scope,out var payload));
         Assert.Equal(Scope,scope); Assert.Equal(request,SharedContainerRules.ParseRequest(payload));
         Assert.True(SharedContainerRules.Result("ok "+request!.Suffix));
+        Assert.True(SharedContainerRules.Result("uncertain "+request.Suffix));
     }
     [Theory]
     [InlineData("name\"lua", "1", "1", "chest", "0")]

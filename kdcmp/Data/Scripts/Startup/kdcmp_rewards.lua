@@ -59,7 +59,7 @@ function KCD2MP_RewardGive(code,key,items)
             end
         end
     end
-    if KCD2MP_Containers then KCD2MP_Containers.pack=read() end
+    if KCD2MP_Containers then KCD2MP_Containers.cachePack() end
     KCD2MP_EmitEvent('w134_reward_applied',key)
 end
 function KCD2MP_RewardReady(key)

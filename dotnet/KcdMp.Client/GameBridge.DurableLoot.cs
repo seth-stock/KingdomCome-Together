@@ -45,7 +45,8 @@ public partial class GameBridge
             if (DurableLootLedger.Replay(result) is { } replay)
                 await Wo134SendAsync(Protocol.LootHostUp, peer, replay.Kind, request.Tok, replay.Text, scope);
             else if (result.Kind == BeginKind.Quarantined)
-                await Wo134SendAsync(Protocol.LootHostUp, peer, replyKind, request.Tok, "gone " + expectedSuffix, scope);
+                await Wo134SendAsync(Protocol.LootHostUp, peer, replyKind, request.Tok,
+                    (replyKind==Protocol.LootHostContainerResult ? "uncertain " : "gone ") + expectedSuffix, scope);
             Console.WriteLine($"MP-LOOT {result.Kind}: {result.Record.OperationId}; no engine mutation");
         }
         catch (Exception ex)

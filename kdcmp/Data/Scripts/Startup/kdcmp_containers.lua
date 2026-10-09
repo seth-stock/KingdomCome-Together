@@ -33,14 +33,18 @@ function C.read(e)
     if not ok then return nil end
     local count, hp={},{}
     for _, it in ipairs(items) do count[it.cls]=(count[it.cls] or 0)+it.amt; hp[it.cls]=it.hp end
-    return count,hp
+    return count,hp,items
 end
 function C.gain(cls,n)
     C.gains[#C.gains+1]={class=cls,n=n,at=now()}
     while #C.gains>500 or (#C.gains>0 and now()-C.gains[1].at>65) do table.remove(C.gains,1) end
 end
+function C.cachePack()
+    local pack,hp,items=C.read(player)
+    C.pack=pack; C.packItems=items
+end
 function C.active()
-    return C.mode and api() and KCD2MP.w134.chests and (KCD2MP_W134JoinerActive() or KCD2MP_W134HostActive())
+    return C.mode and not C.suspended and api() and KCD2MP.w134.chests and (KCD2MP_W134JoinerActive() or KCD2MP_W134HostActive())
 end
 function C.find(id, category)
     local direct=System.GetEntityByName(id)
@@ -75,27 +79,28 @@ function C.send(e, target)
     end
 end
 function C.reset()
-    C.sessions={}; C.pending={}; C.partial={}; C.received={}; C.pack=nil; C.gains={}
+    C.sessions={}; C.pending={}; C.partial={}; C.received={}; C.pack=nil; C.packItems=nil; C.gains={}; C.suspended=false
 end
 function KCD2MP_ContainerMode(enabled, scope)
     if C.scope~=scope or C.mode~=(enabled==true) then
-        if api() and C.settle(0)>0 then return false end -- keep unresolved native rollback evidence instead of forgetting it
+        if api() and C.settle(0)>0 then C.suspended=true; return false end -- stop new asks while preserving unresolved rollback evidence
         C.reset()
     end
     C.scope=scope or ''; C.mode=enabled==true
+    if C.suspended and not next(C.pending) then C.suspended=false end
 end
 function C.setShared(value)
     if value=='on' or value=='off' then emit('w134_container_mode',value)
     else KCD2MP_ShowNativeToast('Shared live containers: mp_shared_containers on|off (off keeps personal chest ledgers).') end
 end
-function C.ask(e,id,category,cls,n,hp,put,charge)
+function C.ask(e,id,category,cls,n,hp,put,charge,original)
     local tok=api().tok()
-    C.pending[tok]={id=id,category=category,class=cls,n=n,hp=hp,put=put,charge=charge,at=now()}
+    C.pending[tok]={id=id,category=category,class=cls,n=n,hp=hp,put=put,charge=charge,at=now(),original=original}
     emit(put and 'w134_cput' or 'w134_ctake', string.format('%s %s %s %d %.4f %s %d',tok,id,cls,n,hp,category,charge))
 end
 function C.pass()
     if not C.active() or KCD2MP_CheckpointBlocked() then return end
-    local pp=api().pos(player); local pack=C.read(player)
+    local pp=api().pos(player); local pack,packHp,packItems=C.read(player)
     if not pp or not pack then return end
     local before=C.pack or pack; local gains,loss={},{}
     for cls,n in pairs(pack) do gains[cls]=math.max(0,n-(before[cls] or 0)) end
@@ -125,7 +130,20 @@ function C.pass()
                         local put=math.min(math.max(0,n-(previous.count[cls] or 0)),loss[cls] or 0)
                         if put>0 then
                             loss[cls]=loss[cls]-put
-                            if KCD2MP_W134JoinerActive() then C.ask(e,id,category,cls,put,hp[cls] or 1,true,0) end
+                            if KCD2MP_W134JoinerActive() then
+                                -- A whole original item may be recoverable exactly. Never synthesize class-only refunds.
+                                local present={}; for _,it in ipairs(packItems or {}) do present[tostring(it.w)]=true end
+                                local stock={}; local _,_,items=C.read(e)
+                                for _,it in ipairs(items or {}) do stock[tostring(it.w)]=it end
+                                local original,total={},0
+                                for _,it in ipairs(C.packItems or {}) do
+                                    local moved=stock[tostring(it.w)]
+                                    if it.cls==cls and not present[tostring(it.w)] and moved and moved.cls==it.cls and moved.amt==it.amt and moved.hp==it.hp then
+                                        original[#original+1]={w=moved.w,cls=it.cls,amt=it.amt,hp=it.hp}; total=total+it.amt
+                                    end
+                                end
+                                C.ask(e,id,category,cls,put,hp[cls] or 1,true,0,total==put and original or nil)
+                            end
                         end
                     end
                 end
@@ -138,7 +156,7 @@ function C.pass()
         end
     end
     for id in pairs(C.sessions) do if not reached[id] then C.sessions[id]=nil end end
-    C.pack=pack
+    C.pack=pack; C.packItems=packItems
 end
 function KCD2MP_ContainerOpen(peer,id,category)
     if not C.active() or not KCD2MP_W134HostActive() then return end
@@ -176,9 +194,35 @@ end
 function C.revoke(t)
     if t.uncertain then return false end
     if t.put then
+        if not t.definiteGone or not t.original or t.restoreAttempted then return false end
         local e=C.find(t.id,t.category)
-        if not e or api().deleteClass(e,t.class,t.n,t.hp,nil)~=t.n then return false end
-        return true -- no speculative refund: an interrupted host may already have created its stock
+        if not e then return false end
+        local source,_,items=C.read(e); local destination,_,pack=C.read(player)
+        if not source or not destination then return false end
+        local stock,present={},{}
+        for _,it in ipairs(items) do stock[tostring(it.w)]=it end
+        for _,it in ipairs(pack) do present[tostring(it.w)]=true end
+        for _,old in ipairs(t.original) do
+            local it=stock[tostring(old.w)]
+            if present[tostring(old.w)] or not it or it.cls~=old.cls or it.amt~=old.amt or it.hp~=old.hp then return false end
+        end
+        t.restoreAttempted=true -- uncertain native moves are never repeated
+        for _,it in ipairs(t.original) do
+            e.inventory:RemoveItem(it.w)
+            player.inventory:AddItem(it.w)
+        end
+        local afterSource,_,sourceItems=C.read(e); local afterDest,_,destItems=C.read(player)
+        if not afterSource or not afterDest or (source[t.class] or 0)-(afterSource[t.class] or 0)~=t.n
+            or (afterDest[t.class] or 0)-(destination[t.class] or 0)~=t.n then return false end
+        stock={}; present={}
+        for _,it in ipairs(sourceItems) do stock[tostring(it.w)]=true end
+        for _,it in ipairs(destItems) do present[tostring(it.w)]=it end
+        for _,old in ipairs(t.original) do
+            local restored=present[tostring(old.w)]
+            if stock[tostring(old.w)] or not restored or restored.cls~=old.cls or restored.amt~=old.amt or restored.hp~=old.hp then return false end
+        end
+        C.gain(t.class,t.n)
+        return true
     end
     if t.refundUncertain then return false end
     local removed=t.n>0 and api().deleteClass(player,t.class,t.n,t.hp,nil) or 0
@@ -188,26 +232,31 @@ function C.revoke(t)
 end
 function C.safeRevoke(t)
     local ok,result=pcall(C.revoke,t)
-    if not ok then t.uncertain=true; return false end
+    if not ok then t.uncertain=true; C.suspended=true; return false end
+    if not result and (t.restoreAttempted or t.refundUncertain or t.uncertain) then C.suspended=true end
     return result
 end
 function KCD2MP_ContainerResult(tok,verdict)
     tok=tostring(tok); local t=C.pending[tok]
     if not t then return end
+    if verdict=='uncertain' then C.suspended=true end
+    if verdict=='gone' then t.definiteGone=true end
     if verdict=='ok' or C.safeRevoke(t) then C.pending[tok]=nil end
-    C.pack=C.read(player) -- a rollback/refund is not a quest reward or a new player transfer
+    C.cachePack() -- a rollback/refund is not a quest reward or a new player transfer
     local stock=C.partial[t.id]
     if stock and stock.parts[1] then KCD2MP_ContainerState(t.id,t.category,stock.generation,1,stock.count,stock.parts[1]) end
 end
 function C.settle(age)
-    local unresolved,attempted=0,false
+    local unresolved,changed=0,false
     for tok,t in pairs(C.pending) do
         if age<=0 or now()-t.at>age then
-            attempted=true
-            if C.safeRevoke(t) then C.pending[tok]=nil else unresolved=unresolved+1 end
+            local oldN,oldAttempt,oldRefund,oldUncertain=t.n,t.restoreAttempted,t.refundUncertain,t.uncertain
+            local settled=C.safeRevoke(t)
+            if settled then C.pending[tok]=nil else unresolved=unresolved+1 end
+            if settled or oldN~=t.n or oldAttempt~=t.restoreAttempted or oldRefund~=t.refundUncertain or oldUncertain~=t.uncertain then changed=true end
         else unresolved=unresolved+1 end
     end
-    if attempted then C.pack=C.read(player) end
+    if changed then C.cachePack() end
     return unresolved
 end
 function KCD2MP_ContainerState(id,category,generation,part,count,items)
@@ -229,5 +278,5 @@ function KCD2MP_ContainerState(id,category,generation,part,count,items)
     for cls,n in pairs(current) do if n>(desired[cls] or 0) and api().deleteClass(e,cls,n-(desired[cls] or 0),hp[cls] or 1,nil)~=n-(desired[cls] or 0) then return end end
     for cls,n in pairs(desired) do if n>(current[cls] or 0) and not createChecked(e,cls,n-(current[cls] or 0),hp[cls] or 1) then return end end
     C.received[id]=generation; C.partial[id]=nil
-    local updated,h=C.read(e); C.sessions[id]={count=updated,hp=h}; C.pack=C.read(player)
+    local updated,h=C.read(e); C.sessions[id]={count=updated,hp=h}; C.cachePack()
 end

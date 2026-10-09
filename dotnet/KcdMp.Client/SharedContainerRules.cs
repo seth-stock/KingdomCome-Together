@@ -22,7 +22,7 @@ public static class SharedContainerRules
     public static bool Result(string text)
     {
         var f = text.Split(' ');
-        return f.Length == 6 && f[0] is "ok" or "gone" && Id(f[1]) && Wo134Rules.TryClass(f[2], out _)
+        return f.Length == 6 && f[0] is "ok" or "gone" or "uncertain" && Id(f[1]) && Wo134Rules.TryClass(f[2], out _)
             && Wo134Rules.TryAmount(f[3], out _) && Category(f[4]) && Money(f[5], out _);
     }
     public static bool Reward(string text)

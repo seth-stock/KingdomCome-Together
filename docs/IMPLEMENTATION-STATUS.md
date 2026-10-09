@@ -1,5 +1,9 @@
 # Co-op reliability implementation
 
+## Session 5 status (2026-10-09)
+
+Full campaign multiplayer and parity remain unfinished. KCD1 now has sequenced, incarnation/term-checked NPC movement, stale-handle protection, pre-mutation reward baselines and verified item grants. Weather presets are Candidate, default off (`kcdus_weather on` on both clients), with no current-profile or scripted-weather preservation proof. KCD2 whole-item put compensation preserves the observed native instance on definitive refusal; unknown outcomes remain unresolved and cannot trigger a speculative refund. KCD2 source wire is now **15**. Neither game has complete native economy interception, universal quest/XP/effect authority or arbitrary complete character restoration. See [SESSION5-RESULTS.md](SESSION5-RESULTS.md).
+
 ## Session 4 current status (2026-10-08)
 
 VERSION stays 0.45.0; **wire protocol is now 14** so older agents/relays are refused. All participants must install this same tagged build. This remains partly shared, with no human acceptance or shared-simulation claim.

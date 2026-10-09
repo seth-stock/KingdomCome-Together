@@ -15828,7 +15828,7 @@ end
 -- (the host's solo takes are what a later join must put back).
 function W134.chestsRecording()
     local w = KCD2MP.w134
-    if KCD2MP_Containers and KCD2MP_Containers.active() then return false end
+    if KCD2MP_Containers and KCD2MP_Containers.mode then return false end -- suspended shared stock must not fall into inverse personal-ledger recording
     if not (w.chests and w.shared and W134.fresh()) then return false end
     if w.joiner then return KCD2MP_W134JoinerActive() end
     return w.host
