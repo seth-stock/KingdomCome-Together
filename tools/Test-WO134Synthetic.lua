@@ -395,6 +395,66 @@ PickableItem.OnUsed(egg, player)
 check("I1 pressing again while asking sends nothing more", #events("w134_item") == 1)
 KCD2MP_W134ItemResult(firstTok("w134_item"), "ok")
 check("I2 host ok: picked up here by the game's own pickup", ENTS["egg000352"] == nil and player.inventory:GetCountOfClass(EGG) == 1)
+local receivedTok=firstTok('w134_item')
+KCD2MP_W134ItemResult(receivedTok,'ok')
+check('I2a repeated host decision does not pick up a second item',player.inventory:GetCountOfClass(EGG)==1)
+
+local failed=mkPickable('egg_delivery_fail',EGG,1,0.7,101,100.2,10,newItem(EGG,0.7,1))
+LOG={};PickableItem.OnUsed(failed,player)
+local failedTok=firstTok('w134_item');local failedReq=KCD2MP.w134.itemReq[failedTok];local calls=0
+failedReq.orig=function() calls=calls+1;return true end -- native call succeeds without moving the item
+KCD2MP_W134ItemResult(failedTok,'ok')
+check('I2b inert native pickup stays unresolved despite pcall success',calls==1 and KCD2MP.w134.itemReq[failedTok]==failedReq and player.inventory:GetCountOfClass(EGG)==1)
+KCD2MP_W134ItemResult(failedTok,'ok');KCD2MP_W134ItemResult(failedTok,'gone')
+check('I2c reordered or duplicate result cannot retry or clear uncertain pickup',calls==1 and KCD2MP.w134.itemReq[failedTok]==failedReq)
+NOW=NOW+30;asJoiner();loop()
+check('I2d recipient uncertainty survives ordinary request timeout',KCD2MP.w134.itemReq[failedTok]==failedReq)
+check('I2e host disappearance cannot delete uncertain local evidence',not KCD2MP_W134ItemGone(EGG,101,100.2,10) and ENTS['egg_delivery_fail']==failed)
+LOG={};KCD2MP_CheckpointPrepare(982)
+check('I2f failed recipient delivery blocks checkpoint',events('wo124_reply')[1]=='982 ok=false')
+KCD2MP_CheckpointRelease()
+-- Fixture-only reset: production must recover the interrupted operation.
+KCD2MP.w134.itemReq[failedTok]=nil;System.RemoveEntity(failed.id)
+
+local applied=mkPickable('egg_delivery_threw',EGG,1,0.6,101,100.3,10,newItem(EGG,0.6,1))
+LOG={};PickableItem.OnUsed(applied,player)
+local appliedTok=firstTok('w134_item');local appliedReq=KCD2MP.w134.itemReq[appliedTok];local nativePickup=appliedReq.orig
+appliedReq.orig=function(...) nativePickup(...);error('callback failed after native move') end
+local errorsBefore=#ERRS
+KCD2MP_W134ItemResult(appliedTok,'ok')
+check('I2g native instance readback establishes delivery even after callback error',KCD2MP.w134.itemReq[appliedTok]==nil and player.inventory:GetCountOfClass(EGG)==2)
+local expectedError=#ERRS==errorsBefore+1 and string.find(ERRS[#ERRS],'callback failed after native move',1,true)~=nil
+check('I2h the deliberate post-mutation exception was caught',expectedError)
+if expectedError then table.remove(ERRS) end
+-- Remove only the fixture's extra item before the original scenarios continue.
+for _,id in ipairs(player.inventory:GetInventoryTable()) do if ITEMS[id] and ITEMS[id].health==0.6 then player.inventory:DeleteItem(id,1) end end
+LOG={};asJoiner()
+local mergeSource=mkPickable('egg_delivery_merge',EGG,2,1,101,100.4,10,newItem(EGG,1,2))
+local destination=player.inventory:GetInventoryTable()[1]
+LOG={};PickableItem.OnUsed(mergeSource,player)
+local mergeTok=firstTok('w134_item');local mergeReq=KCD2MP.w134.itemReq[mergeTok]
+mergeReq.orig=function()
+    ITEMS[destination].amount=ITEMS[destination].amount+2
+    ITEMS[mergeSource.item:GetId()]=nil;ENTS['egg_delivery_merge']=nil
+    return true
+end
+KCD2MP_W134ItemResult(mergeTok,'ok')
+check('I2i native merge into one existing identical-condition stack is verified',KCD2MP.w134.itemReq[mergeTok]==nil and ITEMS[destination].amount==3)
+ITEMS[destination].amount=1
+
+local substitute=mkPickable('egg_delivery_substitute',EGG,1,1,101,100.5,10,newItem(EGG,1,1))
+LOG={};PickableItem.OnUsed(substitute,player)
+local substituteTok=firstTok('w134_item');local substituteReq=KCD2MP.w134.itemReq[substituteTok]
+substituteReq.orig=function()
+    ITEMS[substitute.item:GetId()]=nil;ENTS['egg_delivery_substitute']=nil
+    player.inventory:CreateItem(EGG,1,1);return true
+end
+KCD2MP_W134ItemResult(substituteTok,'ok')
+check('I2j class-count increase from a substitute is not delivery proof',KCD2MP.w134.itemReq[substituteTok]==substituteReq)
+-- Fixture-only cleanup of the rejected synthetic substitution.
+KCD2MP.w134.itemReq[substituteTok]=nil
+for _,id in ipairs(player.inventory:GetInventoryTable()) do if id~=destination and ITEMS[id] and ITEMS[id].class==EGG then player.inventory:DeleteItem(id,1) end end
+LOG={};asJoiner()
 local egg2 = mkPickable("egg000351", EGG, 1, 1, 101, 100.06, 10, newItem(EGG, 1, 1))
 LOG = {}; PickableItem.OnUsed(egg2, player)
 KCD2MP_W134ItemResult(firstTok("w134_item"), "gone")

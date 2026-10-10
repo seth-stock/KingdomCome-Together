@@ -16586,13 +16586,76 @@ function KCD2MP_W134ItemResult(tok, verdict)
     tok = tostring(tok)
     local r = w.itemReq[tok]
     if not r then return end
+    -- The host may already have removed its copy. Never call pickup twice,
+    -- forget an uncertain recipient mutation, or treat pcall as a receipt.
+    if r.deliveryStarted then return end
     w.itemReq[tok] = nil
     if verdict == "ok" then
-        w.stats.itemOk = w.stats.itemOk + 1
-        if KCD2MP_Containers then KCD2MP_Containers.gain(r.cls,1) end
+        r.deliveryStarted = true
+        w.itemReq[tok] = r -- remains unsettled until native inventory readback
+        local source, item, before, readable
+        local prepared = pcall(function()
+            source = r.ent.item:GetId()
+            item = ItemManager.GetItem(source)
+            before, readable = W134.items(player)
+        end)
+        if not prepared or not source or not item or item.class ~= r.cls or not readable then
+            W134.log('WO134-ITEM recipient-unverified tok=' .. tok .. ' reason=precondition-unreadable')
+            return
+        end
+        local sourceKey = tostring(source)
+        for _, held in ipairs(before) do
+            if tostring(held.w) == sourceKey then
+                W134.log('WO134-ITEM recipient-unverified tok=' .. tok .. ' reason=already-held-before-pickup')
+                return
+            end
+        end
+        local amount, health = tonumber(item.amount), tonumber(item.health)
+        if not amount or amount < 1 or amount > 1000000 or amount ~= math.floor(amount) or not health or health < 0 or health > 1 or health ~= health then
+            W134.log('WO134-ITEM recipient-unverified tok=' .. tok .. ' reason=source-metadata-unreadable')
+            return
+        end
         W134.bypass = true
         local ok, res = pcall(function() return r.orig(r.ent, player, r.slot) end)
         W134.bypass = false
+        local after, readOk = W134.items(player)
+        local received = false
+        if readOk then
+            for _, held in ipairs(after) do
+                if tostring(held.w) == sourceKey and held.cls == r.cls and held.amt == amount and held.hp == health then received = true end
+            end
+        end
+        if readOk and not received then
+            -- A stock stack merge may consume the source handle. Require a
+            -- unique existing destination, the exact quantity/condition delta,
+            -- no other changes to this class, and native source disappearance.
+            -- A class-count increase or newly minted substitute is insufficient.
+            local goneOk, gone = pcall(ItemManager.GetItem, source)
+            if goneOk and gone == nil then
+                local old, current = {}, {}
+                local unique, changes, compatible = nil, 0, true
+                for _, held in ipairs(before) do if held.cls == r.cls then old[tostring(held.w)] = held end end
+                for _, held in ipairs(after) do if held.cls == r.cls then current[tostring(held.w)] = held end end
+                for id, held in pairs(current) do
+                    local prior = old[id]
+                    if not prior or held.hp ~= prior.hp then compatible = false
+                    elseif held.amt ~= prior.amt then
+                        changes = changes + 1
+                        if held.hp == health and held.amt == prior.amt + amount then unique = id else compatible = false end
+                    end
+                end
+                for id in pairs(old) do if not current[id] then compatible = false end end
+                received = compatible and changes == 1 and unique ~= nil
+            end
+        end
+        if not received then
+            W134.log(string.format('WO134-ITEM recipient-unverified tok=%s reason=instance-not-observed call=%s res=%s -- no retry/refund; snapshot held', tok,tostring(ok),tostring(res)))
+            KCD2MP_ShowNativeToast('Item delivery needs recovery. Saving together is held.')
+            return
+        end
+        w.itemReq[tok] = nil
+        w.stats.itemOk = w.stats.itemOk + 1
+        if KCD2MP_Containers then KCD2MP_Containers.gain(r.cls,amount) end
         local steal = nil
         pcall(function() steal = r.ent.__w139steal end)
         if ok and steal and KCD2MP_W139Stole then pcall(KCD2MP_W139Stole, steal) end   -- WO-139
@@ -16625,7 +16688,13 @@ function KCD2MP_W134ItemGone(cls, x, y, z)
         W134.log(string.format("WO134-ITEM host-gone cls=%s at=(%.2f,%.2f,%.2f) -- nothing here to remove", tostring(cls), x, y, z))
         return false
     end
-    for tok, r in pairs(w.itemReq) do if r.ent == e then w.itemReq[tok] = nil end end
+    for tok, r in pairs(w.itemReq) do
+        if r.ent == e and r.deliveryStarted then
+            W134.log('WO134-ITEM host-gone held: recipient-unverified tok=' .. tok)
+            return false -- authority disappearance is not recipient delivery proof
+        end
+        if r.ent == e then w.itemReq[tok] = nil end
+    end
     local how = W134.takeAway(e)
     W134.log(string.format("WO134-ITEM host-gone cls=%s at=(%.2f,%.2f,%.2f) -- %s here (matched %.3f m)", tostring(cls), x, y, z, how, d))
     return true
@@ -16815,7 +16884,7 @@ function W134.loop()
         end
     end
     for tok, r in pairs(w.itemReq) do
-        if (now - r.at) > w.askTimeoutS then
+        if not r.deliveryStarted and (now - r.at) > w.askTimeoutS then
             w.itemReq[tok] = nil
             w.stats.itemTimeout = w.stats.itemTimeout + 1
             KCD2MP_ShowNativeToast("The host didn't answer -- try again.")

@@ -139,3 +139,11 @@ Record release tag/commit, installer/Lua/native hashes, engine build, content an
 | ID | Test | Required evidence |
 |---|---|---|
 | H-54 | While hits on a peer avatar are pending, repeatedly leave/rejoin, stream out/back and reload disposable copies. Repeat normal same-life updates during a fight. | No old avatar watch affects a replacement; valid same-life hits remain. Confirm measured/forwarded damage agrees with native restoration; record restore_unverified logs, mixed-cause attribution errors and player-load gaps. Native lifetime unit tests do not replace this gameplay test. |
+
+## Session 8 cases: all PENDING
+
+| ID | Test | Required evidence |
+|---|---|---|
+| H-55 | Host approves a loose pickup; make the native recipient callback inert or fail after moving the item. Duplicate/reorder the reply, time out, deliver a host-disappearance update and prepare a checkpoint. | Same native instance readback settles a real move; unverified delivery cannot be retried or cleared by those messages and holds the checkpoint. A successful pcall or a new class-equivalent item is insufficient. |
+| H-56 | Pick up identical-condition stacks that merge into one existing stack, then test two-stack/deferred/condition-changing merges and native metadata extensions. | The supported merge has source disappearance and one exact destination delta, with no other class changes. Unsupported/ambiguous outcomes remain unresolved; source/destination persistent GUIDs and full metadata still need integration. |
+| H-57 | Crash the agent/game between host approval, native pickup and receipt; load/reconnect and inspect custody on both computers. | Durable source intent plus recipient receipt and native recovery prove custody exactly once. Current volatile pending tables fail this complete-economy gate; an in-process timeout test is insufficient. |
