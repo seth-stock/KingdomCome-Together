@@ -141,7 +141,7 @@ public partial class GameBridge
                 if (f.Length is 5 or 6 && Wo134Rules.BodyName.IsMatch(f[1]) && Wo134Rules.TryClass(f[2], out var tcls) && Wo134Rules.TryAmount(f[3], out int tamt)
                     && Wo134Rules.TryHealth(f[4], out float thp) && Wo134JoinerRole)
                 {
-                    if (name == "w134_take") CustodyRecord(new JoinerTake(_w134RequestScope, U(f[0]), "body", f[1], "body", tcls.ToString("D"), tamt, thp, 0, f.Length == 6 ? W(f[5]) : 0));
+                    if (name == "w134_take" && !CustodyRecord(new JoinerTake(_w134RequestScope, U(f[0]), "body", f[1], "body", tcls.ToString("D"), tamt, thp, 0, f.Length == 6 ? W(f[5]) : 0))) return;
                     _ = Wo134SendAsync(Protocol.LootAskUp, Protocol.JoinTargetHost, name == "w134_take" ? Protocol.LootAskBodyTake : Protocol.LootAskBodyPut,
                                        U(f[0]), $"{f[1]} {f[2]} {f[3]} {f[4]}");
                 }

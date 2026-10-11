@@ -10,6 +10,7 @@ public partial class GameBridge
     private readonly object _custodyGate = new();
     private JoinerCustody? _custody;
     private long _custodyAskAtMs;
+    private int _custodyReceiptCursor;
 
     /// <summary>Tests point the joiner's custody at their own file; empty keeps it in memory.</summary>
     public string? CustodyPathOverride { get; init; }
@@ -23,8 +24,8 @@ public partial class GameBridge
             try { _custody = new JoinerCustody(path); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
             {
-                Console.WriteLine($"MP-LOOT custody journal unavailable ({ex.Message}): takes on probation are kept in memory only");
-                _custody = new JoinerCustody();
+                Console.WriteLine($"MP-LOOT custody journal unavailable ({ex.Message}): new takes refused; preserve the journal");
+                throw;
             }
             return _custody;
         }
@@ -32,10 +33,11 @@ public partial class GameBridge
 
     internal IReadOnlyList<(JoinerTake Take, string Verdict, Coop.Contract.OpState State)> CustodyOpen => Custody().Open();
 
-    private void CustodyRecord(JoinerTake t)
+    private bool CustodyRecord(JoinerTake t)
     {
-        try { Custody().Record(t); }
-        catch (Exception ex) { Console.WriteLine($"MP-LOOT custody: take {t.Tok} not journalled ({ex.Message}); the mod's 20 s rule still applies"); }
+        t = t with { World = _joinedTag ?? "" };
+        try { Custody().Record(t); return true; }
+        catch (Exception ex) { Console.WriteLine($"MP-LOOT custody: take {t.Tok} not journalled ({ex.Message}); request withheld; the mod's probation still applies"); return false; }
     }
 
     private void CustodyAnswer(string scope, uint tok, string verdict)
@@ -57,8 +59,27 @@ public partial class GameBridge
         IReadOnlyList<(JoinerTake Take, string Verdict, Coop.Contract.OpState State)> open;
         try { open = Custody().Open(); } catch { return; }
         bool ask = Environment.TickCount64 - _custodyAskAtMs >= 10_000;
-        foreach (var (t, verdict, _) in open)
+        if (ask)
         {
+            var receipts = Custody().Receipts().Where(r => r.Take.World.Length > 0 && r.Take.World == _joinedTag).ToArray();
+            for (int i = 0; i < Math.Min(32, receipts.Length); i++)
+            {
+                var (take, how) = receipts[(_custodyReceiptCursor + i) % receipts.Length];
+                await Wo134SendAsync(Protocol.LootAskUp, Protocol.JoinTargetHost, Protocol.LootAskReceipt, take.Tok,
+                    FormattableString.Invariant($"{take.Scope} {take.Tok} {how}"));
+            }
+            _custodyReceiptCursor = receipts.Length == 0 ? 0 : (_custodyReceiptCursor + Math.Min(32, receipts.Length)) % receipts.Length;
+        }
+        foreach (var (t, verdict, state) in open)
+        {
+            // A different host/world cannot decide ownership in the world that created this take.
+            // Legacy records lack that evidence and remain preserved for explicit recovery.
+            if (t.World.Length == 0 || t.World != _joinedTag) continue;
+            if (state is Coop.Contract.OpState.Delivered or Coop.Contract.OpState.RecipientVerified)
+            {
+                CustodySettle(t.Scope, t.Tok, verdict is "kept" or "returned" or "reverted" ? verdict : "partial");
+                continue;
+            }
             if (t.Scope == _w134RequestScope) continue;                          // this load's own: the mod's probation rules (20 s, results)
             string v = verdict == "unanswered" ? "gone" : verdict;              // the mod already gave it back before an answer came
             if (v is "ok" or "gone" or "none")

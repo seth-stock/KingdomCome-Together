@@ -111,4 +111,65 @@ public class JoinerCustodyTests : IDisposable
         Assert.Equal("receipt", Protocol.LootAskName(Protocol.LootAskReceipt));
         Assert.Equal("recover-result", Protocol.LootHostName(Protocol.LootHostRecoverResult));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_repeated_take_preserves_its_answer_and_conflicting_metadata_is_refused(bool durable)
+    {
+        using var c = new JoinerCustody(durable ? F("repeat.jsonl") : "");
+        var take = Take(ScopeA, 40) with { World = "world-a" };
+        c.Record(take); c.Answer(ScopeA, 40, "gone"); c.Record(take);
+        Assert.Equal("gone", Assert.Single(c.Open()).Verdict);
+        Assert.Throws<InvalidDataException>(() => c.Record(take with { Health = .5f }));
+        Assert.Throws<InvalidDataException>(() => c.Record(take with { World = "world-b" }));
+    }
+
+    [Fact]
+    public void Completed_receipts_keep_world_identity_and_survive_a_process_restart()
+    {
+        string path = F("receipts.jsonl");
+        using (var c = new JoinerCustody(path))
+        {
+            c.Record(Take(ScopeA, 41) with { World = "world-a" }); c.Answer(ScopeA, 41, "ok"); c.Settle(ScopeA, 41, "kept");
+        }
+        using var restarted = new JoinerCustody(path);
+        Assert.Empty(restarted.Open());
+        var receipt = Assert.Single(restarted.Receipts());
+        Assert.Equal("world-a", receipt.Take.World); Assert.Equal("kept", receipt.How);
+    }
+
+    [Fact]
+    public void A_corrupt_journal_is_preserved_and_never_opened_as_volatile_custody()
+    {
+        string path = F("corrupt.jsonl");
+        File.WriteAllText(path, "{invalid complete record}\n"); var original = File.ReadAllBytes(path);
+        Assert.Throws<InvalidDataException>(() => new JoinerCustody(path));
+        Assert.Equal(original, File.ReadAllBytes(path));
+    }
+
+    [Theory]
+    [InlineData(OpState.Delivered)]
+    [InlineData(OpState.RecipientVerified)]
+    public void Interrupted_settlement_continues_forward_without_repeating_engine_work(OpState interrupted)
+    {
+        string path = F("interrupted.jsonl"); var take = Take(ScopeA, 42);
+        using (var c = new JoinerCustody(path)) { c.Record(take); c.Answer(ScopeA, 42, "gone"); }
+        using (var j = new OperationJournal(path))
+        {
+            j.Advance(JoinerCustody.Key(ScopeA, 42), OpState.Delivered, take.Json(), "returned");
+            if (interrupted == OpState.RecipientVerified) j.Advance(JoinerCustody.Key(ScopeA, 42), interrupted, take.Json(), "returned");
+        }
+        using var restarted = new JoinerCustody(path);
+        Assert.True(restarted.Settle(ScopeA, 42, "returned")); Assert.Empty(restarted.Open()); Assert.Single(restarted.Receipts());
+    }
+
+    [Fact]
+    public void Partial_return_is_quarantined_and_not_advertised_as_complete()
+    {
+        string path = F("partial.jsonl");
+        using (var c = new JoinerCustody(path)) { c.Record(Take(ScopeA, 43)); Assert.False(c.Settle(ScopeA, 43, "partial")); }
+        using var restarted = new JoinerCustody(path);
+        Assert.Equal(1, restarted.QuarantinedCount); Assert.Empty(restarted.Open()); Assert.Empty(restarted.Receipts());
+    }
 }

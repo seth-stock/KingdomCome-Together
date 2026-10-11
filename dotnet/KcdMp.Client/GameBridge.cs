@@ -1151,6 +1151,7 @@ public partial class GameBridge(ClientConfig config)
         {
             _versionIpcServer?.Stop();
             _durableLoot?.Dispose();
+            _custody?.Dispose();
             _versionIpcServer = null;
             _discordPresence?.Dispose();
             if (!ReferenceEquals(_transport, http))

@@ -1,5 +1,8 @@
 # Capabilities and what a room really is
 
+**2026-10-11 continuation:** the four requested engine features remain incomplete.
+See [CONTINUATION-RESULTS.md](CONTINUATION-RESULTS.md) for verified changes and remaining requirements.
+
 ## Session 6 status (2026-10-09)
 
 Full multiplayer remains unfinished. KCD1 native input on ordinary NPCs is a confirmed no-op; a direct animation bypass faulted and was removed. A safe native diagnostic reader and verified health/death application remain. KCD2 hit watches now check avatar lifetimes and native health/stamina restoration. These reliability changes do not establish complete combat/economy/quests/personal state. See [SESSION6-RESULTS.md](SESSION6-RESULTS.md).

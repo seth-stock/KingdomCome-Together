@@ -30,9 +30,9 @@ public partial class GameBridge
         else if (name is "w134_ctake" or "w134_cput" && Wo134JoinerRole && f.Length is 7 or 8 && uint.TryParse(f[0],out uint token)
             && SharedContainerRules.ParseRequest(string.Join(' ',f.Skip(1).Take(6))) is { } request)
         {
-            if (name=="w134_ctake")
-                CustodyRecord(new JoinerTake(_w134RequestScope,token,"container",request.Id,request.Category,request.Class.ToString("D"),request.Amount,request.Health,request.Charge,
-                    f.Length==8 && double.TryParse(f[7],NumberStyles.Float,CultureInfo.InvariantCulture,out double cwt) && cwt>=0 && cwt<1e12 ? cwt : 0));
+            if (name=="w134_ctake" &&
+                !CustodyRecord(new JoinerTake(_w134RequestScope,token,"container",request.Id,request.Category,request.Class.ToString("D"),request.Amount,request.Health,request.Charge,
+                    f.Length==8 && double.TryParse(f[7],NumberStyles.Float,CultureInfo.InvariantCulture,out double cwt) && cwt>=0 && cwt<1e12 ? cwt : 0))) return;
             _=Wo134SendAsync(Protocol.LootAskUp,Protocol.JoinTargetHost,name=="w134_ctake" ? Protocol.LootAskContainerTake : Protocol.LootAskContainerPut,
                 token,FormattableString.Invariant($"{request.Id} {request.Class:D} {request.Amount} {Wo134Rules.F(request.Health)} {request.Category} {request.Charge}"));
         }
