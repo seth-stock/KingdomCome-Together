@@ -51,6 +51,45 @@ public sealed class DurableLootLedger : IDisposable
     public static Decision? Replay(BeginResult result) => result.Kind == BeginKind.Replay
         && result.Record.State == OpState.HostDecisionComplete ? JsonSerializer.Deserialize<Decision>(result.Record.Outcome) : null;
     public void InvalidatePending() { lock (_gate) _journal.Recover(); }
+
+    /// <summary>
+    /// v16 recovery: the host's decision for a joiner's request scope and token, whatever connection (peer number) asked. ok/gone/none from a completed
+    /// decision; "gone" when the operation was interrupted after the engine may have been touched (never granted again); "none" when this host never saw it.
+    /// </summary>
+    public (string Verdict, Decision? Decision) FindDecision(string scope, uint token)
+    {
+        if (!Guid.TryParseExact(scope, "N", out _)) return ("none", null);
+        string suffix = FormattableString.Invariant($":{scope.ToLowerInvariant()}:{token}");
+        lock (_gate)
+        {
+            var rec = _journal.All().LastOrDefault(r => r.OperationId.StartsWith("lt:", StringComparison.Ordinal) && r.OperationId.EndsWith(suffix, StringComparison.Ordinal));
+            if (rec == null) return ("none", null);
+            if (rec.State == OpState.HostDecisionComplete && rec.Outcome.Length > 0)
+            {
+                var d = JsonSerializer.Deserialize<Decision>(rec.Outcome);
+                string first = d?.Text.Split(' ')[0] ?? "";
+                return (first switch { "ok" => "ok", "mine" or "none" => "none", _ => "gone" }, d);
+            }
+            return ("gone", null);
+        }
+    }
+
+    /// <summary>A granted take the joiner did not keep: put back once. False when it was already put back (or is being), so a repeated receipt is harmless.</summary>
+    public bool BeginRestore(string scope, uint token)
+    {
+        if (!Guid.TryParseExact(scope, "N", out _)) return false;
+        lock (_gate)
+        {
+            string id = FormattableString.Invariant($"rs:{scope.ToLowerInvariant()}:{token}");
+            var digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(id))).ToLowerInvariant();
+            var r = _journal.Begin(id, "loot-restore", digest);
+            if (r.Kind != BeginKind.New) return false;
+            _journal.Advance(id, OpState.Reserved);
+            _journal.Advance(id, OpState.IntentRecorded, "the joiner did not keep a granted take: put back into the host's holder");
+            _journal.Advance(id, OpState.EngineApplying, "before the Lua put-back");
+            return true;
+        }
+    }
     public int QuarantinedCount => _journal.Quarantined().Count;
     public void Dispose() => _journal.Dispose();
 }

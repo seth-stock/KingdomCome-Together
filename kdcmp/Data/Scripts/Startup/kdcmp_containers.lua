@@ -96,7 +96,8 @@ end
 function C.ask(e,id,category,cls,n,hp,put,charge,original)
     local tok=api().tok()
     C.pending[tok]={id=id,category=category,class=cls,n=n,hp=hp,put=put,charge=charge,at=now(),original=original}
-    emit(put and 'w134_cput' or 'w134_ctake', string.format('%s %s %s %d %.4f %s %d',tok,id,cls,n,hp,category,charge))
+    local wt=0; pcall(function() wt=Calendar.GetWorldTime() or 0 end)
+    emit(put and 'w134_cput' or 'w134_ctake', string.format('%s %s %s %d %.4f %s %d %.0f',tok,id,cls,n,hp,category,charge,wt))
 end
 function C.pass()
     if not C.active() or KCD2MP_CheckpointBlocked() then return end
@@ -241,7 +242,10 @@ function KCD2MP_ContainerResult(tok,verdict)
     if not t then return end
     if verdict=='uncertain' then C.suspended=true end
     if verdict=='gone' then t.definiteGone=true end
-    if verdict=='ok' or C.safeRevoke(t) then C.pending[tok]=nil end
+    if verdict=='ok' or C.safeRevoke(t) then
+        C.pending[tok]=nil
+        if not t.put then emit('w134_settled', tok..(verdict=='ok' and ' kept' or ' returned')) end   -- the agent's custody receipt
+    end
     C.cachePack() -- a rollback/refund is not a quest reward or a new player transfer
     local stock=C.partial[t.id]
     if stock and stock.parts[1] then KCD2MP_ContainerState(t.id,t.category,stock.generation,1,stock.count,stock.parts[1]) end
@@ -252,7 +256,7 @@ function C.settle(age)
         if age<=0 or now()-t.at>age then
             local oldN,oldAttempt,oldRefund,oldUncertain=t.n,t.restoreAttempted,t.refundUncertain,t.uncertain
             local settled=C.safeRevoke(t)
-            if settled then C.pending[tok]=nil else unresolved=unresolved+1 end
+            if settled then C.pending[tok]=nil; if not t.put then emit('w134_settled', tostring(tok)..' returned') end else unresolved=unresolved+1 end
             if settled or oldN~=t.n or oldAttempt~=t.restoreAttempted or oldRefund~=t.refundUncertain or oldUncertain~=t.uncertain then changed=true end
         else unresolved=unresolved+1 end
     end

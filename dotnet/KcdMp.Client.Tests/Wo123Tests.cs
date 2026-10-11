@@ -84,7 +84,7 @@ public class Wo123Tests : IDisposable
         }
         Assert.Null(Protocol.JoinWireFor(Protocol.WorldSavedUp));
         Assert.False(Protocol.IsJoinDown(Protocol.WorldSavedDown, Protocol.WorldSavedDownPayloadLen));
-        Assert.Equal(15, Protocol.Version);   // v15: uncertain puts are not definitive refusals
+        Assert.Equal(16, Protocol.Version);   // v16: durable joiner custody; v15: uncertain puts are not definitive refusals
         // the biggest frame the join sends fits a u16 length and the relay's queue many times over
         var chunk = Protocol.JoinWireFor(Protocol.WorldChunkUp)!.Value;
         Assert.Equal(Protocol.JoinHeaderLen + 4 + Protocol.WorldChunkMaxData, chunk.Max);

@@ -882,7 +882,7 @@ public class RelayRoundTripTests : IClassFixture<RelayFixture>
         await using var _p = p;
         Assert.Equal(Protocol.VersionMismatch, type);
         Assert.Equal(Protocol.Version, payload[0]);
-        Assert.Equal(15, Protocol.Version);   // uncertain container outcomes
+        Assert.Equal(16, Protocol.Version);   // durable joiner custody; uncertain container outcomes
     }
 
     // ---- WO-114: the leash 0x58..0x5B, protocol v10 -------------------------

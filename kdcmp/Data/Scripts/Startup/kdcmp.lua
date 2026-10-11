@@ -16225,7 +16225,7 @@ function W134.diffSession(name, sess, e)
             sess.pend[tok] = { cls = cls, amt = n - m, hp = hp, at = os.clock(), pinv = sess.pinv }
             if KCD2MP_Containers then KCD2MP_Containers.gain(cls,n-m) end
             w.stats.takes = w.stats.takes + 1
-            KCD2MP_EmitEvent("w134_take", string.format("%s %s %s %d %.4f", tok, name, cls, n - m, hp))
+            KCD2MP_EmitEvent("w134_take", string.format("%s %s %s %d %.4f %.0f", tok, name, cls, n - m, hp, W134.worldTime()))
             W134.log(string.format("WO134-BODY take npc=%s cls=%s amt=%d tok=%s -- sent to the host", name, cls, n - m, tok))
         end
     end
@@ -16272,7 +16272,7 @@ function W134.settlePending(maxAgeS)
         for tok, t in pairs(sess.pend or {}) do
             if maxAgeS <= 0 or (now - (t.at or now)) > maxAgeS then
                 local n = W134.deleteClass(player, t.cls, t.amt, t.hp, t.pinv)
-                if n >= t.amt then sess.pend[tok] = nil
+                if n >= t.amt then sess.pend[tok] = nil; KCD2MP_EmitEvent("w134_settled", tostring(tok) .. " returned")
                 else t.amt = t.amt - n; unresolved = unresolved + 1 end -- preserve uncertainty; a failed rollback must block snapshots
                 taken = taken + 1
                 w.stats.takeSettled = (w.stats.takeSettled or 0) + 1
@@ -16326,6 +16326,7 @@ function KCD2MP_W134TakeResult(tok, verdict, name)
             sess.pend[tok] = nil
             if verdict == "ok" then
                 w.stats.takeOk = w.stats.takeOk + 1
+                KCD2MP_EmitEvent("w134_settled", tok .. " kept")
                 W134.log(string.format("WO134-BODY result npc=%s tok=%s ok -- out of the host's body, kept", bname, tok))
             elseif verdict == "mine" or verdict == "none" then
                 -- WO-136 Phase 7: a duplicate of my own earlier take (take all +
@@ -16333,11 +16334,13 @@ function KCD2MP_W134TakeResult(tok, verdict, name)
                 -- (the copy's own): taken back quietly -- nobody else got anything.
                 w.stats.takeDup = (w.stats.takeDup or 0) + 1
                 local n = W134.revokeTake(sess, tok, t)
+                KCD2MP_EmitEvent("w134_settled", tok .. (n >= t.amt and " returned" or " partial"))
                 W134.log(string.format("WO134-BODY result npc=%s tok=%s %s -- %s: %d of %d taken back off Henry, no notice", bname, tok, verdict,
                     verdict == "mine" and "already mine (a duplicate of my own take)" or "never in the host's body", n, t.amt))
             else
                 w.stats.takeGone = w.stats.takeGone + 1
                 local n = W134.revokeTake(sess, tok, t)
+                KCD2MP_EmitEvent("w134_settled", tok .. (n >= t.amt and " returned" or " partial"))
                 W134.log(string.format("WO134-BODY result npc=%s tok=%s gone -- someone else took it first: %d of %d taken back off Henry", bname, tok, n, t.amt))
                 KCD2MP_ShowNativeToast("Someone already took that.")
             end
@@ -16345,6 +16348,45 @@ function KCD2MP_W134TakeResult(tok, verdict, name)
         end
         if sess.puts[tok] then sess.puts[tok] = nil; return end
     end
+end
+
+-- ---- durable custody (the agent's JoinerCustody.cs, protocol 16) -----------------------
+-- A take of an EARLIER load or process, settled from the agent's durable journal with the host's answer. A take newer than the world time this world was
+-- loaded at is not in the save at all (the world went back): nothing is removed. Otherwise ok keeps it; gone/none takes it back off Henry and refunds a
+-- shop's charge. Each (scope, tok) is settled once per load. The agent never sends an unanswered take here.
+KCD2MP.w134.recovered = KCD2MP.w134.recovered or {}
+function KCD2MP_W134Recover(scope, tok, kind, holder, cls, amt, hp, charge, takeWt, verdict)
+    local w = KCD2MP.w134
+    scope = tostring(scope); tok = tostring(tok)
+    if not string.find(scope, "^%x+$") or #scope ~= 32 or not string.find(tok, "^%d+$") then return end
+    local key = scope .. ":" .. tok
+    if w.recovered[key] then KCD2MP_EmitEvent("w134_recovered", key:gsub(":", " ") .. " 0 repeat"); return end
+    amt = math.floor(tonumber(amt) or 0); charge = math.floor(tonumber(charge) or 0); takeWt = tonumber(takeWt) or 0
+    if amt < 1 or amt > 100000 or charge < 0 or charge > 10000000 then return end
+    local loaded = w.loadWt or W134.worldTime()
+    local function done(n, why) w.recovered[key] = true; KCD2MP_EmitEvent("w134_recovered", string.format("%s %s %d %s", scope, tok, n, why)) end
+    if takeWt > loaded then return done(0, "reverted") end
+    if verdict == "ok" then return done(0, "kept") end
+    if verdict ~= "gone" and verdict ~= "none" then return end
+    local ok, n = pcall(W134.deleteClass, player, cls, amt, tonumber(hp) or 1, nil)
+    if not ok then n = 0 end
+    if charge > 0 then pcall(function() player.inventory:CreateItem("5ef63059-322e-4e1b-abe8-926e100c770e", 1, charge) end) end   -- as the live containers refund
+    if KCD2MP_Containers and KCD2MP_Containers.cachePack then pcall(KCD2MP_Containers.cachePack) end   -- a recovery is not a new transfer or a reward
+    done(n, n >= amt and "returned" or "partial")
+end
+
+-- (host) A granted take the joiner did not keep (it gave it back, or its world went back before the take): the item exists nowhere, so it goes back into
+-- the host's holder. The agent journals the put-back first and asks only once.
+function KCD2MP_W134HostRestore(kind, holder, category, cls, amt)
+    amt = math.floor(tonumber(amt) or 0)
+    if amt < 1 or amt > 100000 then return end
+    local e
+    if kind == "container" and KCD2MP_Containers then e = KCD2MP_Containers.find(holder, category)
+    else pcall(function() e = System.GetEntityByName(holder) end) end
+    if not e or not e.inventory then mp_log("WO134-RESTORE " .. tostring(holder) .. " not found: nothing put back"); return end
+    local ok = pcall(function() e.inventory:CreateItem(cls, 1, amt) end)
+    mp_log(string.format("WO134-RESTORE %s %s x%d into %s ok=%s", kind, tostring(cls), amt, tostring(holder), tostring(ok)))
+    if kind == "container" and KCD2MP_Containers then pcall(KCD2MP_Containers.send, e, 0) end
 end
 
 -- ---- NPC bodies: the host -------------------------------------------------------
@@ -16901,8 +16943,15 @@ function W134.loop()
     if W134.chestsRecording() then W134.chestPass() else w.chestSess = {} end
 end
 
+function W134.worldTime()
+    local t = 0
+    pcall(function() t = Calendar.GetWorldTime() or 0 end)
+    return t
+end
+
 function W134.forgetWorld(why)
     local w = KCD2MP.w134
+    w.loadWt = W134.worldTime()                 -- durable custody: a take newer than this is not in the loaded save
     if KCD2MP_Containers then KCD2MP_Containers.reset() end
     local n = 0
     for _ in pairs(w.chestSess) do n = n + 1 end
@@ -16923,6 +16972,7 @@ function W134.startLoop()
     Script.SetTimer(w.loopMs, W134.loop)
 end
 KCD2MP.w134.startLoop = W134.startLoop   -- WO-134 test hook
+KCD2MP.w134.forgetWorld = W134.forgetWorld   -- durable custody test hook (a load)
 KCD2MP.w134.loopOnce = function() local r = KCD2MP.w134LoopRunning; KCD2MP.w134LoopRunning = true; W134.loop(); KCD2MP.w134LoopRunning = r end
 
 -- The agent, once a second while connected: this machine's role in a shared world.

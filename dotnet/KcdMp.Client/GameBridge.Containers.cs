@@ -27,10 +27,15 @@ public partial class GameBridge
         }
         if (name=="w134_copen" && Wo134JoinerRole && f.Length==2 && SharedContainerRules.Id(f[0]) && SharedContainerRules.Category(f[1]))
             _=Wo134SendAsync(Protocol.LootAskUp,Protocol.JoinTargetHost,Protocol.LootAskContainerOpen,0,arg!);
-        else if (name is "w134_ctake" or "w134_cput" && Wo134JoinerRole && f.Length==7 && uint.TryParse(f[0],out uint token)
-            && SharedContainerRules.ParseRequest(string.Join(' ',f.Skip(1))) is { } request)
+        else if (name is "w134_ctake" or "w134_cput" && Wo134JoinerRole && f.Length is 7 or 8 && uint.TryParse(f[0],out uint token)
+            && SharedContainerRules.ParseRequest(string.Join(' ',f.Skip(1).Take(6))) is { } request)
+        {
+            if (name=="w134_ctake")
+                CustodyRecord(new JoinerTake(_w134RequestScope,token,"container",request.Id,request.Category,request.Class.ToString("D"),request.Amount,request.Health,request.Charge,
+                    f.Length==8 && double.TryParse(f[7],NumberStyles.Float,CultureInfo.InvariantCulture,out double cwt) && cwt>=0 && cwt<1e12 ? cwt : 0));
             _=Wo134SendAsync(Protocol.LootAskUp,Protocol.JoinTargetHost,name=="w134_ctake" ? Protocol.LootAskContainerTake : Protocol.LootAskContainerPut,
                 token,FormattableString.Invariant($"{request.Id} {request.Class:D} {request.Amount} {Wo134Rules.F(request.Health)} {request.Category} {request.Charge}"));
+        }
         else if (name=="w134_cres" && Wo134HostRole && f.Length==9 && byte.TryParse(f[0],out byte peer)
             && uint.TryParse(f[1],out uint tok) && Guid.TryParseExact(f[8],"N",out _) && SharedContainerRules.Result(string.Join(' ',f.Skip(2).Take(6))))
             _=Wo134DurableResultAsync(peer,tok,f[8],Protocol.LootHostContainerResult,string.Join(' ',f.Skip(2).Take(6)));
@@ -77,7 +82,10 @@ public partial class GameBridge
             await ExecLuaAsync($"if KCD2MP_ContainerMode then KCD2MP_ContainerMode({B(_sharedContainers)},\"{replyScope}\") end; if KCD2MP_RewardMode then KCD2MP_RewardMode(false,\"{replyScope}\") end");
         }
         else if (msg.Kind==Protocol.LootHostContainerResult && replyScope==_w134RequestScope && SharedContainerRules.Result(text))
+        {
+            if (text.Split(' ')[0] is "ok" or "gone") CustodyAnswer(_w134RequestScope,msg.Tok,text.Split(' ')[0]);   // "uncertain" stays open: never guessed
             await ExecLuaAsync($"if KCD2MP_ContainerResult then KCD2MP_ContainerResult(\"{msg.Tok}\",\"{text.Split(' ')[0]}\") end");
+        }
         else if (replyScope==_hostContainerScope && msg.Kind==Protocol.LootHostContainerState && SharedContainerRules.State(text))
         {
             var f=text.Split(' '); var items=Wo134Rules.ParseItems(f[4])!;

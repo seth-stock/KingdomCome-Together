@@ -90,6 +90,7 @@ public partial class GameBridge
                 await ContainerModeTickAsync();
                 _ = ExecLuaAsync($"if KCD2MP_W134Tick then KCD2MP_W134Tick({B(joiner)}, {B(host)}, {B(shared)}, {peers},{B(ContainersEffective)},\"{(host ? _w134RequestScope : _hostContainerScope)}\") end");
                 Wo134FlushHost();
+                if (joiner && shared) await CustodyRecoverAsync();
                 Wo135HostTick();   // WO-135: the host world's build to every joiner
                 await Wo134ApplyIfReadyAsync(timeout: false);
                 if (Environment.TickCount64 - lastStats >= 60_000)
@@ -127,6 +128,7 @@ public partial class GameBridge
         ContainerEvent(name,arg);
         var f = (arg ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         uint U(string s) => uint.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint v) ? v : 0;
+        double W(string s) => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double v) && v >= 0 && v < 1e12 ? v : 0;
         switch (name)
         {
             // ---- joiner -> host
@@ -134,12 +136,21 @@ public partial class GameBridge
                 if (f.Length == 1 && Wo134Rules.BodyName.IsMatch(f[0]) && Wo134JoinerRole)
                     _ = Wo134SendAsync(Protocol.LootAskUp, Protocol.JoinTargetHost, Protocol.LootAskBodyOpen, 0, f[0]);
                 return;
-            case "w134_take":      // <tok> <body> <cls> <amt> <hp>
+            case "w134_take":      // <tok> <body> <cls> <amt> <hp> [<worldT>]
             case "w134_put":
-                if (f.Length == 5 && Wo134Rules.BodyName.IsMatch(f[1]) && Wo134Rules.TryClass(f[2], out _) && Wo134Rules.TryAmount(f[3], out _)
-                    && Wo134Rules.TryHealth(f[4], out _) && Wo134JoinerRole)
+                if (f.Length is 5 or 6 && Wo134Rules.BodyName.IsMatch(f[1]) && Wo134Rules.TryClass(f[2], out var tcls) && Wo134Rules.TryAmount(f[3], out int tamt)
+                    && Wo134Rules.TryHealth(f[4], out float thp) && Wo134JoinerRole)
+                {
+                    if (name == "w134_take") CustodyRecord(new JoinerTake(_w134RequestScope, U(f[0]), "body", f[1], "body", tcls.ToString("D"), tamt, thp, 0, f.Length == 6 ? W(f[5]) : 0));
                     _ = Wo134SendAsync(Protocol.LootAskUp, Protocol.JoinTargetHost, name == "w134_take" ? Protocol.LootAskBodyTake : Protocol.LootAskBodyPut,
                                        U(f[0]), $"{f[1]} {f[2]} {f[3]} {f[4]}");
+                }
+                return;
+            case "w134_settled":   // <tok> <kept|returned|partial>: the mod settled a take of THIS load
+                if (f.Length == 2 && Wo134JoinerRole) CustodySettle(_w134RequestScope, U(f[0]), f[1]);
+                return;
+            case "w134_recovered": // <scope> <tok> <removed> <kept|returned|reverted|partial|repeat>: a take of an earlier load
+                if (f.Length == 4 && Guid.TryParseExact(f[0], "N", out _) && f[3] != "repeat") CustodySettle(f[0], U(f[1]), f[3]);
                 return;
             case "w134_item":      // <tok> <cls> <x> <y> <z> <fromBody>
                 if (f.Length == 6 && Wo134Rules.TryClass(f[1], out _) && Wo134Rules.TryCoord(f[2], out _) && Wo134Rules.TryCoord(f[3], out _)
@@ -225,7 +236,12 @@ public partial class GameBridge
         }
         if (await Wo135OnLootFrameAsync(type, src, m)) return;   // WO-135: takedowns, the host's build
         if (await ContainerFrameAsync(type,src,m,scope)) return;
-        if (type == Protocol.LootHostDown && m.Kind is Protocol.LootHostTakeResult or Protocol.LootHostItemResult)
+        if (type == Protocol.LootHostDown && m.Kind == Protocol.LootHostRecoverResult)
+        {
+            if (!LootMsg.TryUnscope(m.Text, out _, out string recPayload)) { Interlocked.Increment(ref _w134Dropped); return; }
+            m = m with { Text = recPayload };
+        }
+        else if (type == Protocol.LootHostDown && m.Kind is Protocol.LootHostTakeResult or Protocol.LootHostItemResult)
         {
             if (!LootMsg.TryUnscope(m.Text, out string responseScope, out string payload) || responseScope != _w134RequestScope)
             { Interlocked.Increment(ref _w134Dropped); return; }
@@ -238,6 +254,7 @@ public partial class GameBridge
             // The host: a joiner's request. Checked field by field, then to the mod.
             Interlocked.Increment(ref _w134AsksIn);
             if (!Wo134HostRole || _where == GameWhere.Menu || Wo136Holding || CheckpointHolding) { Interlocked.Increment(ref _w134Dropped); return; }
+            if (m.Kind is Protocol.LootAskRecover or Protocol.LootAskReceipt) { await CustodyHostAskAsync(src, m, f); return; }
             switch (m.Kind)
             {
                 case Protocol.LootAskBodyOpen when f.Length == 1 && Wo134Rules.BodyName.IsMatch(f[0]):
@@ -273,7 +290,11 @@ public partial class GameBridge
                     && Wo134Rules.ParseItems(f[5]) is { } items:
                 await ExecLuaAsync($"if KCD2MP_W134BodyState then KCD2MP_W134BodyState(\"{f[0]}\", \"{f[1]}\", {flags}, {part}, {np}, {Wo134Rules.LuaItems(items)}) end");
                 return;
+            case Protocol.LootHostRecoverResult when f.Length == 3 && Guid.TryParseExact(f[0], "N", out _) && f[2] is "ok" or "gone" or "none":
+                CustodyAnswer(f[0], uint.TryParse(f[1], NumberStyles.None, CultureInfo.InvariantCulture, out uint rt) ? rt : 0, f[2]);
+                return;
             case Protocol.LootHostTakeResult when f.Length == 4 && Wo136Rules.IsTakeVerdict(f[0]) && Wo134Rules.BodyName.IsMatch(f[1]):
+                CustodyAnswer(_w134RequestScope, m.Tok, f[0]);
                 await ExecLuaAsync($"if KCD2MP_W134TakeResult then KCD2MP_W134TakeResult(\"{m.Tok}\", \"{f[0]}\", \"{f[1]}\") end");
                 return;
             case Protocol.LootHostItemResult when f.Length == 5 && Wo136Rules.IsItemVerdict(f[0]):
