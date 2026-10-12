@@ -12,6 +12,7 @@
 #include "wo135.h"
 #include "wo153.h"
 #include "wo137.h"
+#include "xpread.h"
 #include "weather.h"
 #include "wo138.h"
 #include "wo139.h"
@@ -176,6 +177,7 @@ DWORD WINAPI plugin_main(LPVOID) {
     // WO-137: the quest State detector (two C_StateVariable vftable slots) and the
     // Set<Value> apply. Fails closed (WO137-BUILD); silent until the agent turns it on.
     kcdmp::wo137::install();
+    kcdmp::xpread::install();   // Session 10: native XP observer (quest reward XP)
     // WO-138: the PauseGame gate (CCryAction::PauseGame; off until the agent turns
     // the levers on for a session with a partner). Fails closed (WO138-GATE).
     kcdmp::wo138::install();

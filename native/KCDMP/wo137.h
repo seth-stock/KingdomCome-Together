@@ -123,6 +123,12 @@ uint32_t punish_skipped();
 
 // WO-153: is a mirrored quest step being applied right now (main thread), and how long ago did the last one end
 // (milliseconds on GetTickCount64's clock; ~0 = never). The cutscene gate reads both.
+// Session 10: what the code running now belongs to -- the seq of the outermost recorded State change whose consumers are
+// executing (0 = none), and the tag of the Apply pulse running (the host's change seq on a joiner; 0 = none). Read by the
+// XP observer, which stamps every reward row with both.
+uint32_t current_root_seq();
+uint32_t current_apply_tag();
+
 bool apply_active();
 uint64_t ms_since_apply_end();
 

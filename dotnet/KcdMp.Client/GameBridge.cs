@@ -5936,6 +5936,7 @@ public partial class GameBridge(ClientConfig config)
             case "w134_reward":
             case "w134_reward_applied":
             case "w134_reward_unverified":
+            case "w134_econ":
             case "w134_put":
             case "w134_item":
             case "w134_bstate":
@@ -5955,6 +5956,7 @@ public partial class GameBridge(ClientConfig config)
             case "w137_sync":        // WO-137: shared quests
             case "w137_talk":
             case "w137_status":
+            case "w137_xp_given":
                 Wo137OnEvent(name, arg);
                 return;
             case "w139_cfg":         // WO-139: crime and guards

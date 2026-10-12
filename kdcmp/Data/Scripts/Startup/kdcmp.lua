@@ -19358,6 +19358,7 @@ function KCD2MP_W139StopEnd(why, result)
     mp_log(string.format("WO139-STOP end guard=%s id=%s why=%s result=%s paid=%d held_s=%.1f planted=%s -- the copy is suspended again; the host's guard stands where this one ended%s",
         s.guard, s.id, tostring(why), result, paid, os.clock() - s.since, table.concat(s.planted or {}, ","), ended .. unpaid))
     KCD2MP_EmitEvent("w139_stop", "off " .. s.guard)
+    if paid and paid > 0 and KCD2MP_Containers and KCD2MP_Containers.econ then pcall(KCD2MP_Containers.econ.claim, 8, KCD2MP_Containers.money, paid) end   -- Session 10: the economy audit names the fine
     KCD2MP_EmitEvent("w139_outcome", string.format("%s %s %s %d %.2f %.2f %.2f", s.id, result, s.guard, paid, gp.x, gp.y, gp.z))
 end
 

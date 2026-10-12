@@ -145,6 +145,7 @@ public partial class GameBridge
                 if (wasHolding && !holding && host) Wo137ReleaseHeldRequests();
                 wasHolding = holding;
                 long now = Environment.TickCount64;
+                await Wo137XpTickAsync(host, joinerActive, now);   // Session 10: native quest XP
                 if (host && LivePartners().Count > 0)
                 {
                     if (now - _w137ModeAtMs >= 10_000) { _w137ModeAtMs = now; await Wo137SendModeAsync("heartbeat"); }
@@ -169,6 +170,8 @@ public partial class GameBridge
                 {
                     lastStats = now;
                     Console.WriteLine(Wo137StatsLine());
+                    Console.WriteLine(XpStatsLine());
+                    Console.WriteLine(EconStatsLine());
                 }
             }
             catch (Exception ex) { Console.WriteLine($"MP-W137 tick failed: {ex.GetType().Name}: {ex.Message}"); }
@@ -230,6 +233,7 @@ public partial class GameBridge
             if (_w137HostSeen.Count > 4000) Wo137TrimSeen();
             _w137HostSeenDirty = true;
             string text = Wo137Rules.ChangeText(c);
+            XpNoteSharedChange(c.Seq);   // Session 10: this change goes to the partners, so the quest XP it paid does too
             if (!_w137RewardSeen.TryAdd(c.Path,0)) await RewardArmAsync(c,true); // first observation is a baseline
             var peers = Wo134Peers();
             foreach (byte g in peers) await Wo137SendAsync(Protocol.QuestHostUp, g, Protocol.QuestHostChange, 0, text);
@@ -429,6 +433,7 @@ public partial class GameBridge
             return true;
         }
         await RewardArmAsync(c,false);
+        long xpStart = Environment.TickCount64;
         var r = await _combat.Wo137ApplyAsync(c.Seq, c.Path, c.Port);
         if (r is not { } a)
         {
@@ -454,6 +459,7 @@ public partial class GameBridge
         {
             case 0:
                 Interlocked.Increment(ref _w137Applied);
+                XpOnJoinerApplied(c.Seq, true, xpStart);
                 if (a.New==c.New) await ExecLuaAsync($"if KCD2MP_RewardReady then KCD2MP_RewardReady(\"{RewardKey(c)}\") end");
                 Wo147LearnPortValue(c.Path, c.Port, a.New, a.Type);   // WO-147
                 Console.WriteLine(FormattableString.Invariant(
@@ -462,6 +468,7 @@ public partial class GameBridge
                 break;
             case 1:
                 Interlocked.Increment(ref _w137Unchanged);   // already there: counted once
+                XpOnJoinerApplied(c.Seq, false, xpStart);
                 // WO-147: a correction that moved nothing is remembered like a miss (the field fired the same no-op
                 // at every checkpoint: waitingForReactors x7, konfrontace.state30 x10, takedown tutorials x11).
                 if (c.Seq == 0 && a.New != c.New) Wo144CorrectionMissed(c.Path, c.Port, c.New, a.New);
@@ -719,8 +726,12 @@ public partial class GameBridge
                     _ = Wo137SendAsync(Protocol.QuestAskUp, Protocol.JoinTargetHost, Protocol.QuestAskTalk, tok, Wo137Rules.TalkText(f[0] == "on", f[1]));
                 }
                 return;
+            case "w137_xp_given":      // "<key> <given> <failed>": the quest XP receipt ran
+                Console.WriteLine($"MP-W137 xp joiner: receipt {arg}");
+                return;
             case "w137_status":
                 Console.WriteLine(Wo137StatsLine());
+                Console.WriteLine(XpStatsLine());
                 _ = Task.Run(async () => { var s = await _combat.Wo137StatusAsync(); Console.WriteLine($"MP-W137 native: {s ?? "no answer"}"); });
                 return;
         }

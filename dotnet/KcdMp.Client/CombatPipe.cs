@@ -1410,6 +1410,26 @@ public sealed class CombatPipe : IAsyncDisposable
         return (found, level, objs);
     }
 
+    /// <summary>op 9 (native xpread.h): the XP observer's rows since <paramref name="cursor"/> (null = no answer or the observer is not armed).</summary>
+    public async Task<(uint Now, uint Lost, List<XpRow> Rows)?> Wo137XpReadAsync(uint cursor, CancellationToken ct = default)
+    {
+        var a = new byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(a, cursor);
+        var r = await Wo137Async(9, a, ct);
+        if (r is not { Ok: true } v || v.Payload.Length < 9) return null;
+        var b = v.Payload;
+        uint now = BinaryPrimitives.ReadUInt32LittleEndian(b), lost = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(4));
+        int count = b[8], at = 9;
+        var rows = new List<XpRow>(count);
+        for (int i = 0; i < count && at + 42 <= b.Length; i++, at += 42)
+            rows.Add(new XpRow(BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at)), b[at + 4] != 0, BinaryPrimitives.ReadUInt64LittleEndian(b.AsSpan(at + 5)),
+                BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at + 13)), BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at + 17)),
+                BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at + 21)), BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at + 25)),
+                BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at + 29)), b[at + 33],
+                BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at + 34)), BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(at + 38))));
+        return (now, lost, rows);
+    }
+
     /// <summary>op 5: the native side's counters.</summary>
     public async Task<string?> Wo137StatusAsync(CancellationToken ct = default)
     {

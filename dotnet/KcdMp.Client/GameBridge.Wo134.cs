@@ -125,6 +125,7 @@ public partial class GameBridge
 
     private void Wo134OnEvent(string name, string? arg)
     {
+        if (name=="w134_econ") { EconOnEvent(arg); return; }   // Session 10: the pack watcher's attribution
         ContainerEvent(name,arg);
         var f = (arg ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         uint U(string s) => uint.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out uint v) ? v : 0;

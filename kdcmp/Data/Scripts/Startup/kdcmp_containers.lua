@@ -39,6 +39,23 @@ function C.gain(cls,n)
     C.gains[#C.gains+1]={class=cls,n=n,at=now()}
     while #C.gains>500 or (#C.gains>0 and now()-C.gains[1].at>65) do table.remove(C.gains,1) end
 end
+-- Session 10: the economy audit ledger's events (agent EconomyLedger): "<kind> <class> <delta> <world time> [ref]" where delta is the change
+-- of THIS pack. Kinds: 1 take, 2 put, 3 barter-buy, 4 barter-sell, 5 loss, 6 gain, 7 reward, 8 crime. Observation only; nothing is moved.
+C.econ={count=0,claims={}}
+local function econClass(cls) return type(cls)=='string' and #cls>0 and #cls<=64 and not string.find(cls,'[^%w_%.%-]') end
+function C.econ.emit(kind,cls,delta,ref)
+    if not econClass(cls) or type(delta)~='number' or delta==0 or delta~=delta then return end
+    local wt=0; pcall(function() wt=Calendar.GetWorldTime() or 0 end)
+    if type(ref)~='string' or #ref==0 or #ref>80 or string.find(ref,'[^%w_%.%-%[%]/:]') then ref=nil end
+    C.econ.count=C.econ.count+1
+    emit('w134_econ',string.format('%d %s %d %.0f%s',kind,cls,delta,wt,ref and (' '..ref) or ''))
+end
+-- A judged crime paid money (WO-139): the pack watcher will see the money leave; the claim lets it name the cause instead of a plain loss.
+function C.econ.claim(kind,cls,n)
+    if not econClass(cls) or type(n)~='number' or n<=0 or n~=n then return end
+    C.econ.claims[#C.econ.claims+1]={kind=kind,cls=cls,n=n,at=now()}
+    while #C.econ.claims>16 do table.remove(C.econ.claims,1) end
+end
 function C.cachePack()
     local pack,hp,items=C.read(player)
     C.pack=pack; C.packItems=items
@@ -123,6 +140,8 @@ function C.pass()
                         if taken>0 then
                             gains[cls]=gains[cls]-taken
                             if KCD2MP_W134JoinerActive() then C.ask(e,id,category,cls,taken,previous.hp[cls] or 1,false,category=='shop' and spent or 0) end
+                            C.econ.emit(category=='shop' and 3 or 1,cls,taken,id)
+                            if category=='shop' and spent>0 then C.econ.emit(3,C.money,-spent,id); loss[C.money]=math.max(0,(loss[C.money] or 0)-spent) end
                             if category=='shop' then spent=0 end -- observed payment budget consumed once, never refunded per class
                             C.gain(cls,taken)
                         end
@@ -131,6 +150,8 @@ function C.pass()
                         local put=math.min(math.max(0,n-(previous.count[cls] or 0)),loss[cls] or 0)
                         if put>0 then
                             loss[cls]=loss[cls]-put
+                            C.econ.emit(category=='shop' and 4 or 2,cls,-put,id)
+                            if category=='shop' and cls~=C.money and (gains[C.money] or 0)>0 then C.econ.emit(4,C.money,gains[C.money],id); gains[C.money]=0 end
                             if KCD2MP_W134JoinerActive() then
                                 -- A whole original item may be recoverable exactly. Never synthesize class-only refunds.
                                 local present={}; for _,it in ipairs(packItems or {}) do present[tostring(it.w)]=true end
@@ -157,6 +178,22 @@ function C.pass()
         end
     end
     for id in pairs(C.sessions) do if not reached[id] then C.sessions[id]=nil end end
+    -- what is left changed the pack with no holder on the other side: used up, dropped, found, crafted, paid out, or a quest's reward
+    local rewarding=false
+    if KCD2MP_Rewards then
+        if next(KCD2MP_Rewards.windows or {}) then rewarding=true end
+        for _,a in pairs(KCD2MP_Rewards.applied or {}) do if now()-(a.at or 0)<=10 then rewarding=true end end
+    end
+    for i=#C.econ.claims,1,-1 do
+        local c=C.econ.claims[i]
+        if now()-c.at>30 or c.n<=0 then table.remove(C.econ.claims,i)
+        else
+            local amount=math.min(c.n,loss[c.cls] or 0)
+            if amount>0 then C.econ.emit(c.kind,c.cls,-amount,'crime'); loss[c.cls]=loss[c.cls]-amount; c.n=c.n-amount end
+        end
+    end
+    for cls,n in pairs(loss) do if n>0 then C.econ.emit(5,cls,-n) end end
+    for cls,n in pairs(gains) do if n>0 then C.econ.emit(rewarding and 7 or 6,cls,n) end end
     C.pack=pack; C.packItems=packItems
 end
 function KCD2MP_ContainerOpen(peer,id,category)

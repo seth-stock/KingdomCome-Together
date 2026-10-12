@@ -106,7 +106,7 @@ public class JoinerCustodyTests : IDisposable
     [Fact]
     public void Protocol_16_appends_the_recover_and_receipt_kinds()
     {
-        Assert.Equal(16, Protocol.Version);
+        Assert.Equal(17, Protocol.Version);
         Assert.Equal("recover", Protocol.LootAskName(Protocol.LootAskRecover));
         Assert.Equal("receipt", Protocol.LootAskName(Protocol.LootAskReceipt));
         Assert.Equal("recover-result", Protocol.LootHostName(Protocol.LootHostRecoverResult));

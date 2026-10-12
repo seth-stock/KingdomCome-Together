@@ -21,6 +21,7 @@
 #include "pipe_server.h"
 #include "port_gate.h"
 #include "respawn.h"
+#include "xpread.h"
 
 namespace kcdmp::wo137 {
 
@@ -407,20 +408,22 @@ struct Rec {
     char path[kMaxPath + 1];
 };
 int g_changeDepth = 0;   // main thread: >0 while a State's own notification runs (its consumers' changes are a cascade)
+uint32_t g_rootSeq = 0;  // main thread: the seq of the outermost recorded change now running (0 = none): what a reward node's XP belongs to
+std::atomic<uint32_t> g_applyTag{0};   // the tag of the Apply now running (the host's seq on a joiner)
 std::atomic<uint32_t> c_notQuest{0}, c_cascade{0};
 std::mutex g_qm;
 std::vector<Rec> g_queue;           // under g_qm
 constexpr size_t kMaxQueue = 8192;
 
-void record(void* self, const void* oldV, const void* newV, bool notify, bool cascade) {
+uint32_t record(void* self, const void* oldV, const void* newV, bool notify, bool cascade) {
     Rec r{};
     char full[kMaxPath + 64];
     size_t questEnd = 0;
-    if (!node_path(self, full, sizeof full, &questEnd)) { c_noPath.fetch_add(1); return; }
+    if (!node_path(self, full, sizeof full, &questEnd)) { c_noPath.fetch_add(1); return 0; }
     const char* p = canonical(full);
-    if (std::strncmp(p, "Barbora.", 8) != 0) { c_foreign.fetch_add(1); return; }   // Haste and the rest: not quests
+    if (std::strncmp(p, "Barbora.", 8) != 0) { c_foreign.fetch_add(1); return 0; }   // Haste and the rest: not quests
     const size_t cut = static_cast<size_t>(p - full);
-    if (questEnd <= cut) { c_notQuest.fetch_add(1); return; }   // world simulation (event places, professions, ...): not under a C_Quest
+    if (questEnd <= cut) { c_notQuest.fetch_add(1); return 0; }   // world simulation (event places, professions, ...): not under a C_Quest
     r.questLen = static_cast<uint16_t>(questEnd - cut);
     strncpy_s(r.path, p, _TRUNCATE);
     if (cascade) c_cascade.fetch_add(1);
@@ -436,8 +439,9 @@ void record(void* self, const void* oldV, const void* newV, bool notify, bool ca
     r.seq = g_seq.fetch_add(1) + 1;
     c_recorded.fetch_add(1);
     std::lock_guard<std::mutex> lk(g_qm);
-    if (g_queue.size() >= kMaxQueue) { c_dropped.fetch_add(1); return; }
+    if (g_queue.size() >= kMaxQueue) { c_dropped.fetch_add(1); return r.seq; }
     g_queue.push_back(r);
+    return r.seq;
 }
 
 void hooked_changed(void* self, const void* oldV, const void* newV, bool notify) {
@@ -445,10 +449,12 @@ void hooked_changed(void* self, const void* oldV, const void* newV, bool notify)
     // further States (a cascade), which then land after this one -- the
     // engine's own order.
     const bool mainT = GetCurrentThreadId() == g_mainTid;
-    if (g_detect.load(std::memory_order_relaxed)) record(self, oldV, newV, notify, mainT && g_changeDepth > 0);
+    uint32_t seq = 0;
+    if (g_detect.load(std::memory_order_relaxed)) seq = record(self, oldV, newV, notify, mainT && g_changeDepth > 0);
+    if (mainT && g_changeDepth == 0) g_rootSeq = seq;   // the outermost change owns what its consumers pay (rewards)
     if (mainT) ++g_changeDepth;
     g_origChanged(self, oldV, newV, notify);
-    if (mainT) --g_changeDepth;
+    if (mainT && --g_changeDepth == 0) g_rootSeq = 0;
 }
 
 void hooked_execute(void* self, const void* ctx) {
@@ -1139,7 +1145,9 @@ uint8_t handle(const uint8_t* req, size_t n, uint8_t* out, size_t cap, size_t* o
         char port[128]{}; std::memcpy(port, req + 8 + pl, portLen);
         if (std::strncmp(path, "Barbora.", 8) != 0) return kRBadRequest;   // quests only
         Val b{}, a{};
+        g_applyTag.store(tag);
         const Applied r = apply(path, port, &b, &a);
+        g_applyTag.store(0);
         logf("WO137-APPLY tag=%u %s :: %s -> %s (from %d to %d, %s)", tag, path, port, applied_text(r), b.i, a.i, a.type);
         if (cap < 12 + 48) return kRFailed;
         size_t o = 0;
@@ -1220,9 +1228,12 @@ uint8_t handle(const uint8_t* req, size_t n, uint8_t* out, size_t cap, size_t* o
         logf("WO137-HUD %s -- %s", req[1] ? "on" : "off", why);
         return ok ? kROk : kRUnarmed;
     }
+    case xpread::kOpXpRead:
+        return xpread::handle(req, n, out, cap, outN);
     case kOpStatus: {
         char t[900];
         status_text(t, sizeof t);
+        xpread::status(t + std::strlen(t), sizeof t - std::strlen(t));
         const size_t m = std::strlen(t) < cap ? std::strlen(t) : cap;
         std::memcpy(out, t, m);
         *outN = m;
@@ -1242,6 +1253,9 @@ bool set_punish_gate(bool on) {
 }
 bool punish_gate_armed() { return A.timeGate; }
 uint32_t punish_skipped() { return c_punishSkipped.load(); }
+
+uint32_t current_root_seq() { return GetCurrentThreadId() == g_mainTid ? g_rootSeq : 0; }
+uint32_t current_apply_tag() { return g_applyDepth.load(std::memory_order_relaxed) > 0 ? g_applyTag.load(std::memory_order_relaxed) : 0; }
 
 bool apply_active() { return g_applyDepth.load(std::memory_order_relaxed) > 0; }
 uint64_t ms_since_apply_end() {

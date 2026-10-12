@@ -178,6 +178,61 @@ fresh(true)
 stash=mkChest('restore_chest','Stash',101,100,10,7)
 LOG={}; KCD2MP_W134HostRestore('container','restore_chest','chest',APPLE,2)
 check('P44 the host puts a granted-but-not-kept take back and broadcasts the stock',stash.inventory:GetCountOfClass(APPLE)==2 and #events('w134_cstate')>=1,tostring(stash.inventory:GetCountOfClass(APPLE))..'/'..#events('w134_cstate')..'/'..table.concat(LOG,' | '):sub(1,300))
+-- ---- quest XP receipt (Session 10): the agent gives the difference once through the engine's own AddStatXP/AddSkillXP
+fresh(false)
+local XPCALLS={}
+player.soul={AddStatXP=function(_,n,a) XPCALLS[#XPCALLS+1]='s:'..n..':'..a end,AddSkillXP=function(_,n,a) XPCALLS[#XPCALLS+1]='k:'..n..':'..a end}
+KCD2MP_QuestXpMode(scope); LOG={}
+check('P45 the joiner gives each slot its amount (1/128 XP) through the engine',KCD2MP_QuestXpGive('q5',{{false,0,1024},{true,17,384},{false,3,64}})==true and #XPCALLS==3 and XPCALLS[1]=='s:strength:8' and XPCALLS[2]=='k:heavy_weapons:3' and XPCALLS[3]=='s:speech:0.5',table.concat(XPCALLS,','))
+check('P46 the receipt is reported with its counts',(events('w137_xp_given')[1] or '')=='q5 3 0',tostring(events('w137_xp_given')[1]))
+check('P47 the same key is never paid twice',KCD2MP_QuestXpGive('q5',{{false,0,1024}})==false and #XPCALLS==3)
+LOG={}
+check('P48 storyProgress, unknown ids and absurd amounts are refused slot by slot, the rest given',KCD2MP_QuestXpGive('q6',{{false,8,7360},{true,5,128},{false,1,200000},{false,2,128},{false,2,0}})==false and #XPCALLS==4 and XPCALLS[4]=='s:vitality:1' and (events('w137_xp_given')[1] or '')=='q6 1 4',table.concat(XPCALLS,',')..' / '..tostring(events('w137_xp_given')[1]))
+local throwing=player.soul.AddStatXP; player.soul.AddStatXP=function() error('engine refused') end; LOG={}
+check('P49 an engine error is counted, never thrown',KCD2MP_QuestXpGive('q7',{{false,0,128}})==false and (events('w137_xp_given')[1] or '')=='q7 0 1')
+player.soul.AddStatXP=throwing
+for k in pairs(ERRS) do ERRS[k]=nil end -- the deliberate engine error above is not a script bug
+KCD2MP_QuestXpMode(string.rep('9',32)); XPCALLS={}
+check('P50 a new host session starts a new receipt book',KCD2MP_QuestXpGive('q5',{{false,0,128}})==true and #XPCALLS==1)
+fresh(true); player.soul={AddStatXP=function() XPCALLS[#XPCALLS+1]='host' end}; XPCALLS={}
+check('P51 the host never receives a joiner receipt',KCD2MP_QuestXpGive('q9',{{false,0,128}})==false and #XPCALLS==0)
+-- ---- economy audit events (Session 10): "<kind> <class> <delta> <world time> [ref]", observation only
+local function econ() local o={}; for _,e in ipairs(events('w134_econ')) do o[#o+1]=e end; return o end
+local function econHas(prefix) for _,e in ipairs(econ()) do if string.sub(e,1,#prefix)==prefix then return true end end return false end
+fresh(false)
+stash=mkChest('econ_chest','Stash',101,100,10,7); stash.inventory:CreateItem(APPLE,1,2)
+C.pass(); LOG={}; move(stash,player,APPLE); C.pass()
+check('P52 a chest take is ledgered as a take of exactly what moved',econHas('1 '..APPLE..' 2 '),table.concat(econ(),' | '))
+LOG={}; move(player,stash,APPLE); C.pass()
+check('P53 a chest put is ledgered as a put',econHas('2 '..APPLE..' -2 '),table.concat(econ(),' | '))
+R.applied={}; R.windows={}
+LOG={}; player.inventory:CreateItem(DICE,1,1); C.pass()
+check('P54 a gain no holder gave is a plain gain',econHas('6 '..DICE..' 1 '),table.concat(econ(),' | '))
+LOG={}; for _,w in ipairs(player.inventory:GetInventoryTable()) do if ITEMS[w].class==DICE then player.inventory:DeleteItem(w,1); break end end; C.pass()
+check('P55 a loss no holder received is a loss',econHas('5 '..DICE..' -1 '),table.concat(econ(),' | '))
+LOG={}; C.pass()
+check('P56 an unchanged pack ledgers nothing',#econ()==0)
+fresh(false)
+shop=mkChest('econ_shop','Stash',120,100,10,7); shop.inventory:CreateItem(COAT,1,1)
+Shops={IsLinkedWithShop=function(id) return id==shop.id and 'shop-link' or nil end}; Framework={IsValidWUID=function(id) return id=='shop-link' end}
+player.inventory:CreateItem(MONEY,1,100); C.pass(); LOG={}
+move(shop,player,COAT)
+for _,wuid in ipairs(player.inventory.list) do if ITEMS[wuid].class==MONEY then ITEMS[wuid].amount=75 end end
+C.pass()
+check('P57 a purchase is two barter entries: the goods in, the price out, and no stray loss',econHas('3 '..COAT..' 1 ') and econHas('3 '..MONEY..' -25 ') and not econHas('5 '),table.concat(econ(),' | '))
+check('P58 every economy event is a well-formed line',(function() for _,e in ipairs(econ()) do if not string.match(e,'^%d [%w_%.%-]+ %-?%d+ %d+') then return false end end return true end)())
+fresh(false); C.pass()
+KCD2MP_RewardArm('econ-reward','q_test',string.rep('f',32),false)
+LOG={}; player.inventory:CreateItem(DICE,1,1); C.pass()
+check('P59 a gain while a quest reward is being applied is ledgered as a reward',econHas('7 '..DICE..' 1 '),table.concat(econ(),' | '))
+fresh(false); player.inventory:CreateItem(MONEY,1,200); C.pass()
+C.econ.claim(8,C.money,60)
+for _,wuid in ipairs(player.inventory.list) do if ITEMS[wuid].class==MONEY then ITEMS[wuid].amount=140 end end
+LOG={}; C.pass()
+check('P60 a fine the crime module claimed is ledgered as a crime, not a plain loss',econHas('8 '..MONEY..' -60 ') and not econHas('5 '),table.concat(econ(),' | '))
+for _,wuid in ipairs(player.inventory.list) do if ITEMS[wuid].class==MONEY then ITEMS[wuid].amount=130 end end
+LOG={}; C.pass()
+check('P61 the claim is spent once: further spending is an ordinary loss',econHas('5 '..MONEY..' -10 ') and not econHas('8 '),table.concat(econ(),' | '))
 check('no Lua errors',#ERRS==0,ERRS[1])
 local pass,fail=0,0; for _,result in ipairs(RESULTS) do if result:sub(1,4)=='PASS' then pass=pass+1 else fail=fail+1 end end
 OUT=table.concat(RESULTS,'\n')..string.format('\n%d passed, %d failed',pass,fail)

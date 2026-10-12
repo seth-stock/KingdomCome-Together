@@ -1,5 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-only
--- Candidate reward parity: bounded inventory windows, excluding observed loot; no XP sharing or claim of native reward interception.
+-- Candidate reward parity: bounded inventory windows, excluding observed loot. Quest XP (Session 10) is measured natively
+-- (plugin xpread: C_StatXPEffect/C_SkillXPEffect Apply), compared in the agent and given here as the difference only.
 KCD2MP_Rewards={windows={},applied={},given={},gains={},last=nil,host=false,scope='',seconds=3,roots={},paid={},pending={}}
 local R=KCD2MP_Rewards
 local function read()
@@ -64,6 +65,36 @@ function KCD2MP_RewardGive(code,key,items)
 end
 function KCD2MP_RewardReady(key)
     if R.applied[key] then R.applied[key].ready=true end
+end
+-- Session 10: quest XP receipt. The agent decides the amounts (host's native quest-reward XP minus what this machine's own
+-- engine paid for the same change); this only gives them, once per key, through the engine's own AddStatXP/AddSkillXP.
+-- Ids are the engine's (Libs/Tables/rpg/stat.xml, skill.xml); amounts are 1/128 XP, the engine's fixed-point unit.
+R.xpGiven={}
+local XP_STAT={[0]='strength',[1]='agility',[2]='vitality',[3]='speech',[9]='prestige'}
+local XP_SKILL={[0]='stealth',[1]='horse_riding',[2]='fencing',[3]='bard',[4]='thievery',[6]='alchemy',[7]='cooking',[8]='craftsmanship',
+    [10]='fishing',[11]='mining',[12]='first_aid',[13]='drinking',[14]='survival',[15]='defense',[16]='weapon_sword',[17]='heavy_weapons',
+    [19]='marksmanship',[20]='weapon_shield',[22]='weapon_dagger',[23]='weapon_large',[24]='weapon_unarmed',[26]='scholarship',
+    [27]='tailoring',[28]='armourer',[29]='weaponsmithing',[30]='shoemaking',[31]='gunsmithing',[32]='bowyery',[33]='gambling',[34]='houndmaster'}
+function KCD2MP_QuestXpGive(key,rows)
+    if type(key)~='string' or type(rows)~='table' or R.xpGiven[key] then return false end
+    if not player or not player.soul or not KCD2MP_W134JoinerActive() then return false end
+    R.xpGiven[key]=true -- a partly given set is not repeated: the engine cannot tell us which half landed
+    local given,failed=0,0
+    for _,r in ipairs(rows) do
+        local skill,id,amount=r[1],r[2],r[3]
+        local name=(skill and XP_SKILL or XP_STAT)[id]
+        if name and type(amount)=='number' and amount>0 and amount<=1000*128 then
+            local ok=pcall(function()
+                if skill then player.soul:AddSkillXP(name,amount/128) else player.soul:AddStatXP(name,amount/128) end
+            end)
+            if ok then given=given+1 else failed=failed+1 end
+        else failed=failed+1 end
+    end
+    KCD2MP_EmitEvent('w137_xp_given',key..' '..given..' '..failed)
+    return failed==0
+end
+function KCD2MP_QuestXpMode(scope)
+    if R.xpScope~=scope then R.xpGiven={}; R.xpScope=scope end
 end
 function R.step()
     if not KCD2MP or not KCD2MP.w134 or not player then return end

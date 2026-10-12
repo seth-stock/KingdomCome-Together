@@ -48,6 +48,7 @@ add_library(KCDMP SHARED
     wo151.cpp
     wo153.cpp
     weather.cpp
+    xpread.cpp
 )
 
 target_include_directories(KCDMP PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

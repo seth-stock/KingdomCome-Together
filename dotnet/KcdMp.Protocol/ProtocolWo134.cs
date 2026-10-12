@@ -63,6 +63,7 @@ public static partial class Protocol
     public const byte LootHostTakedownResult = 6, LootHostBuild = 7;          // WO-135
     public const byte LootHostContainerResult = 8, LootHostContainerState = 9, LootHostContainerMode = 10, LootHostQuestReward = 11;
     public const byte LootHostRecoverResult = 12;                         // v16: "<take scope> <tok> <ok|gone|none>"
+    public const byte LootHostQuestXp = 13;                               // v17: "<host change seq> <s|k><id>:<amount/128>,..." the host's native quest-reward XP for one quest change
 
     public static string LootAskName(byte k) => k switch
     {
@@ -74,7 +75,7 @@ public static partial class Protocol
     {
         LootHostBodyState => "body-state", LootHostTakeResult => "take-result", LootHostItemResult => "item-result",
         LootHostItemGone => "item-gone", LootHostLedger => "ledger", LootHostTakedownResult => "takedown-result", LootHostBuild => "build",
-        LootHostContainerResult => "container-result", LootHostContainerState => "container-state", LootHostContainerMode => "container-mode", LootHostQuestReward => "quest-reward", LootHostRecoverResult => "recover-result", _ => $"unknown-{k}",
+        LootHostContainerResult => "container-result", LootHostContainerState => "container-state", LootHostContainerMode => "container-mode", LootHostQuestReward => "quest-reward", LootHostRecoverResult => "recover-result", LootHostQuestXp => "quest-xp", _ => $"unknown-{k}",
     };
 }
 

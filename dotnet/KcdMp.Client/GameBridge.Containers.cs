@@ -74,7 +74,7 @@ public partial class GameBridge
             }
             return true;
         }
-        if (type!=Protocol.LootHostDown || msg.Kind is not (Protocol.LootHostContainerResult or Protocol.LootHostContainerState or Protocol.LootHostContainerMode or Protocol.LootHostQuestReward)) return false;
+        if (type!=Protocol.LootHostDown || msg.Kind is not (Protocol.LootHostContainerResult or Protocol.LootHostContainerState or Protocol.LootHostContainerMode or Protocol.LootHostQuestReward or Protocol.LootHostQuestXp)) return false;
         if (!Wo134JoinerRole || !LootMsg.TryUnscope(msg.Text,out string replyScope,out string text)) return true;
         if (msg.Kind==Protocol.LootHostContainerMode && text is "on" or "off")
         {
@@ -91,6 +91,8 @@ public partial class GameBridge
             var f=text.Split(' '); var items=Wo134Rules.ParseItems(f[4])!;
             await ExecLuaAsync($"if KCD2MP_ContainerState then KCD2MP_ContainerState(\"{EscapeLua(f[0])}\",\"{f[1]}\",{msg.Tok},{f[2]},{f[3]},{Wo134Rules.LuaItems(items)}) end");
         }
+        else if (replyScope==_hostContainerScope && msg.Kind==Protocol.LootHostQuestXp)
+            XpOnHostAmounts(text);
         else if (replyScope==_hostContainerScope && msg.Kind==Protocol.LootHostQuestReward && SharedContainerRules.Reward(text))
         {
             var f=text.Split(' ');

@@ -795,7 +795,7 @@ public static partial class Protocol
     /// rows. A v9 relay would drop both as unknown types; v9 and v10 refuse
     /// each other at Handshake.
     /// </summary>
-    public const byte Version = 16; // v16: durable joiner custody (recover queries, receipts, host put-back); v15: uncertain container outcomes are distinct from definitive refusal; old agents must not refund quarantined puts
+    public const byte Version = 17; // v17: the host's native quest-reward XP for a quest change (LootHost QuestXp), given to a joiner as the difference from what its own engine paid; v16: durable joiner custody (recover queries, receipts, host put-back); v15: uncertain container outcomes are distinct from definitive refusal; old agents must not refund quarantined puts
 
     // C→S
     public const byte Handshake      = 0x00;
